@@ -12,12 +12,7 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
+/* Tingraph is a light-only tool: keep paper-grade white regardless of OS theme. */
 
 body {
   background: var(--background);
