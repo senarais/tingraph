@@ -153,6 +153,139 @@ const l1MaxY = Math.max(...l1.map((n) => n.y + n.height));
 const l3MinY = Math.min(...l3.map((n) => n.y));
 assert.ok(l1MaxY < l3MinY, "lane L1 content is above lane L3 content");
 
+// --- BPMN grid invariants across a range of shapes of diagram
+const BPMN_CASES: Array<[string, string]> = [
+  ["template", BPMN_TEMPLATE],
+  [
+    "loop back",
+    'bpmn "Loop" {\n  pool P "P" {\n    lane L "L" {\n      start S "s"\n      task A "a"\n      gw-ex G "ok?"\n      end E "e"\n    }\n  }\n  S -> A -> G\n  G [yes] -> E\n  G [no] -> A\n}',
+  ],
+  [
+    "parallel branches",
+    'bpmn "Split" {\n  pool P "P" {\n    lane L1 "One" {\n      start S "s"\n      gw-para G "fork"\n      task A "a"\n      task B "b"\n      gw-para J "join"\n      end E "e"\n    }\n  }\n  S -> G\n  G -> A -> J\n  G -> B -> J\n  J -> E\n}',
+  ],
+  [
+    "two pools",
+    'bpmn "Pools" {\n  pool P1 "Customer" {\n    start S "s"\n    task A "order"\n  }\n  pool P2 "Shop" {\n    task B "ship"\n    end E "done"\n  }\n  S -> A -> B -> E\n}',
+  ],
+  [
+    "crowded column",
+    'bpmn "Order" {\n  pool P1 "Customer" {\n    msg-start S "order placed"\n    task A "choose items"\n    recv-task R "receive invoice"\n    end E "done"\n  }\n  pool P2 "Supplier" {\n    lane L1 "Sales" {\n      task B "check stock"\n      gw-ex G "in stock?"\n      send-task C "send invoice"\n    }\n    lane L2 "Warehouse" {\n      user-task D "pack order"\n      data DO "picking list"\n      msg-end ME "order rejected"\n    }\n  }\n  S -> A -> B -> G\n  G [yes] -> D -> C -> R -> E\n  G [no] -> ME\n  D -.-> DO\n}',
+  ],
+  [
+    "skipped rank",
+    'bpmn "Skip" {\n  pool P "P" {\n    lane L "L" {\n      start S "s"\n      task A "a"\n      task B "b"\n      end E "e"\n    }\n  }\n  S -> A -> B -> E\n  S -> B\n}',
+  ],
+  [
+    "no pool",
+    'bpmn "Bare" {\n  start S "s"\n  user-task A "review"\n  data D "log"\n  end E "e"\n  S -> A -> E\n  A -.-> D\n}',
+  ],
+];
+
+function overlapsBox(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+): boolean {
+  return (
+    a.x < b.x + b.width &&
+    b.x < a.x + a.width &&
+    a.y < b.y + b.height &&
+    b.y < a.y + a.height
+  );
+}
+
+for (const [name, source] of BPMN_CASES) {
+  const laid = computeLayout(parseDSL(source));
+  const nodes = laid.nodes;
+  const byId = new Map(nodes.map((n) => [n.id, n]));
+
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      assert.ok(
+        !overlapsBox(nodes[i], nodes[j]),
+        `${name}: ${nodes[i].id}/${nodes[j].id} overlap`,
+      );
+    }
+  }
+
+  for (const lane of laid.pools?.flatMap((p) => p.lanes) ?? []) {
+    for (const node of nodes.filter((n) => n.lane === lane.id)) {
+      assert.ok(
+        node.x >= lane.x + lane.headerWidth &&
+          node.x + node.width <= lane.x + lane.width &&
+          node.y >= lane.y &&
+          node.y + node.height <= lane.y + lane.height,
+        `${name}: ${node.id} escapes lane ${lane.id}`,
+      );
+    }
+  }
+  for (const pool of laid.pools ?? []) {
+    let cursor = pool.y;
+    for (const lane of pool.lanes) {
+      assert.equal(lane.y, cursor, `${name}: lanes tile pool ${pool.id}`);
+      cursor += lane.height;
+    }
+    assert.equal(cursor, pool.y + pool.height, `${name}: pool ${pool.id} height`);
+  }
+
+  for (const edge of laid.edges) {
+    assert.ok(edge.points.length >= 2, `${name}: ${edge.from}->${edge.to} routed`);
+    for (let i = 1; i < edge.points.length; i++) {
+      const a = edge.points[i - 1];
+      const b = edge.points[i];
+      assert.ok(
+        Math.abs(a.x - b.x) < 1 || Math.abs(a.y - b.y) < 1,
+        `${name}: ${edge.from}->${edge.to} leg ${i} is not orthogonal`,
+      );
+    }
+    // ends sit on the boundary of their shape
+    for (const [point, id] of [
+      [edge.points[0], edge.from],
+      [edge.points[edge.points.length - 1], edge.to],
+    ] as const) {
+      const node = byId.get(id)!;
+      const onVerticalEdge =
+        (Math.abs(point.x - node.x) < 1 ||
+          Math.abs(point.x - (node.x + node.width)) < 1) &&
+        point.y >= node.y - 1 &&
+        point.y <= node.y + node.height + 1;
+      const onHorizontalEdge =
+        (Math.abs(point.y - node.y) < 1 ||
+          Math.abs(point.y - (node.y + node.height)) < 1) &&
+        point.x >= node.x - 1 &&
+        point.x <= node.x + node.width + 1;
+      assert.ok(
+        onVerticalEdge || onHorizontalEdge,
+        `${name}: ${edge.from}->${edge.to} does not touch ${id}`,
+      );
+    }
+    // no leg cuts through an unrelated shape
+    for (let i = 1; i < edge.points.length; i++) {
+      const a = edge.points[i - 1];
+      const b = edge.points[i];
+      const box = {
+        x: Math.min(a.x, b.x) + 1,
+        y: Math.min(a.y, b.y) + 1,
+        width: Math.abs(a.x - b.x) - 2,
+        height: Math.abs(a.y - b.y) - 2,
+      };
+      if (box.width < 0 || box.height < 0) {
+        box.width = Math.max(0, box.width);
+        box.height = Math.max(0, box.height);
+      }
+      for (const node of nodes) {
+        if (node.id === edge.from || node.id === edge.to) {
+          continue;
+        }
+        assert.ok(
+          !overlapsBox(box, node),
+          `${name}: ${edge.from}->${edge.to} crosses ${node.id}`,
+        );
+      }
+    }
+  }
+}
+
 // error cases carry friendly messages and line numbers
 function expectDSLError(code: string, msgPart: string, line?: number): void {
   try {

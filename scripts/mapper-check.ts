@@ -36,10 +36,21 @@ for (const tpl of [FLOWCHART_TEMPLATE, BPMN_TEMPLATE]) {
     assert.equal(el.fillStyle, "solid", "solid fill");
     assert.equal(el.opacity, 100, "opaque");
   }
+  const typeOf = new Map(positioned.nodes.map((n) => [n.id, n.type]));
   positioned.edges.forEach((edge, i) => {
     const arrow = skeletons.get(`edge-${i}`);
     assert.ok(arrow && arrow.type === "arrow", `edge-${i} is arrow`);
-    assert.ok(arrow.start && arrow.end, `edge-${i} binding refs`);
+    // outlines (data objects) carry no bindable container, so they stay free
+    assert.equal(
+      !!arrow.start,
+      typeOf.get(edge.from) !== "data",
+      `edge-${i} start binding`,
+    );
+    assert.equal(
+      !!arrow.end,
+      typeOf.get(edge.to) !== "data",
+      `edge-${i} end binding`,
+    );
     const points = arrow.points as unknown[];
     assert.ok(Array.isArray(points) && points.length >= 2, "polyline points");
     if (positioned.category === "bpmn") {
@@ -118,12 +129,16 @@ assert.ok(taskGroups?.includes("bpmn-A1"), "task grouped");
 const sendGroups = sendIcons[0].groupIds as string[];
 assert.ok(sendGroups.includes("bpmn-A2"), "icon grouped with task");
 
-// pool + lane chrome: rectangles and rotated header labels, drawn behind nodes
+// pool + lane chrome: one pool box, split lines between lanes, header bands
 const poolRect = bpmnS.get("pool-P1");
 assert.ok(poolRect && poolRect.type === "rectangle", "pool rectangle");
-for (const id of ["lane-L1", "lane-L2", "lane-L3"]) {
-  const laneRect = bpmnS.get(id);
-  assert.ok(laneRect && laneRect.type === "rectangle", `${id} rectangle`);
+assert.equal(bpmnS.get("pool-P1-divider")?.type, "line", "pool header divider");
+assert.ok(!bpmnS.has("lane-L1-split"), "first lane reuses the pool border");
+for (const id of ["lane-L2-split", "lane-L3-split"]) {
+  assert.equal(bpmnS.get(id)?.type, "line", `${id} splits the pool`);
+}
+for (const id of ["lane-L1-divider", "lane-L2-divider", "lane-L3-divider"]) {
+  assert.equal(bpmnS.get(id)?.type, "line", `${id} header divider`);
 }
 const poolLabel = bpmnS.get("pool-P1-label") as Skel | undefined;
 assert.ok(poolLabel && poolLabel.type === "text" && poolLabel.text === "Request", "pool label");
@@ -132,7 +147,14 @@ assert.ok(laneLabel && laneLabel.text === "Employee", "lane label");
 const ordered = indexByPrefix(buildSkeletons(bpmn));
 const idxOf = (id: string) => ordered.findIndex((s) => s.id === id);
 assert.ok(idxOf("pool-P1") >= 0 && idxOf("pool-P1") < idxOf("S1"), "pool drawn before nodes");
-assert.ok(idxOf("lane-L2") < idxOf("G1"), "lane drawn before nodes");
+assert.ok(idxOf("lane-L2-split") < idxOf("G1"), "lane chrome drawn before nodes");
+
+// conditional flows carry their own caption next to the gateway
+const yes = bpmnS.get("edge-3-label") as Skel | undefined;
+assert.equal(yes?.text, "Yes", "conditional flow caption");
+assert.equal(yes?.fontSize, 11, "edge caption 11px");
+assert.equal(bpmnS.get("edge-5-label")?.text, "No", "second conditional caption");
+assert.ok(!bpmnS.has("edge-0-label"), "unlabelled flows have no caption");
 
 // extended event/task marker mapping (not in the default template)
 const ext = computeLayout(

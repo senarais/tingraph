@@ -11,31 +11,45 @@ export const ACCENT_PRESETS = [
 
 export type AccentColor = (typeof ACCENT_PRESETS)[number]["color"];
 
+export type SidePanel = "source" | "shapes" | "guide";
+
 interface TingraphState {
   code: string;
   category: DiagramCategory;
   accent: AccentColor;
-  cheatSheetOpen: boolean;
+  panel: SidePanel;
   sidebarOpen: boolean;
+  /** Excalidraw's shape-properties panel, off until the reader asks for it */
+  propertiesOpen: boolean;
   setCode: (code: string) => void;
   setCategory: (category: DiagramCategory) => void;
   setAccent: (accent: AccentColor) => void;
-  toggleCheatSheet: () => void;
+  setPanel: (panel: SidePanel) => void;
   toggleSidebar: () => void;
+  toggleProperties: () => void;
 }
 
 export const useTingraphStore = create<TingraphState>((set) => ({
   code: TEMPLATES.bpmn,
   category: "bpmn",
   accent: "#1e1e1e",
-  cheatSheetOpen: true,
+  panel: "source",
   sidebarOpen: true,
+  propertiesOpen: false,
   setCode: (code) => set({ code }),
   setCategory: (category) => set({ category, code: TEMPLATES[category] }),
   setAccent: (accent) => set({ accent }),
-  toggleCheatSheet: () =>
-    set((state) => ({ cheatSheetOpen: !state.cheatSheetOpen })),
+  setPanel: (panel) => set({ panel }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+  toggleProperties: () =>
+    set((state) => ({ propertiesOpen: !state.propertiesOpen })),
 }));
+
+if (typeof window !== "undefined") {
+  (window as unknown as { __tingraphStore?: object }).__tingraphStore = {
+    getState: () => useTingraphStore.getState(),
+    setState: (partial: object) => useTingraphStore.setState(partial),
+  };
+}
 
 export { TEMPLATE_LABELS, TEMPLATES };

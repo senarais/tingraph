@@ -1,6 +1,6 @@
 import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
 import { PositionedNode } from "@/lib/types";
-import { rawPathToPolylines } from "@/lib/bpmn-icons/scale-path";
+import { rawPathToPolylines, type ScaleParams } from "@/lib/bpmn-icons/scale-path";
 
 // BPMN icon package: Excalidraw `line`/`ellipse` skeletons drawing canonical
 // bpmn.io markers inside events, tasks, and gateways. Scale parameters ported
@@ -34,13 +34,8 @@ function subpathLines(
   idPrefix: string,
   node: PositionedNode,
   pathId: string,
-  param: {
-    xScaleFactor?: number;
-    yScaleFactor?: number;
-    position?: { mx: number; my: number };
-    abspos?: { x: number; y: number };
-  },
-  opts: { fillColor?: string; strokeWidth?: number },
+  param: ScaleParams,
+  opts: { fillColor?: string; strokeColor?: string; strokeWidth?: number },
   theme: IconTheme,
   groupIds: string[],
 ): ExcalidrawElementSkeleton[] {
@@ -69,7 +64,7 @@ function subpathLines(
       height: Math.max(...ys) - Math.min(...ys),
       points: local,
       groupIds,
-      strokeColor: theme.strokeColor,
+      strokeColor: opts.strokeColor ?? theme.strokeColor,
       strokeWidth: opts.strokeWidth ?? 1,
       backgroundColor: opts.fillColor ?? "transparent",
       ...ICON_BASE,
@@ -129,7 +124,7 @@ export function buildBpmnIcons(
             yScaleFactor: 0.9,
             position: { mx: 0.235, my: 0.315 },
           },
-          { fillColor: theme.throwFill },
+          { fillColor: theme.throwFill, strokeColor: WHITE },
           theme,
           groupIds,
         ),
@@ -242,7 +237,7 @@ export function buildBpmnIcons(
       break;
     }
     case "send-task": {
-      // black envelope (bpmn-js SendTask: fill = stroke, drawn at mx/my)
+      // black envelope (bpmn-js SendTask: fill = stroke, marker box 21×14)
       skeletons.push(
         ...subpathLines(
           id("send"),
@@ -251,9 +246,11 @@ export function buildBpmnIcons(
           {
             xScaleFactor: 1,
             yScaleFactor: 1,
+            containerWidth: 21,
+            containerHeight: 14,
             position: { mx: 0.285, my: 0.357 },
           },
-          { fillColor: theme.throwFill },
+          { fillColor: theme.throwFill, strokeColor: WHITE },
           theme,
           groupIds,
         ),
@@ -270,6 +267,8 @@ export function buildBpmnIcons(
           {
             xScaleFactor: 0.9,
             yScaleFactor: 0.9,
+            containerWidth: 21,
+            containerHeight: 14,
             position: { mx: 0.3, my: 0.4 },
           },
           { fillColor: WHITE },

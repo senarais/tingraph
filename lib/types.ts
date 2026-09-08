@@ -88,11 +88,13 @@ export interface PositionedEdge extends DSLEdge {
 export interface PositionedLane {
   id: string;
   label: string;
-  /** top-left of the lane's interior content area (already inside pool) */
+  /** top-left of the lane box, header band included */
   x: number;
   y: number;
   width: number;
   height: number;
+  /** width of the vertical label band on the left (0 when unlabelled) */
+  headerWidth: number;
   /** id of the containing pool */
   poolId?: string;
 }
@@ -104,6 +106,8 @@ export interface PositionedPool {
   y: number;
   width: number;
   height: number;
+  /** width of the vertical label band on the left (0 when unlabelled) */
+  headerWidth: number;
   lanes: PositionedLane[];
 }
 

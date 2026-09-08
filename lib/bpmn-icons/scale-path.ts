@@ -82,7 +82,7 @@ interface Cursor {
 
 function tokenize(d: string): Array<[string, number[]]> {
   const commands: Array<[string, number[]]> = [];
-  const re = /([mlLhHvVcCsSqQtTaAzZ])([^mlLhHvVcCsSqQtTaAzZ]*)/g;
+  const re = /([MmLlHhVvCcSsQqTtAaZz])([^MmLlHhVvCcSsQqTtAaZz]*)/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(d)) !== null) {
     const nums = (m[2].match(/-?\d*\.?\d+(?:e[-+]?\d+)?/gi) ?? []).map(
@@ -138,6 +138,13 @@ export function pathToPolylines(d: string, opts: PathOptions = {}): Cursor[][] {
     cursor = p;
   };
 
+  /** After `z` (or at the very start) drawing resumes from the current point. */
+  const ensureStart = (): void => {
+    if (current.length === 0) {
+      current.push({ ...cursor });
+    }
+  };
+
   for (const [cmd, nums] of tokenize(d)) {
     const abs = cmd === cmd.toUpperCase();
     switch (cmd.toLowerCase()) {
@@ -146,21 +153,21 @@ export function pathToPolylines(d: string, opts: PathOptions = {}): Cursor[][] {
           const p = abs
             ? { x: nums[i], y: nums[i + 1] }
             : { x: cursor.x + nums[i], y: cursor.y + nums[i + 1] };
-          if (i > 0 || current.length === 0) {
-            // implicit lineto after first coordinate pair
-            if (i === 0 && current.length > 0) {
-              subpaths.push(current);
-              current = [];
-            }
-          }
           if (i === 0) {
+            // a moveto closes the running subpath and opens a new one
+            if (current.length > 1) {
+              subpaths.push(current);
+            }
+            current = [];
             subpathStart = p;
           }
+          // coordinate pairs after the first are implicit linetos
           pushPoint(p);
         }
         break;
       }
       case "l": {
+        ensureStart();
         for (let i = 0; i + 1 < nums.length; i += 2) {
           pushPoint(
             abs
@@ -171,6 +178,7 @@ export function pathToPolylines(d: string, opts: PathOptions = {}): Cursor[][] {
         break;
       }
       case "h": {
+        ensureStart();
         for (const n of nums) {
           pushPoint(
             abs ? { x: n, y: cursor.y } : { x: cursor.x + n, y: cursor.y },
@@ -179,6 +187,7 @@ export function pathToPolylines(d: string, opts: PathOptions = {}): Cursor[][] {
         break;
       }
       case "v": {
+        ensureStart();
         for (const n of nums) {
           pushPoint(
             abs ? { x: cursor.x, y: n } : { x: cursor.x, y: cursor.y + n },
@@ -187,6 +196,7 @@ export function pathToPolylines(d: string, opts: PathOptions = {}): Cursor[][] {
         break;
       }
       case "c": {
+        ensureStart();
         for (let i = 0; i + 5 < nums.length; i += 6) {
           const c1 = abs
             ? { x: nums[i], y: nums[i + 1] }
@@ -205,6 +215,7 @@ export function pathToPolylines(d: string, opts: PathOptions = {}): Cursor[][] {
         break;
       }
       case "s": {
+        ensureStart();
         for (let i = 0; i + 3 < nums.length; i += 4) {
           const c1 = lastControl
             ? { x: 2 * cursor.x - lastControl.x, y: 2 * cursor.y - lastControl.y }
@@ -223,6 +234,7 @@ export function pathToPolylines(d: string, opts: PathOptions = {}): Cursor[][] {
         break;
       }
       case "q": {
+        ensureStart();
         for (let i = 0; i + 3 < nums.length; i += 4) {
           const q = abs
             ? { x: nums[i], y: nums[i + 1] }

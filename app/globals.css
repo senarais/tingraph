@@ -1,21 +1,129 @@
 @import "tailwindcss";
 
+/*
+ * Tingraph reads as a drafting table: a white sheet under instrument-grade
+ * chrome. Warm-neutral panels, hairline rules, blueprint ink for anything
+ * interactive, and monospaced tick labels borrowed from technical drawings.
+ */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --paper: #ffffff;
+  --panel: #f2f3f0;
+  --raised: #fbfbf9;
+  --ink: #14171a;
+  --ink-soft: #565d64;
+  --ink-faint: #8b929a;
+  --rule: #e1e3de;
+  --rule-strong: #c8ccc5;
+  --blueprint: #1a4f6b;
+  --blueprint-tint: #e5eef3;
+  --alert: #a32a1c;
+  --alert-tint: #fbeeec;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-paper: var(--paper);
+  --color-panel: var(--panel);
+  --color-raised: var(--raised);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-blueprint: var(--blueprint);
+  --color-blueprint-tint: var(--blueprint-tint);
+  --color-alert: var(--alert);
+  --color-alert-tint: var(--alert-tint);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
 }
 
 /* Tingraph is a light-only tool: keep paper-grade white regardless of OS theme. */
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--panel);
+  color: var(--ink);
+  font-family: var(--font-plex-sans), system-ui, sans-serif;
+  font-feature-settings: "cv05" 1;
+}
+
+/* Annotation label, set the way a drawing sheet labels its cells. */
+.tick {
+  font-family: var(--font-plex-mono), ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+/* Registration marks at the corners of the sheet. */
+.crop-marks {
+  --mark: 14px;
+  background:
+    linear-gradient(var(--rule-strong), var(--rule-strong)) left top / var(--mark) 1px no-repeat,
+    linear-gradient(var(--rule-strong), var(--rule-strong)) left top / 1px var(--mark) no-repeat,
+    linear-gradient(var(--rule-strong), var(--rule-strong)) right top / var(--mark) 1px no-repeat,
+    linear-gradient(var(--rule-strong), var(--rule-strong)) right top / 1px var(--mark) no-repeat,
+    linear-gradient(var(--rule-strong), var(--rule-strong)) left bottom / var(--mark) 1px no-repeat,
+    linear-gradient(var(--rule-strong), var(--rule-strong)) left bottom / 1px var(--mark) no-repeat,
+    linear-gradient(var(--rule-strong), var(--rule-strong)) right bottom / var(--mark) 1px no-repeat,
+    linear-gradient(var(--rule-strong), var(--rule-strong)) right bottom / 1px var(--mark) no-repeat;
+}
+
+:focus-visible {
+  outline: 2px solid var(--blueprint);
+  outline-offset: 1px;
+}
+
+/* ------------------------------------------------------------------ monaco */
+
+.monaco-editor,
+.monaco-editor-background,
+.monaco-editor .margin {
+  background-color: var(--paper) !important;
+}
+.monaco-editor .line-numbers {
+  color: var(--ink-faint) !important;
+}
+
+/* -------------------------------------------------------------- excalidraw */
+/* The canvas is ours, not Excalidraw's: same rules, same ink, no shadows. */
+
+.excalidraw {
+  --color-primary: var(--blueprint);
+  --color-primary-darker: #163f56;
+  --color-primary-darkest: #102e3f;
+  --color-primary-light: var(--blueprint-tint);
+  --color-primary-light-darker: #d6e5ed;
+  --color-primary-hover: #17475f;
+  --island-bg-color: var(--raised);
+  --shadow-island: none;
+  --border-radius-lg: 6px;
+  --ui-font: var(--font-plex-sans), system-ui, sans-serif;
+}
+
+.excalidraw .Island {
+  border: 1px solid var(--rule);
+}
+
+/* our own rail owns the menu, the library and the help affordances */
+.excalidraw .layer-ui__wrapper__top-right,
+.excalidraw .dropdown-menu-button,
+.excalidraw .help-icon,
+.excalidraw .HintViewer {
+  display: none !important;
+}
+
+.excalidraw .App-toolbar {
+  padding: 2px;
+}
+
+.excalidraw .ToolIcon__keybinding {
+  color: var(--ink-faint);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

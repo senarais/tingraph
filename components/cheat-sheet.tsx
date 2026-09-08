@@ -1,79 +1,112 @@
 "use client";
 
-import { ChevronDown, ChevronUp } from "lucide-react";
 import { DiagramCategory } from "@/lib/types";
 
-const FLOW_ROWS: Array<[string, string]> = [
-  ['flow "Title" {', "open a flowchart diagram"],
-  ["start ID \"Label\"", "terminator (ellipse)"],
-  ["process ID \"Label\"", "process step (rectangle); alias: task"],
-  ["decision ID \"Label\"", "branch point (diamond)"],
-  ["io ID \"Label\"", "input/output (shaded rect); alias: data"],
-  ["end ID \"Label\"", "terminator (ellipse)"],
-  ["A -> B", "directed edge"],
-  ["A [Yes] -> B", "edge with a label"],
-  ["A -> B -> C", "edge chain"],
-  ["# comment", "line comment (also //)"],
+const FLOW_SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
+  {
+    title: "Diagram",
+    rows: [['flow "Title" {', "open a flowchart"]],
+  },
+  {
+    title: "Nodes",
+    rows: [
+      ['start ID "Label"', "terminator (ellipse)"],
+      ['process ID "Label"', "process step; alias: task"],
+      ['decision ID "Label"', "branch point (diamond)"],
+      ['io ID "Label"', "input/output; alias: data"],
+      ['end ID "Label"', "terminator (ellipse)"],
+    ],
+  },
+  {
+    title: "Edges",
+    rows: [
+      ["A -> B", "directed edge"],
+      ["A [Yes] -> B", "edge with a caption"],
+      ["A -> B -> C", "chain"],
+      ["# comment", "line comment (also //)"],
+    ],
+  },
 ];
 
-const BPMN_ROWS: Array<[string, string]> = [
-  ['bpmn "Title" {', "open a BPMN 2.0 diagram"],
-  ['pool ID "Label" {', "participant with lanes inside"],
-  ["lane ID \"Label\" {", "lane inside a pool (or standalone)"],
-  ["start ID \"Label\"", "start event (thin circle)"],
-  ["msg-start ID \"Label\"", "message start (circle + white envelope)"],
-  ["msg-end ID \"Label\"", "message end (thick circle + black envelope)"],
-  ["timer ID \"Label\"", "timer event (double circle + clock)"],
-  ["task ID \"Label\"", "task (rounded rectangle)"],
-  ["send-task ID \"Label\"", "send task (black envelope marker)"],
-  ["recv-task ID \"Label\"", "receive task (white envelope marker)"],
-  ["script-task ID \"Label\"", "script task (page marker)"],
-  ["user-task ID \"Label\"", "user task (user marker)"],
-  ["gw-ex ID \"Label\"", "exclusive gateway (diamond + X)"],
-  ["gw-para ID \"Label\"", "parallel gateway (diamond + +)"],
-  ["gw-inc ID \"Label\"", "inclusive gateway (diamond + O)"],
-  ["data ID \"Label\"", "data object reference (document)"],
-  ["end ID \"Label\"", "end event (thick circle)"],
-  ["A -> B", "sequence flow (solid, filled arrowhead)"],
-  ["A [Yes] -> B", "conditional sequence flow"],
-  ["D -.-> A", "data association (dotted, open arrowhead)"],
+const BPMN_SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
+  {
+    title: "Diagram",
+    rows: [
+      ['bpmn "Title" {', "open a BPMN 2.0 diagram"],
+      ['pool ID "Label" {', "participant, holds lanes"],
+      ['lane ID "Label" {', "role inside a pool"],
+    ],
+  },
+  {
+    title: "Events",
+    rows: [
+      ['start ID "Label"', "start event (thin circle)"],
+      ['msg-start ID "Label"', "message start (open envelope)"],
+      ['timer ID "Label"', "timer event (clock)"],
+      ['end ID "Label"', "end event (thick circle)"],
+      ['msg-end ID "Label"', "message end (filled envelope)"],
+    ],
+  },
+  {
+    title: "Activities",
+    rows: [
+      ['task ID "Label"', "task (rounded rectangle)"],
+      ['send-task ID "Label"', "send task"],
+      ['recv-task ID "Label"', "receive task"],
+      ['script-task ID "Label"', "script task"],
+      ['user-task ID "Label"', "user task"],
+    ],
+  },
+  {
+    title: "Gateways & data",
+    rows: [
+      ['gw-ex ID "Label"', "exclusive gateway (X)"],
+      ['gw-para ID "Label"', "parallel gateway (+)"],
+      ['gw-inc ID "Label"', "inclusive gateway (O)"],
+      ['data ID "Label"', "data object (document)"],
+    ],
+  },
+  {
+    title: "Flows",
+    rows: [
+      ["A -> B", "sequence flow"],
+      ["A [Yes] -> B", "conditional flow"],
+      ["A -.-> D", "data association (dotted)"],
+    ],
+  },
 ];
 
 interface CheatSheetProps {
   category: DiagramCategory;
-  open: boolean;
-  onToggle: () => void;
 }
 
-export default function CheatSheet({ category, open, onToggle }: CheatSheetProps) {
-  const rows = category === "flow" ? FLOW_ROWS : BPMN_ROWS;
+export default function CheatSheet({ category }: CheatSheetProps) {
+  const sections = category === "flow" ? FLOW_SECTIONS : BPMN_SECTIONS;
   return (
-    <div className="border-t border-zinc-200 bg-white">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center justify-between px-3 py-2 text-xs font-semibold uppercase tracking-wide text-zinc-500 hover:text-zinc-800"
-      >
-        <span>{category === "flow" ? "Flowchart" : "BPMN"} syntax cheat sheet</span>
-        {open ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-      </button>
-      {open && (
-        <dl className="max-h-64 overflow-y-auto px-3 pb-3">
-          {rows.map(([syntax, meaning]) => (
-            <div
-              key={syntax}
-              className="flex items-baseline gap-2 border-b border-zinc-100 py-1 last:border-0"
-            >
-              <dt>
-                <code className="rounded bg-zinc-100 px-1.5 py-0.5 font-mono text-[11px] text-zinc-900">
-                  {syntax}
-                </code>
-              </dt>
-              <dd className="text-[11px] text-zinc-500">{meaning}</dd>
-            </div>
-          ))}
-        </dl>
-      )}
+    <div className="min-h-0 flex-1 overflow-y-auto">
+      <p className="border-b border-rule px-4 py-3 text-[12px] leading-relaxed text-ink-soft">
+        Declare every element once, then wire the flows. Layout, spacing and
+        routing are worked out for you — drag anything afterwards on the sheet.
+      </p>
+      {sections.map((section) => (
+        <section key={section.title} className="border-b border-rule px-4 py-3">
+          <h3 className="tick mb-2">{section.title}</h3>
+          <dl className="space-y-1.5">
+            {section.rows.map(([syntax, meaning]) => (
+              <div key={syntax} className="flex items-baseline gap-2">
+                <dt className="shrink-0">
+                  <code className="rounded border border-rule bg-raised px-1.5 py-0.5 font-mono text-[11px] text-ink">
+                    {syntax}
+                  </code>
+                </dt>
+                <dd className="min-w-0 flex-1 truncate text-[11px] text-ink-faint">
+                  {meaning}
+                </dd>
+              </div>
+            ))}
+          </dl>
+        </section>
+      ))}
     </div>
   );
 }
