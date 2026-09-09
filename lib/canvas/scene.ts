@@ -3,12 +3,19 @@ import {
   newElementWith,
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
-import { unitOf } from "@/lib/canvas/units";
+import { marked, unitOf } from "@/lib/canvas/units";
 import type { Ink } from "@/lib/ink";
-import { squareRoute, type Corner } from "@/lib/canvas/route";
+import {
+  clipEnds,
+  squareRoute,
+  type Bound,
+  type Bounds,
+  type Corner,
+} from "@/lib/canvas/route";
 import {
   buildLaneSkeletons,
   buildPoolSkeletons,
+  type ConnectorStyle,
 } from "@/lib/excalidraw-mapper/build-skeletons";
 import {
   BPMN_HEADER_WIDTH,
@@ -179,28 +186,117 @@ export function normalizeUnits(
 // -------------------------------------------------------------- square edges
 
 /**
- * Keeps every connector Tingraph drew running square. Hand-drawn arrows are
- * left alone — those belong to the reader.
+ * Takes an arrow the reader just drew into the drawing: it is restyled to the
+ * one connector this sheet uses and stamped as a flow, which puts it under the
+ * same square rule as the generated ones. It happens once, at the moment the
+ * arrow appears, so a later restyle by hand survives.
  */
-export function squareEdges(elements: Elements): ExcalidrawElement[] | null {
+export function adoptArrows(
+  elements: Elements,
+  style: ConnectorStyle,
+  drawing: string | null,
+): ExcalidrawElement[] | null {
   let next: ExcalidrawElement[] | null = null;
   elements.forEach((element, index) => {
-    if (element.isDeleted || element.type !== "arrow") {
+    if (
+      element.isDeleted ||
+      element.type !== "arrow" ||
+      element.id === drawing ||
+      unitOf(element)
+    ) {
+      return;
+    }
+    next ??= elements.slice();
+    next[index] = newElementWith(element, {
+      ...style,
+      ...marked({ unit: `hand-${element.id}`, kind: "edge", core: true }),
+    } as never);
+  });
+  return next;
+}
+
+const SHAPES = new Set(["rectangle", "ellipse", "diamond", "image"]);
+
+/**
+ * What each element counts as when an arrow points at it. A Tingraph element
+ * is drawn as several shapes but reads as one, so an arrow that lands on any
+ * of its pieces stops at the outline of the whole thing.
+ */
+function bindingBounds(elements: Elements): Map<string, Bounds> {
+  const units = new Map<string, Bounds>();
+  const own = new Map<string, Bounds>();
+  for (const element of elements) {
+    if (element.isDeleted) {
+      continue;
+    }
+    const box = {
+      left: element.x,
+      top: element.y,
+      right: element.x + element.width,
+      bottom: element.y + element.height,
+    };
+    own.set(element.id, box);
+    const unit = unitOf(element)?.unit;
+    if (!unit || !SHAPES.has(element.type)) {
+      continue;
+    }
+    const grown = units.get(unit);
+    units.set(
+      unit,
+      grown
+        ? {
+            left: Math.min(grown.left, box.left),
+            top: Math.min(grown.top, box.top),
+            right: Math.max(grown.right, box.right),
+            bottom: Math.max(grown.bottom, box.bottom),
+          }
+        : box,
+    );
+  }
+  const out = new Map<string, Bounds>();
+  for (const element of elements) {
+    if (element.isDeleted) {
+      continue;
+    }
+    const unit = unitOf(element)?.unit;
+    const box = (unit ? units.get(unit) : undefined) ?? own.get(element.id);
+    if (box) {
+      out.set(element.id, box);
+    }
+  }
+  return out;
+}
+
+/** Keeps every connector on the sheet running square. */
+export function squareEdges(
+  elements: Elements,
+  drawing: string | null = null,
+): ExcalidrawElement[] | null {
+  let next: ExcalidrawElement[] | null = null;
+  let boxes: Map<string, Bounds> | null = null;
+  elements.forEach((element, index) => {
+    if (element.isDeleted || element.type !== "arrow" || element.id === drawing) {
+      return;
+    }
+    // an elbow arrow is routed by Excalidraw and is square already
+    if ((element as { elbowed?: boolean }).elbowed) {
       return;
     }
     if (unitOf(element)?.kind !== "edge") {
       return;
     }
-    const points = (element as unknown as { points: readonly Corner[] }).points;
-    const square = squareRoute(points);
-    if (!square) {
+    const arrow = element as unknown as Bound & { points: readonly Corner[] };
+    const square = squareRoute(arrow.points);
+    boxes ??= bindingBounds(elements);
+    const route = clipEnds(square ?? arrow.points, arrow, boxes) ?? square;
+    if (!route) {
       return;
     }
-    const xs = square.map((point) => point[0]);
-    const ys = square.map((point) => point[1]);
+    const xs = route.map((point) => point[0]);
+    const ys = route.map((point) => point[1]);
     next ??= elements.slice();
     next[index] = newElementWith(element, {
-      points: square as never,
+      points: route as never,
       width: Math.max(...xs) - Math.min(...xs),
       height: Math.max(...ys) - Math.min(...ys),
     });

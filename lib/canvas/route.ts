@@ -5,6 +5,21 @@
 
 export type Corner = readonly [number, number];
 
+export interface Bounds {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/** The parts of a bound arrow the clipping needs. */
+export interface Bound {
+  x: number;
+  y: number;
+  startBinding?: { elementId: string } | null;
+  endBinding?: { elementId: string } | null;
+}
+
 const NUDGE = 0.01;
 const alignedX = (a: Corner, b: Corner) => Math.abs(a[0] - b[0]) < NUDGE;
 const alignedY = (a: Corner, b: Corner) => Math.abs(a[1] - b[1]) < NUDGE;
@@ -18,6 +33,21 @@ function legAxis(a: Corner, b: Corner): "h" | "v" | null {
     return null;
   }
   return down ? "v" : "h";
+}
+
+/** Which way a leg runs, or null when it is skewed or has no length. */
+export function legRun(
+  a: Corner,
+  b: Corner,
+): "up" | "down" | "left" | "right" | null {
+  const axis = legAxis(a, b);
+  if (axis === "v") {
+    return b[1] > a[1] ? "down" : "up";
+  }
+  if (axis === "h") {
+    return b[0] > a[0] ? "right" : "left";
+  }
+  return null;
 }
 
 /** Two ends and one step between them, taken along the longer run. */
@@ -123,3 +153,63 @@ export function squareRoute(points: readonly Corner[]): Corner[] | null {
   return tidy(out);
 }
 
+/**
+ * Pulls an end that sits inside the shape it points at back onto that shape's
+ * outline, along the leg it leaves by. An arrow drawn from the middle of a box
+ * otherwise starts under the box's own caption. An end already on or beyond
+ * the outline is left where Excalidraw put it, so nothing here fights the
+ * binding when a box is dragged.
+ */
+export function clipEnds(
+  points: readonly Corner[],
+  arrow: Bound,
+  boxes: Map<string, Bounds>,
+): Corner[] | null {
+  const out = points.map((point) => [point[0], point[1]] as Corner);
+  let moved = false;
+  const clip = (at: number, toward: number, id: string | undefined) => {
+    const box = id ? boxes.get(id) : undefined;
+    if (!box || at === toward) {
+      return;
+    }
+    const here = { x: arrow.x + out[at][0], y: arrow.y + out[at][1] };
+    if (
+      here.x <= box.left ||
+      here.x >= box.right ||
+      here.y <= box.top ||
+      here.y >= box.bottom
+    ) {
+      return;
+    }
+    const next = { x: arrow.x + out[toward][0], y: arrow.y + out[toward][1] };
+    switch (legRun(out[at], out[toward])) {
+      case "down":
+        if (box.bottom < next.y) {
+          out[at] = [out[at][0], box.bottom - arrow.y];
+          moved = true;
+        }
+        break;
+      case "up":
+        if (box.top > next.y) {
+          out[at] = [out[at][0], box.top - arrow.y];
+          moved = true;
+        }
+        break;
+      case "right":
+        if (box.right < next.x) {
+          out[at] = [box.right - arrow.x, out[at][1]];
+          moved = true;
+        }
+        break;
+      case "left":
+        if (box.left > next.x) {
+          out[at] = [box.left - arrow.x, out[at][1]];
+          moved = true;
+        }
+        break;
+    }
+  };
+  clip(0, 1, arrow.startBinding?.elementId);
+  clip(out.length - 1, out.length - 2, arrow.endBinding?.elementId);
+  return moved ? out : null;
+}

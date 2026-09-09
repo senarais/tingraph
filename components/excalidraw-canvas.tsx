@@ -2,7 +2,7 @@
 
 import "@excalidraw/excalidraw/index.css";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CaptureUpdateAction, Excalidraw } from "@excalidraw/excalidraw";
 import type {
   AppState,
@@ -13,18 +13,22 @@ import { useTingraphStore } from "@/lib/store";
 import {
   addLane,
   addPoolBelow,
+  adoptArrows,
   normalizeUnits,
   poolBoxes,
   removePool,
   squareEdges,
   type PoolBox,
 } from "@/lib/canvas/scene";
+import type { ConnectorStyle } from "@/lib/excalidraw-mapper/build-skeletons";
 import { inkFor } from "@/lib/ink";
 import PoolControls, { type CanvasView } from "@/components/pool-controls";
 
 interface ExcalidrawCanvasProps {
   /** first drawing, seeded once; afterwards the sheet is the reader's */
   initialElements: ExcalidrawElement[];
+  /** the one connector this sheet draws, generated or by hand */
+  connector: ConnectorStyle;
   propertiesOpen: boolean;
   onApi: (api: ExcalidrawImperativeAPI) => void;
 }
@@ -39,6 +43,7 @@ const NO_VIEW: CanvasView = {
 
 export default function ExcalidrawCanvas({
   initialElements,
+  connector,
   propertiesOpen,
   onApi,
 }: ExcalidrawCanvasProps) {
@@ -50,13 +55,24 @@ export default function ExcalidrawCanvas({
   const [pools, setPools] = useState<PoolBox[]>([]);
   const [view, setView] = useState<CanvasView>(NO_VIEW);
   const overlayRef = useRef("");
+  const connectorRef = useRef(connector);
+  useEffect(() => {
+    connectorRef.current = connector;
+  }, [connector]);
 
   const handleChange = useCallback(
     (elements: readonly ExcalidrawElement[], state: AppState) => {
       const fix = normalizeUnits(elements, state);
+      // an arrow still under the pointer is left alone until it is finished
+      const drawing = state.multiElement?.id ?? state.newElement?.id ?? null;
+      const adopted = adoptArrows(
+        fix?.elements ?? elements,
+        connectorRef.current,
+        drawing,
+      );
       // a bound connector is dragged out of square by its own ends; put it back
-      const square = squareEdges(fix?.elements ?? elements);
-      const next = square ?? fix?.elements;
+      const square = squareEdges(adopted ?? fix?.elements ?? elements, drawing);
+      const next = square ?? adopted ?? fix?.elements;
       if (next || fix?.appState) {
         // deferred: this runs inside Excalidraw's own commit
         queueMicrotask(() =>
@@ -138,8 +154,10 @@ export default function ExcalidrawCanvas({
             currentItemStrokeStyle: "solid",
             currentItemRoughness: 0,
             currentItemRoundness: "sharp",
-            // a connector the reader draws by hand stays square as well
-            currentItemArrowType: "elbow",
+            currentItemArrowType: "sharp",
+            // a hand-drawn arrow starts out as the sheet's own connector
+            currentItemEndArrowhead: "triangle",
+            currentItemStartArrowhead: null,
             currentItemFontSize: 16,
             currentItemFontFamily: 2,
             currentItemOpacity: 100,

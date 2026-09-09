@@ -47,6 +47,7 @@ const BPMN_END_STROKE_WIDTH = 4;
 const BPMN_INTERMEDIATE_STROKE_WIDTH = 1.5;
 const BPMN_TASK_ROUNDNESS = { type: 3, value: 10 } as const; // rx=10px cap
 const CHROME_STROKE_WIDTH = 1.5;
+const CONNECTOR_STROKE_WIDTH = 1.5;
 const TITLE_FONT_SIZE = 22;
 const TITLE_GAP = 28;
 /**
@@ -75,6 +76,34 @@ function themeFor(ink: Ink, category: PositionedAST["category"]): Theme {
     fontFamily: ACADEMIC_MONOCHROME_THEME.fontFamily,
     fontSize: category === "bpmn" ? BPMN_LABEL_FONT_SIZE : 16,
   };
+}
+
+/**
+ * How every connector on the sheet is drawn. The generated flows spread this,
+ * and so does an arrow the reader draws by hand, so the two are the same line.
+ */
+function connectorFrom(theme: Theme) {
+  return {
+    strokeColor: theme.strokeColor,
+    backgroundColor: "transparent",
+    strokeWidth: CONNECTOR_STROKE_WIDTH,
+    strokeStyle: "solid",
+    roughness: 0,
+    opacity: 100,
+    roundness: null,
+    startArrowhead: null,
+    // bpmn.io draws a sequence flow with a filled triangle head
+    endArrowhead: "triangle",
+  } as const;
+}
+
+export type ConnectorStyle = ReturnType<typeof connectorFrom>;
+
+export function connectorStyle(
+  ink: Ink = MONOCHROME,
+  category: PositionedAST["category"] = "bpmn",
+): ConnectorStyle {
+  return connectorFrom(themeFor(ink, category));
 }
 
 function bpmnEventStrokeWidth(type: NodeType): number {
@@ -396,11 +425,8 @@ function edgeSkeleton(
     ...(bindable.has(edge.from) ? { start: { id: edge.from } } : {}),
     ...(bindable.has(edge.to) ? { end: { id: edge.to } } : {}),
     ...ACADEMIC_MONOCHROME_THEME,
-    strokeColor: theme.strokeColor,
-    strokeWidth: 1.5,
-    roundness: null,
-    // bpmn.io: sequence flow = filled triangle head; association = dotted
-    // line with an open (outline) arrowhead
+    ...connectorFrom(theme),
+    // an association is the same line, dotted, with an open head
     ...(isAssociation
       ? {
           strokeStyle: "dotted",

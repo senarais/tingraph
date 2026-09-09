@@ -21,6 +21,7 @@ import { mapToExcalidrawElements } from "@/lib/excalidraw-mapper/map-to-elements
 import {
   buildOrgShapeSkeletons,
   buildShapeSkeletons,
+  connectorStyle,
 } from "@/lib/excalidraw-mapper/build-skeletons";
 import {
   PaletteItem,
@@ -492,6 +493,7 @@ export default function TingraphEditor() {
         <main className="relative min-w-0 flex-1 bg-paper">
           <ExcalidrawCanvas
             initialElements={seed}
+            connector={connectorStyle(ink, editorCategory)}
             propertiesOpen={propertiesOpen}
             onApi={(api) => {
               apiRef.current = api;

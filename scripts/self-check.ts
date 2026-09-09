@@ -3,7 +3,12 @@ import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
 import { computeLayout } from "@/lib/layout/compute-layout";
 import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE } from "@/lib/templates";
 import { DSLError } from "@/lib/types";
-import { squareRoute, type Corner } from "@/lib/canvas/route";
+import {
+  clipEnds,
+  squareRoute,
+  type Bounds,
+  type Corner,
+} from "@/lib/canvas/route";
 
 assert.equal(detectCategory(FLOWCHART_TEMPLATE), "flow");
 assert.equal(detectCategory(BPMN_TEMPLATE), "bpmn");
@@ -556,5 +561,53 @@ for (const template of [FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE]) {
     );
   }
 }
+
+// --------------------------------------------------- ends that land on a box
+
+const target: Bounds = { left: 100, top: 0, right: 200, bottom: 100 };
+const boxes = new Map<string, Bounds>([["box", target]]);
+const arrow = { x: 0, y: 0, endBinding: { elementId: "box" } };
+
+// an end dropped in the middle of the box is pulled back onto its outline
+assert.deepEqual(
+  clipEnds([[0, 50], [150, 50]], arrow, boxes),
+  [[0, 50], [100, 50]],
+  "an end inside the box comes back to the near edge",
+);
+// coming up from below, it stops at the bottom
+assert.deepEqual(
+  clipEnds([[150, 200], [150, 50]], arrow, boxes),
+  [[150, 200], [150, 100]],
+  "an end reached from below stops at the bottom edge",
+);
+// an end that is already outside is left exactly where Excalidraw put it
+assert.equal(
+  clipEnds([[0, 50], [100, 50]], arrow, boxes),
+  null,
+  "an end on the outline is left alone",
+);
+assert.equal(
+  clipEnds([[0, 50], [80, 50]], arrow, boxes),
+  null,
+  "an end short of the box is left alone",
+);
+// an unbound end is never touched
+assert.equal(
+  clipEnds([[0, 50], [150, 50]], { x: 0, y: 0 }, boxes),
+  null,
+  "an unbound end is left alone",
+);
+// the arrow's own origin is taken into account
+assert.deepEqual(
+  clipEnds([[0, 0], [130, 0]], { x: 20, y: 50, endBinding: { elementId: "box" } }, boxes),
+  [[0, 0], [80, 0]],
+  "clipping works in the arrow's own frame",
+);
+// a leg that would collapse onto its neighbour is left as it is
+assert.equal(
+  clipEnds([[100, 50], [150, 50]], arrow, boxes),
+  null,
+  "clipping never eats a whole leg",
+);
 
 console.log("parse + layout self-check: all assertions passed");
