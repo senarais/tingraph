@@ -13,10 +13,15 @@ import {
   BPMN_LABEL_FONT_SIZE,
   BPMN_LINE_HEIGHT,
   BPMN_TASK_FONT_SIZE,
+  ORG_NAME_FONT_SIZE,
+  ORG_TITLE_FONT_SIZE,
   bpmnHasExternalLabel,
+  orgBoxLayout,
   textWidth,
+  wrapByWidth,
   wrapExternalLabel,
 } from "@/lib/layout/compute-layout";
+import { MONOCHROME, type Ink } from "@/lib/ink";
 import {
   buildBpmnIcons,
   buildDataObjectOutline,
@@ -44,16 +49,29 @@ const BPMN_TASK_ROUNDNESS = { type: 3, value: 10 } as const; // rx=10px cap
 const CHROME_STROKE_WIDTH = 1.5;
 const TITLE_FONT_SIZE = 22;
 const TITLE_GAP = 28;
+/**
+ * An org chart is drawn in plain black whatever the ink is, so that the wash
+ * behind the role bands is the only colour on the sheet. The value is kept
+ * apart from every ink preset on purpose: re-inking the sheet swaps ink for
+ * ink and wash for wash, and these rules must sit out both swaps.
+ */
+const ORG_STROKE = "#111827";
+const ORG_PILL_ROUNDNESS = { type: 3, value: 6 } as const;
+/** Hairline around a sub-role pill, so the pill still reads on a white wash. */
+const ORG_PILL_EDGE = "#d1d5db";
 
 interface Theme {
   strokeColor: string;
+  /** wash behind highlighted text — the org band and its sub-role pills */
+  tint: string;
   fontSize: number;
   fontFamily: number;
 }
 
-function themeFor(accentColor: string, category: PositionedAST["category"]): Theme {
+function themeFor(ink: Ink, category: PositionedAST["category"]): Theme {
   return {
-    strokeColor: accentColor,
+    strokeColor: category === "org" ? ORG_STROKE : ink.color,
+    tint: ink.tint,
     fontFamily: ACADEMIC_MONOCHROME_THEME.fontFamily,
     fontSize: category === "bpmn" ? BPMN_LABEL_FONT_SIZE : 16,
   };
@@ -242,6 +260,108 @@ function flowNodeSkeletons(
 }
 
 /**
+ * One org box: a washed band carrying the role, and — when the source gives
+ * one — a white body carrying the name. A box that lists sub-roles fills that
+ * body with a washed pill per sub-role and the name underneath it.
+ *
+ * Every caption is a real Excalidraw label, so a reader can double click any
+ * of them and retype it.
+ */
+function orgNodeSkeletons(
+  node: PositionedNode,
+  theme: Theme,
+): ExcalidrawElementSkeleton[] {
+  const box = orgBoxLayout(node);
+  const unit = `org-${node.id}`;
+  const rule = {
+    ...ACADEMIC_MONOCHROME_THEME,
+    strokeColor: theme.strokeColor,
+    strokeWidth: CHROME_STROKE_WIDTH,
+    roundness: null,
+    groupIds: [unit],
+    ...marked({ unit, kind: "node", core: true }),
+  } as const;
+  const caption = (text: string[], fontSize: number) => ({
+    label: {
+      text: text.join("\n"),
+      fontSize,
+      fontFamily: theme.fontFamily,
+      strokeColor: theme.strokeColor,
+    },
+  });
+
+  const out: ExcalidrawElementSkeleton[] = [
+    {
+      type: "rectangle",
+      id: node.id,
+      x: node.x,
+      y: node.y,
+      width: box.width,
+      height: box.bandHeight,
+      ...rule,
+      backgroundColor: theme.tint,
+      ...marked({ unit, kind: "node", core: true, wash: true }),
+      ...caption(box.title, ORG_TITLE_FONT_SIZE),
+    } as ExcalidrawElementSkeleton,
+  ];
+
+  const bodyHeight = box.height - box.bandHeight;
+  if (bodyHeight > 0) {
+    out.push({
+      type: "rectangle",
+      id: `${node.id}-body`,
+      x: node.x,
+      y: node.y + box.bandHeight,
+      width: box.width,
+      height: bodyHeight,
+      ...rule,
+      backgroundColor: WHITE,
+      ...(box.name.length > 0 ? caption(box.name, ORG_NAME_FONT_SIZE) : {}),
+    } as ExcalidrawElementSkeleton);
+  }
+
+  box.rows.forEach((row, index) => {
+    out.push({
+      type: "rectangle",
+      id: `${node.id}-unit-${index}`,
+      x: Math.round(node.x + (box.width - row.pillWidth) / 2),
+      y: node.y + row.pillTop,
+      width: row.pillWidth,
+      height: row.pillHeight,
+      ...ACADEMIC_MONOCHROME_THEME,
+      // a wash with a hairline, so the pill survives a white wash too
+      strokeColor: ORG_PILL_EDGE,
+      backgroundColor: theme.tint,
+      strokeWidth: 1,
+      roundness: ORG_PILL_ROUNDNESS,
+      groupIds: [unit],
+      ...marked({ unit, kind: "node", core: true, wash: true }),
+      ...caption(row.label, ORG_TITLE_FONT_SIZE),
+    } as ExcalidrawElementSkeleton);
+    if (row.name.length === 0) {
+      return;
+    }
+    out.push({
+      type: "text",
+      id: `${node.id}-unit-${index}-name`,
+      text: row.name.join("\n"),
+      // centre alignment: Excalidraw reads x as the anchor, y as the top
+      x: Math.round(node.x + box.width / 2),
+      y: node.y + row.nameTop,
+      ...ACADEMIC_MONOCHROME_THEME,
+      strokeColor: theme.strokeColor,
+      fontSize: ORG_NAME_FONT_SIZE,
+      fontFamily: theme.fontFamily,
+      textAlign: "center",
+      verticalAlign: "top",
+      groupIds: [unit],
+      ...marked({ unit, kind: "node", core: true }),
+    } as ExcalidrawElementSkeleton);
+  });
+  return out;
+}
+
+/**
  * Sequence flows and associations. Endpoints are bound to their shapes so the
  * arrow keeps up when the reader drags a node around on the canvas; shapes
  * drawn as raw outlines (data objects) have no bindable container, so those
@@ -345,7 +465,8 @@ function edgeLabelSkeletons(
   const taken: Box[] = [];
   for (const node of positioned.nodes) {
     taken.push({ x: node.x - 3, y: node.y - 3, width: node.width + 6, height: node.height + 6 });
-    const label = externalLabelBox(node);
+    const label =
+      positioned.category === "bpmn" ? externalLabelBox(node) : null;
     if (label) {
       taken.push(label);
     }
@@ -396,6 +517,32 @@ function edgeLabelSkeletons(
   return out;
 }
 
+/**
+ * Org connectors. A reporting line is a filled arrow bound to the two boxes it
+ * joins, so it keeps up when either is dragged; anything else is a plain
+ * dashed rule, the way a chart marks an advisory tie.
+ */
+function orgEdgeSkeleton(
+  edge: PositionedEdge,
+  index: number,
+  theme: Theme,
+  bottomOf: (id: string) => string,
+): ExcalidrawElementSkeleton | null {
+  const skeleton = edgeSkeleton(edge, index, theme, new Set());
+  if (!skeleton) {
+    return null;
+  }
+  const dashed = edge.kind === "association";
+  return {
+    ...skeleton,
+    ...(edge.reporting
+      ? { start: { id: bottomOf(edge.from) }, end: { id: edge.to } }
+      : {}),
+    strokeStyle: dashed ? "dashed" : "solid",
+    endArrowhead: dashed ? null : "triangle",
+  } as unknown as ExcalidrawElementSkeleton;
+}
+
 function flowEdgeSkeleton(
   edge: PositionedEdge,
   index: number,
@@ -442,12 +589,14 @@ function titleSkeleton(
   theme: Theme,
 ): ExcalidrawElementSkeleton {
   const { minX, maxX, minY } = diagramBounds(positioned);
+  const lines = wrapByWidth(positioned.title, maxX - minX, TITLE_FONT_SIZE);
+  const height = Math.max(1, lines.length) * TITLE_FONT_SIZE * 1.25;
   return {
     type: "text",
     id: "diagram-title",
-    text: positioned.title,
+    text: lines.join("\n") || positioned.title,
     x: Math.round((minX + maxX) / 2),
-    y: Math.round(minY - TITLE_FONT_SIZE * 1.25 - TITLE_GAP),
+    y: Math.round(minY - height - TITLE_GAP),
     ...ACADEMIC_MONOCHROME_THEME,
     strokeColor: theme.strokeColor,
     fontSize: TITLE_FONT_SIZE,
@@ -643,11 +792,12 @@ function poolLaneSkeletons(
 
 export function buildSkeletons(
   positioned: PositionedAST,
-  accentColor: string = ACADEMIC_MONOCHROME_THEME.strokeColor,
+  ink: Ink = MONOCHROME,
 ): ExcalidrawElementSkeleton[] {
-  const theme = themeFor(accentColor, positioned.category);
+  const theme = themeFor(ink, positioned.category);
   const skeletons: ExcalidrawElementSkeleton[] = [];
   const isBpmn = positioned.category === "bpmn";
+  const isOrg = positioned.category === "org";
 
   if (isBpmn && positioned.pools) {
     skeletons.push(...poolLaneSkeletons(positioned, theme));
@@ -655,22 +805,38 @@ export function buildSkeletons(
 
   for (const node of positioned.nodes) {
     skeletons.push(
-      ...(isBpmn ? bpmnNodeSkeletons(node, theme) : flowNodeSkeletons(node, theme)),
+      ...(isBpmn
+        ? bpmnNodeSkeletons(node, theme)
+        : isOrg
+          ? orgNodeSkeletons(node, theme)
+          : flowNodeSkeletons(node, theme)),
     );
   }
 
   const bindable = new Set(
     positioned.nodes.filter((n) => n.type !== "data").map((n) => n.id),
   );
+  // a reporting line leaves the bottom of a box, which is its body when the
+  // box carries a name and the band itself when it does not
+  const bottomOf = (id: string): string => {
+    const node = positioned.nodes.find((n) => n.id === id);
+    if (!node) {
+      return id;
+    }
+    const box = orgBoxLayout(node);
+    return box.height > box.bandHeight ? `${id}-body` : id;
+  };
   positioned.edges.forEach((edge, index) => {
     const skeleton = isBpmn
       ? edgeSkeleton(edge, index, theme, bindable)
-      : flowEdgeSkeleton(edge, index, theme);
+      : isOrg
+        ? orgEdgeSkeleton(edge, index, theme, bottomOf)
+        : flowEdgeSkeleton(edge, index, theme);
     if (skeleton) {
       skeletons.push(skeleton);
     }
   });
-  if (isBpmn) {
+  if (isBpmn || isOrg) {
     skeletons.push(...edgeLabelSkeletons(positioned, theme));
   }
 
@@ -686,23 +852,31 @@ export function buildSkeletons(
  */
 export function buildShapeSkeletons(
   node: PositionedNode,
-  accentColor: string = ACADEMIC_MONOCHROME_THEME.strokeColor,
+  ink: Ink = MONOCHROME,
 ): ExcalidrawElementSkeleton[] {
-  return bpmnNodeSkeletons(node, themeFor(accentColor, "bpmn"));
+  return bpmnNodeSkeletons(node, themeFor(ink, "bpmn"));
 }
 
 /** One pool box, for adding a participant straight on the canvas. */
 export function buildPoolSkeletons(
   pool: PositionedPool,
-  accentColor: string = ACADEMIC_MONOCHROME_THEME.strokeColor,
+  ink: Ink = MONOCHROME,
 ): ExcalidrawElementSkeleton[] {
-  return poolSkeletons(pool, themeFor(accentColor, "bpmn"));
+  return poolSkeletons(pool, themeFor(ink, "bpmn"));
 }
 
 /** One lane rule set, for splitting a pool that is already on the canvas. */
 export function buildLaneSkeletons(
   lane: PositionedLane,
-  accentColor: string = ACADEMIC_MONOCHROME_THEME.strokeColor,
+  ink: Ink = MONOCHROME,
 ): ExcalidrawElementSkeleton[] {
-  return laneSkeletons(lane, themeFor(accentColor, "bpmn"), true);
+  return laneSkeletons(lane, themeFor(ink, "bpmn"), true);
+}
+
+/** One free-standing org box, for dropping a role straight onto the sheet. */
+export function buildOrgShapeSkeletons(
+  node: PositionedNode,
+  ink: Ink = MONOCHROME,
+): ExcalidrawElementSkeleton[] {
+  return orgNodeSkeletons(node, themeFor(ink, "org"));
 }

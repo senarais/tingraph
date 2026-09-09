@@ -1,6 +1,7 @@
 import { convertToExcalidrawElements } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { PositionedAST } from "@/lib/types";
+import { MONOCHROME, type Ink } from "@/lib/ink";
 import {
   ACADEMIC_MONOCHROME_THEME,
   buildSkeletons,
@@ -8,9 +9,9 @@ import {
 
 export function mapToExcalidrawElements(
   positioned: PositionedAST,
-  accentColor: string = ACADEMIC_MONOCHROME_THEME.strokeColor,
+  ink: Ink = MONOCHROME,
 ): ExcalidrawElement[] {
-  return convertToExcalidrawElements(buildSkeletons(positioned, accentColor), {
+  return convertToExcalidrawElements(buildSkeletons(positioned, ink), {
     regenerateIds: false,
   });
 }

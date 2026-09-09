@@ -2,6 +2,7 @@ import dagre from "@dagrejs/dagre";
 import {
   AST,
   DSLEdge,
+  DSLEntry,
   DSLNode,
   NodeType,
   PositionedAST,
@@ -75,7 +76,7 @@ const FLOW_SIDE_GAP = 40; // side channel for a flowchart loop
 
 // --------------------------------------------------------------- text utils
 
-function wrapByWidth(label: string, maxWidth: number, fontSize: number): string[] {
+export function wrapByWidth(label: string, maxWidth: number, fontSize: number): string[] {
   const words = label.split(/\s+/).filter(Boolean);
   if (words.length === 0) {
     return [];
@@ -257,9 +258,12 @@ function routeFlowEdges(
     const downward = to.y >= from.y + from.height;
 
     if (downward) {
+      // one x for both ends, so a near-miss between two centres still drops
+      // straight down instead of leaning a pixel to one side
+      const shared = Math.round((fromCx + toCx) / 2);
       const straight: Point[] = [
-        { x: fromCx, y: from.y + from.height },
-        { x: toCx, y: to.y },
+        { x: shared, y: from.y + from.height },
+        { x: shared, y: to.y },
       ];
       if (Math.abs(fromCx - toCx) < 1 && !hits(straight, blockers)) {
         return { ...edge, points: straight.map(round) };
@@ -939,8 +943,392 @@ function round(p: Point): Point {
   return { x: Math.round(p.x), y: Math.round(p.y) };
 }
 
+// ------------------------------------------------------------------ org tree
+
+export const ORG_TITLE_FONT_SIZE = 12;
+export const ORG_NAME_FONT_SIZE = 13;
+export const ORG_TITLE_LINE_HEIGHT = ORG_TITLE_FONT_SIZE * 1.25;
+export const ORG_NAME_LINE_HEIGHT = ORG_NAME_FONT_SIZE * 1.25;
+/** Text inset from the box edge. */
+export const ORG_PAD_X = 12;
+/** Text inset inside a sub-role pill. */
+export const ORG_PILL_PAD_X = 8;
+
+const ORG_MIN_WIDTH = 160;
+const ORG_MAX_WIDTH = 232;
+const ORG_BAND_PAD_Y = 9;
+const ORG_BODY_PAD_Y = 10;
+const ORG_PILL_PAD_Y = 5;
+const ORG_ENTRY_GAP = 8;
+const ORG_ENTRY_NAME_GAP = 4;
+const ORG_COL_GAP = 28;
+const ORG_ROW_GAP = 64;
+/** Distance from a box to the advisory node parked beside it. */
+const ORG_SATELLITE_GAP = 90;
+
+/** One sub-role listed inside a box: a tinted pill and the name under it. */
+export interface OrgEntryRow {
+  label: string[];
+  name: string[];
+  pillTop: number;
+  pillHeight: number;
+  pillWidth: number;
+  nameTop: number;
+  nameHeight: number;
+}
+
+export interface OrgLayout {
+  width: number;
+  height: number;
+  /** height of the tinted header band holding the role */
+  bandHeight: number;
+  title: string[];
+  /** the name under the band; empty when the box lists sub-roles instead */
+  name: string[];
+  rows: OrgEntryRow[];
+}
+
+/**
+ * Text rows of one org box. Both the layout and the mapper read this, so the
+ * drawn rows and the reserved height can never drift apart.
+ */
+export function orgBoxLayout(node: DSLNode): OrgLayout {
+  const entries: DSLEntry[] = node.entries ?? [];
+  const natural = Math.max(
+    textWidth(node.label, ORG_TITLE_FONT_SIZE),
+    node.name ? textWidth(node.name, ORG_NAME_FONT_SIZE) : 0,
+    ...entries.map(
+      (entry) => textWidth(entry.label, ORG_TITLE_FONT_SIZE) + ORG_PILL_PAD_X * 2,
+    ),
+    ...entries.map((entry) =>
+      entry.name ? textWidth(entry.name, ORG_NAME_FONT_SIZE) : 0,
+    ),
+  );
+  const width = Math.round(
+    Math.min(ORG_MAX_WIDTH, Math.max(ORG_MIN_WIDTH, natural + ORG_PAD_X * 2)),
+  );
+  const text = width - ORG_PAD_X * 2;
+
+  const title = wrapByWidth(node.label, text, ORG_TITLE_FONT_SIZE);
+  const bandHeight = Math.round(
+    Math.max(1, title.length) * ORG_TITLE_LINE_HEIGHT + ORG_BAND_PAD_Y * 2,
+  );
+
+  if (entries.length === 0) {
+    const name = node.name
+      ? wrapByWidth(node.name, text, ORG_NAME_FONT_SIZE)
+      : [];
+    const bodyHeight =
+      name.length === 0
+        ? 0
+        : Math.round(name.length * ORG_NAME_LINE_HEIGHT + ORG_BODY_PAD_Y * 2);
+    return {
+      width,
+      height: bandHeight + bodyHeight,
+      bandHeight,
+      title,
+      name,
+      rows: [],
+    };
+  }
+
+  const pillText = text - ORG_PILL_PAD_X * 2;
+  const rows: OrgEntryRow[] = [];
+  let cursor = bandHeight + ORG_ENTRY_GAP;
+  for (const entry of entries) {
+    const label = wrapByWidth(entry.label, pillText, ORG_TITLE_FONT_SIZE);
+    const pillHeight = Math.round(
+      Math.max(1, label.length) * ORG_TITLE_LINE_HEIGHT + ORG_PILL_PAD_Y * 2,
+    );
+    const name = entry.name
+      ? wrapByWidth(entry.name, text, ORG_NAME_FONT_SIZE)
+      : [];
+    const nameHeight = Math.round(name.length * ORG_NAME_LINE_HEIGHT);
+    rows.push({
+      label,
+      name,
+      pillTop: cursor,
+      pillHeight,
+      pillWidth: Math.round(
+        Math.min(text, linesWidth(label, ORG_TITLE_FONT_SIZE) + ORG_PILL_PAD_X * 2),
+      ),
+      nameTop: cursor + pillHeight + (nameHeight > 0 ? ORG_ENTRY_NAME_GAP : 0),
+      nameHeight,
+    });
+    cursor +=
+      pillHeight +
+      (nameHeight > 0 ? ORG_ENTRY_NAME_GAP + nameHeight : 0) +
+      ORG_ENTRY_GAP;
+  }
+  return { width, height: cursor, bandHeight, title, name: [], rows };
+}
+
+/**
+ * A tidy top-down tree. Solid edges are the reporting lines that build it;
+ * a dotted edge to a box that reports to nobody parks that box beside its
+ * partner, the way a senate sits next to a dean.
+ */
+function computeOrgLayout(ast: AST): PositionedAST {
+  const boxes = new Map<string, OrgLayout>(
+    ast.nodes.map((node) => [node.id, orgBoxLayout(node)]),
+  );
+  const parent = new Map<string, string>();
+  const children = new Map<string, string[]>();
+
+  const isAncestor = (ancestor: string, of: string): boolean => {
+    const seen = new Set<string>();
+    let cursor: string | undefined = of;
+    while (cursor && !seen.has(cursor)) {
+      if (cursor === ancestor) {
+        return true;
+      }
+      seen.add(cursor);
+      cursor = parent.get(cursor);
+    }
+    return false;
+  };
+
+  for (const edge of ast.edges) {
+    // a second reporting line, a self-link or a loop stays a plain connector
+    if (
+      edge.kind === "association" ||
+      edge.from === edge.to ||
+      parent.has(edge.to) ||
+      !boxes.has(edge.from) ||
+      !boxes.has(edge.to) ||
+      isAncestor(edge.to, edge.from)
+    ) {
+      continue;
+    }
+    parent.set(edge.to, edge.from);
+    const kids = children.get(edge.from);
+    if (kids) {
+      kids.push(edge.to);
+    } else {
+      children.set(edge.from, [edge.to]);
+    }
+  }
+
+  // a box that reports to nobody and is only tied in by a dotted line rides
+  // along beside the box it is tied to
+  const satelliteOf = new Map<string, string>();
+  for (const edge of ast.edges) {
+    if (edge.kind !== "association") {
+      continue;
+    }
+    for (const [rider, host] of [
+      [edge.to, edge.from],
+      [edge.from, edge.to],
+    ]) {
+      const loose =
+        !parent.has(rider) &&
+        !satelliteOf.has(rider) &&
+        (children.get(rider)?.length ?? 0) === 0;
+      const anchored = !parent.has(host) && (children.get(host)?.length ?? 0) > 0;
+      if (loose && anchored && rider !== host && boxes.has(rider)) {
+        satelliteOf.set(rider, host);
+        break;
+      }
+    }
+  }
+
+  const roots = ast.nodes
+    .map((node) => node.id)
+    .filter((id) => !parent.has(id) && !satelliteOf.has(id));
+
+  const depth = new Map<string, number>();
+  const walk = (id: string, level: number): void => {
+    if (depth.has(id)) {
+      return;
+    }
+    depth.set(id, level);
+    for (const child of children.get(id) ?? []) {
+      walk(child, level + 1);
+    }
+  };
+  roots.forEach((id) => walk(id, 0));
+  for (const [rider, host] of satelliteOf) {
+    depth.set(rider, depth.get(host) ?? 0);
+  }
+  // anything the forest never reached (a node in a cycle) lands on its own row
+  for (const node of ast.nodes) {
+    if (!depth.has(node.id)) {
+      depth.set(node.id, 0);
+      roots.push(node.id);
+    }
+  }
+
+  const rowHeight: number[] = [];
+  for (const [id, level] of depth) {
+    rowHeight[level] = Math.max(rowHeight[level] ?? 0, boxes.get(id)?.height ?? 0);
+  }
+  const rowTop: number[] = [];
+  let stack = MARGIN;
+  for (let level = 0; level < rowHeight.length; level++) {
+    rowTop[level] = stack;
+    stack += (rowHeight[level] ?? 0) + ORG_ROW_GAP;
+  }
+
+  const span = new Map<string, number>();
+  const measure = (id: string): number => {
+    const own = boxes.get(id)?.width ?? ORG_MIN_WIDTH;
+    const kids = children.get(id) ?? [];
+    const inner =
+      kids.length === 0
+        ? 0
+        : kids.reduce((sum, kid) => sum + measure(kid), 0) +
+          (kids.length - 1) * ORG_COL_GAP;
+    const total = Math.max(own, inner);
+    span.set(id, total);
+    return total;
+  };
+
+  const left = new Map<string, number>();
+  const place = (id: string, slot: number): void => {
+    const own = boxes.get(id)?.width ?? ORG_MIN_WIDTH;
+    const total = span.get(id) ?? own;
+    const kids = children.get(id) ?? [];
+    if (kids.length === 0) {
+      left.set(id, Math.round(slot + (total - own) / 2));
+      return;
+    }
+    const inner =
+      kids.reduce((sum, kid) => sum + (span.get(kid) ?? 0), 0) +
+      (kids.length - 1) * ORG_COL_GAP;
+    let cursor = slot + (total - inner) / 2;
+    for (const kid of kids) {
+      place(kid, cursor);
+      cursor += (span.get(kid) ?? 0) + ORG_COL_GAP;
+    }
+    const first = kids[0];
+    const last = kids[kids.length - 1];
+    const centre =
+      ((left.get(first) ?? 0) +
+        (boxes.get(first)?.width ?? 0) / 2 +
+        (left.get(last) ?? 0) +
+        (boxes.get(last)?.width ?? 0) / 2) /
+      2;
+    left.set(id, Math.round(centre - own / 2));
+  };
+
+  let cursor = MARGIN;
+  for (const root of roots) {
+    measure(root);
+    place(root, cursor);
+    cursor += (span.get(root) ?? 0) + ORG_COL_GAP;
+  }
+
+  // satellites sit to the right of their host, nudged clear of anything else
+  // already standing on that row
+  for (const [rider, host] of satelliteOf) {
+    const hostLeft = left.get(host) ?? MARGIN;
+    const hostWidth = boxes.get(host)?.width ?? 0;
+    const riderWidth = boxes.get(rider)?.width ?? 0;
+    let x = hostLeft + hostWidth + ORG_SATELLITE_GAP;
+    const row = depth.get(rider) ?? 0;
+    for (const [other, level] of depth) {
+      if (other === rider || other === host || level !== row) {
+        continue;
+      }
+      const otherLeft = left.get(other);
+      if (otherLeft === undefined) {
+        continue;
+      }
+      const otherWidth = boxes.get(other)?.width ?? 0;
+      if (x < otherLeft + otherWidth && otherLeft < x + riderWidth) {
+        x = otherLeft + otherWidth + ORG_COL_GAP;
+      }
+    }
+    left.set(rider, Math.round(x));
+  }
+
+  const nodes: PositionedNode[] = ast.nodes.map((node) => {
+    const box = boxes.get(node.id) as OrgLayout;
+    const level = depth.get(node.id) ?? 0;
+    return {
+      ...node,
+      x: left.get(node.id) ?? MARGIN,
+      y: rowTop[level] ?? MARGIN,
+      width: box.width,
+      height: box.height,
+      rank: level,
+    };
+  });
+  const edges: PositionedEdge[] = ast.edges.map((edge) => {
+    const from = nodes.find((n) => n.id === edge.from);
+    const to = nodes.find((n) => n.id === edge.to);
+    if (!from || !to) {
+      return { ...edge, points: [] };
+    }
+    const reporting = edge.kind !== "association" && parent.get(edge.to) === edge.from;
+    return {
+      ...edge,
+      points: reporting ? orgTreeRoute(from, to) : orgSideRoute(from, to),
+      ...(reporting ? { reporting: true } : {}),
+    };
+  });
+
+  return { category: "org", title: ast.title, nodes, edges };
+}
+
+/** Parent bottom, down to the shared bus, across, then into the child's top. */
+function orgTreeRoute(from: Box, to: Box): Point[] {
+  const fromX = Math.round(from.x + from.width / 2);
+  const toX = Math.round(to.x + to.width / 2);
+  const bottom = Math.round(from.y + from.height);
+  const top = Math.round(to.y);
+  if (fromX === toX) {
+    return [
+      { x: fromX, y: bottom },
+      { x: toX, y: top },
+    ];
+  }
+  const bus = Math.round((bottom + top) / 2);
+  return [
+    { x: fromX, y: bottom },
+    { x: fromX, y: bus },
+    { x: toX, y: bus },
+    { x: toX, y: top },
+  ];
+}
+
+/** A plain connector between two boxes that are not parent and child. */
+function orgSideRoute(from: Box, to: Box): Point[] {
+  const overlapTop = Math.max(from.y, to.y);
+  const overlapBottom = Math.min(from.y + from.height, to.y + to.height);
+  if (overlapBottom - overlapTop > 8) {
+    const y = Math.round((overlapTop + overlapBottom) / 2);
+    return to.x >= from.x
+      ? [
+          { x: Math.round(from.x + from.width), y },
+          { x: Math.round(to.x), y },
+        ]
+      : [
+          { x: Math.round(from.x), y },
+          { x: Math.round(to.x + to.width), y },
+        ];
+  }
+  const fromX = Math.round(from.x + from.width / 2);
+  const toX = Math.round(to.x + to.width / 2);
+  const downward = to.y > from.y;
+  const start = { x: fromX, y: Math.round(downward ? from.y + from.height : from.y) };
+  const finish = { x: toX, y: Math.round(downward ? to.y : to.y + to.height) };
+  if (fromX === toX) {
+    return [start, finish];
+  }
+  const mid = Math.round((start.y + finish.y) / 2);
+  return [start, { x: fromX, y: mid }, { x: toX, y: mid }, finish];
+}
+
 // --------------------------------------------------------------------- api
 
 export function computeLayout(ast: AST): PositionedAST {
-  return ast.category === "bpmn" ? computeBpmnLayout(ast) : computeFlowLayout(ast);
+  switch (ast.category) {
+    case "bpmn":
+      return computeBpmnLayout(ast);
+    case "org":
+      return computeOrgLayout(ast);
+    default:
+      return computeFlowLayout(ast);
+  }
 }

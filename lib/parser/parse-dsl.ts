@@ -1,6 +1,7 @@
 import {
   AST,
   DSLEdge,
+  DSLEntry,
   DSLError,
   DSLLane,
   DSLNode,
@@ -35,6 +36,11 @@ const BPMN_NODE_TYPES = new Map<string, NodeType>([
   ["gw-para", "gw-para"],
   ["gw-inc", "gw-inc"],
   ["data", "data"],
+]);
+
+const ORG_NODE_TYPES = new Map<string, NodeType>([
+  ["role", "role"],
+  ["unit", "role"],
 ]);
 
 type TokenKind =
@@ -177,9 +183,13 @@ class Parser {
     const tok = this.tokens[this.pos];
     if (tok.kind !== "id") {
       throw new DSLError(
-        `Expected a node type (e.g. "process ${
-          this.category === "flow" ? "P1" : "T1"
-        } \\"Label\\") or an edge statement (e.g. "A -> B"), got "${tok.value}"`,
+        `Expected a node type (e.g. "${
+          this.category === "flow"
+            ? 'process P1'
+            : this.category === "org"
+              ? 'role R1'
+              : 'task T1'
+        } \\"Label\\"") or an edge statement (e.g. "A -> B"), got "${tok.value}"`,
         tok.line,
       );
     }
@@ -190,6 +200,12 @@ class Parser {
     if (this.category === "bpmn" && tok.value === "lane") {
       this.parseLane(undefined);
       return;
+    }
+    if (this.category === "org" && tok.value === "unit") {
+      throw new DSLError(
+        '"unit" only belongs inside a role block, e.g. role R "Head" { unit "Lab" "Name" }',
+        tok.line,
+      );
     }
     const next = this.tokens[this.pos + 1];
     const isDeclaration =
@@ -307,13 +323,58 @@ class Parser {
     if (this.peekIs("string")) {
       label = this.advance().value;
     }
+    // org: `role R "Title" "Name"` — the second caption is who holds the role
+    let name: string | undefined;
+    let entries: DSLEntry[] | undefined;
+    if (this.category === "org") {
+      if (this.peekIs("string")) {
+        name = this.advance().value;
+      }
+      if (this.peekIs("lbrace")) {
+        entries = this.parseOrgEntries(idTok.line);
+      }
+    }
     const lane = this.openLaneIds.length > 0 ? this.openLaneIds[this.openLaneIds.length - 1] : undefined;
     this.nodes.set(idTok.value, {
       id: idTok.value,
       type: canonical,
       label,
       ...(lane ? { lane } : {}),
+      ...(name ? { name } : {}),
+      ...(entries && entries.length > 0 ? { entries } : {}),
     });
+  }
+
+  /** `{ unit "Sub-role" "Name" ... }` — the rows listed inside one org box. */
+  private parseOrgEntries(openLine: number): DSLEntry[] {
+    this.advance(); // {
+    const entries: DSLEntry[] = [];
+    while (!this.peekIs("rbrace")) {
+      if (this.pos >= this.tokens.length) {
+        throw new DSLError('Missing "}" for role block', openLine);
+      }
+      const keyword = this.eat(
+        "id",
+        'Expected "unit" inside a role block, e.g. unit "Lab" "Name"',
+      );
+      if (keyword.value !== "unit") {
+        throw new DSLError(
+          `Expected "unit" inside a role block, got "${keyword.value}"`,
+          keyword.line,
+        );
+      }
+      const label = this.eat("string", 'Expected a caption after "unit"');
+      const entry: DSLEntry = { label: label.value };
+      if (this.peekIs("string")) {
+        entry.name = this.advance().value;
+      }
+      entries.push(entry);
+    }
+    this.advance();
+    if (entries.length === 0) {
+      throw new DSLError("An empty role block draws nothing; remove the { }", openLine);
+    }
+    return entries;
   }
 
   private parseEdgeChain(): void {
@@ -407,7 +468,7 @@ export function detectCategory(code: string): DiagramCategory | null {
     .replace(/(?:#|\/\/)[^\n]*/g, "")
     .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
     .trimStart();
-  const head = stripped.match(/^(flow|bpmn)\b/);
+  const head = stripped.match(/^(flow|bpmn|org)\b/);
   return head ? (head[1] as DiagramCategory) : null;
 }
 
@@ -415,10 +476,15 @@ export function parseDSL(code: string): AST {
   const category = detectCategory(code);
   if (!category) {
     throw new DSLError(
-      'Diagram must start with "flow" or "bpmn" followed by a title, e.g. flow "My Chart" {',
+      'Diagram must start with "flow", "bpmn" or "org" followed by a title, e.g. flow "My Chart" {',
       1,
     );
   }
-  const nodeTypes = category === "flow" ? FLOW_NODE_TYPES : BPMN_NODE_TYPES;
+  const nodeTypes =
+    category === "flow"
+      ? FLOW_NODE_TYPES
+      : category === "org"
+        ? ORG_NODE_TYPES
+        : BPMN_NODE_TYPES;
   return new Parser(tokenize(code), category, nodeTypes).parse();
 }

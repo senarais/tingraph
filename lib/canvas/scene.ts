@@ -4,6 +4,8 @@ import {
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { unitOf } from "@/lib/canvas/units";
+import type { Ink } from "@/lib/ink";
+import { squareRoute, type Corner } from "@/lib/canvas/route";
 import {
   buildLaneSkeletons,
   buildPoolSkeletons,
@@ -174,6 +176,38 @@ export function normalizeUnits(
   return fix.elements || fix.appState ? fix : null;
 }
 
+// -------------------------------------------------------------- square edges
+
+/**
+ * Keeps every connector Tingraph drew running square. Hand-drawn arrows are
+ * left alone — those belong to the reader.
+ */
+export function squareEdges(elements: Elements): ExcalidrawElement[] | null {
+  let next: ExcalidrawElement[] | null = null;
+  elements.forEach((element, index) => {
+    if (element.isDeleted || element.type !== "arrow") {
+      return;
+    }
+    if (unitOf(element)?.kind !== "edge") {
+      return;
+    }
+    const points = (element as unknown as { points: readonly Corner[] }).points;
+    const square = squareRoute(points);
+    if (!square) {
+      return;
+    }
+    const xs = square.map((point) => point[0]);
+    const ys = square.map((point) => point[1]);
+    next ??= elements.slice();
+    next[index] = newElementWith(element, {
+      points: square as never,
+      width: Math.max(...xs) - Math.min(...xs),
+      height: Math.max(...ys) - Math.min(...ys),
+    });
+  });
+  return next;
+}
+
 // ----------------------------------------------------------------- pool edits
 
 export interface PoolBox {
@@ -251,7 +285,7 @@ function place(skeletons: ReturnType<typeof buildPoolSkeletons>): ExcalidrawElem
 export function addPoolBelow(
   elements: Elements,
   pool: PoolBox,
-  accent: string,
+  ink: Ink,
 ): ExcalidrawElement[] {
   const bottom = pool.y + pool.height;
   const height = MIN_LANE_HEIGHT;
@@ -267,7 +301,7 @@ export function addPoolBelow(
         headerWidth: pool.band || BPMN_HEADER_WIDTH,
         lanes: [],
       },
-      accent,
+      ink,
     ),
   );
   return [...shiftBelow(elements, bottom, POOL_GAP + height), ...added];
@@ -277,7 +311,7 @@ export function addPoolBelow(
 export function addLane(
   elements: Elements,
   pool: PoolBox,
-  accent: string,
+  ink: Ink,
 ): ExcalidrawElement[] {
   const bottom = pool.y + pool.height;
   const height = MIN_LANE_HEIGHT;
@@ -319,7 +353,7 @@ export function addLane(
         headerWidth: band,
         poolId: pool.unit,
       },
-      accent,
+      ink,
     ),
   );
   return [...grown, ...added];

@@ -15,6 +15,8 @@ export interface UnitMark {
   kind: UnitKind;
   /** a piece the reader may pick inside the element (the caption carrier) */
   core?: true;
+  /** a piece filled with the ink's wash, so re-inking can find it by name */
+  wash?: true;
   /** pool only: width of its own header band */
   band?: number;
   /** pool only: width of the header band its lanes use */

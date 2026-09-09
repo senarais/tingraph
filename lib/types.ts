@@ -21,9 +21,18 @@ export type BpmnNodeType =
   | "gw-inc"
   | "data";
 
+/** An org chart has one shape: a box holding a role and, optionally, a name. */
+export type OrgNodeType = "role";
+
 export type EdgeKind = "sequence" | "association";
 
-export type NodeType = FlowNodeType | BpmnNodeType;
+export type NodeType = FlowNodeType | BpmnNodeType | OrgNodeType;
+
+/** A sub-role listed inside an org box, e.g. one lab under a lab head. */
+export interface DSLEntry {
+  label: string;
+  name?: string;
+}
 
 export interface DSLNode {
   id: string;
@@ -31,6 +40,10 @@ export interface DSLNode {
   label: string;
   /** id of the containing lane (BPMN only) */
   lane?: string;
+  /** org: the person holding the role */
+  name?: string;
+  /** org: sub-roles listed inside the same box */
+  entries?: DSLEntry[];
 }
 
 export interface DSLLane {
@@ -51,7 +64,7 @@ export interface DSLEdge {
   kind?: EdgeKind;
 }
 
-export type DiagramCategory = "flow" | "bpmn";
+export type DiagramCategory = "flow" | "bpmn" | "org";
 
 export interface AST {
   category: DiagramCategory;
@@ -83,6 +96,8 @@ export interface PositionedNode extends DSLNode {
 
 export interface PositionedEdge extends DSLEdge {
   points: Array<{ x: number; y: number }>;
+  /** org: a reporting line, routed as a bus from a parent box to a child */
+  reporting?: boolean;
 }
 
 export interface PositionedLane {

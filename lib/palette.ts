@@ -67,9 +67,21 @@ const FLOW_GROUPS: PaletteGroup[] = [
   },
 ];
 
+const ORG_GROUPS: PaletteGroup[] = [
+  {
+    title: "Boxes",
+    items: [
+      { type: "role", label: "Role & name", hint: "band over a name", droppable: true },
+      { type: "role-only", label: "Role only", hint: "band on its own", droppable: true },
+      { type: "role-units", label: "Role & units", hint: "band over sub-roles", droppable: true },
+    ],
+  },
+];
+
 export const PALETTE_GROUPS: Record<DiagramCategory, PaletteGroup[]> = {
   bpmn: BPMN_GROUPS,
   flow: FLOW_GROUPS,
+  org: ORG_GROUPS,
 };
 
 function idPrefix(type: string): string {
@@ -85,8 +97,46 @@ function idPrefix(type: string): string {
   return type.slice(0, 1).toUpperCase();
 }
 
+/** The box a palette item stands for, as the org layout reads it. */
+export function orgSampleNode(type: string, counter: number) {
+  if (type === "role-only") {
+    return { id: `R${counter}`, type: "role" as const, label: `ROLE ${counter}` };
+  }
+  if (type === "role-units") {
+    return {
+      id: `R${counter}`,
+      type: "role" as const,
+      label: `ROLE ${counter}`,
+      entries: [
+        { label: "Sub-role", name: "Name" },
+        { label: "Sub-role", name: "Name" },
+      ],
+    };
+  }
+  return {
+    id: `R${counter}`,
+    type: "role" as const,
+    label: `ROLE ${counter}`,
+    name: "Name",
+  };
+}
+
 /** DSL text for the item, ready to drop at the caret. */
 export function snippetFor(item: PaletteItem, counter: number): string {
+  if (item.type === "role") {
+    return `\n  role R${counter} "ROLE ${counter}" "Name"`;
+  }
+  if (item.type === "role-only") {
+    return `\n  role R${counter} "ROLE ${counter}"`;
+  }
+  if (item.type === "role-units") {
+    return (
+      `\n  role R${counter} "ROLE ${counter}" {` +
+      `\n    unit "Sub-role" "Name"` +
+      `\n    unit "Sub-role" "Name"` +
+      `\n  }`
+    );
+  }
   if (item.type === "pool") {
     return `\n  pool P${counter} "Pool ${counter}" {\n    lane L${counter} "Lane ${counter}" {\n    }\n  }\n`;
   }

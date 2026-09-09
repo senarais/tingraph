@@ -7,7 +7,8 @@ import {
   buildSkeletons,
 } from "../lib/excalidraw-mapper/build-skeletons";
 import { unitOf } from "../lib/canvas/units";
-import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE } from "../lib/templates";
+import { inkFor } from "../lib/ink";
+import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE } from "../lib/templates";
 
 type Skel = Record<string, unknown> & {
   id?: string;
@@ -28,7 +29,7 @@ function byId(skeletons: unknown[]): Map<string, Skel> {
 // --- both templates produce skeletons
 for (const tpl of [FLOWCHART_TEMPLATE, BPMN_TEMPLATE]) {
   const positioned = computeLayout(parseDSL(tpl));
-  const skeletons = byId(buildSkeletons(positioned, "#1e1e1e"));
+  const skeletons = byId(buildSkeletons(positioned, inkFor("mono")));
   assert.ok(skeletons.size > 0, "skeletons produced");
   const title = skeletons.get("diagram-title");
   assert.ok(title && title.type === "text", "title element present");
@@ -180,9 +181,9 @@ assert.ok(msgIcons.length >= 1, "msg-start envelope icon");
 assert.equal(msgIcons[0].backgroundColor, "#ffffff", "catch envelope white");
 
 // accent override
-const accented = byId(buildSkeletons(bpmn, "#1e3a8a"));
+const accented = byId(buildSkeletons(bpmn, inkFor("blue")));
 assert.equal(accented.get("A1")?.strokeColor, "#1e3a8a");
-const accentedXor = buildSkeletons(bpmn, "#1e3a8a").filter(
+const accentedXor = buildSkeletons(bpmn, inkFor("blue")).filter(
   (s) => String((s as Skel).id ?? "").startsWith("G1-xor"),
 );
 assert.equal(
@@ -261,5 +262,104 @@ assert.deepEqual(
   "new lane: split, header rule, caption",
 );
 assert.equal(lane[0].y, 110, "split sits on the lane top edge");
+
+// ------------------------------------------------------------------ org chart
+
+const orgPositioned = computeLayout(parseDSL(ORG_TEMPLATE));
+const orgAll = indexByPrefix(buildSkeletons(orgPositioned, inkFor("blue")));
+const orgById = byId(buildSkeletons(orgPositioned, inkFor("blue")));
+const ORG_BLACK = "#111827";
+const BLUE_WASH = "#7dd3fc";
+const PILL_EDGE = "#d1d5db";
+
+// the chart stays black on white; the ink shows up only as the band wash
+for (const skeleton of orgAll) {
+  const id = String(skeleton.id ?? "");
+  if (id === "diagram-title") {
+    continue;
+  }
+  const mark = unitOf(skeleton as { customData?: Record<string, unknown> });
+  assert.ok(mark, `${id} carries a unit mark`);
+  assert.equal((skeleton.groupIds as string[])[0], mark.unit, `${id} grouped`);
+  assert.ok(
+    skeleton.strokeColor === ORG_BLACK || skeleton.strokeColor === PILL_EDGE,
+    `${id} is drawn in black or in the pill hairline, never in the ink`,
+  );
+}
+assert.equal(orgById.get("diagram-title")?.strokeColor, ORG_BLACK, "title in black");
+
+// role plus name: a washed band over a white body, both captioned
+const band = orgById.get("DEKAN") as Skel & { label?: { text: string } };
+assert.equal(band.type, "rectangle");
+assert.equal(band.backgroundColor, BLUE_WASH, "band carries the wash");
+assert.equal(band.label?.text, "DEKAN");
+const body = orgById.get("DEKAN-body") as Skel & { label?: { text: string } };
+assert.equal(body.backgroundColor, "#ffffff", "body stays white");
+assert.equal(
+  body.label?.text.replace(/\n/g, " "),
+  "Dr. Gumgum Gumelar F. R, M.Si",
+  "the name is wrapped to the box",
+);
+
+// role only: a band and nothing else
+assert.ok(orgById.has("SENAT"), "role-only box drawn");
+assert.ok(!orgById.has("SENAT-body"), "role-only box has no body");
+
+// role with sub-roles: a pill and a name for each one, inside the body
+const pills = orgAll.filter((s) => /^LAB-unit-\d+$/.test(String(s.id ?? "")));
+assert.equal(pills.length, 3, "one pill per sub-role");
+assert.equal(
+  (pills[1] as Skel & { label?: { text: string } }).label?.text,
+  "Lab. Komputer",
+);
+assert.equal(pills[1].backgroundColor, BLUE_WASH, "pill carries the wash");
+assert.equal(pills[1].strokeColor, PILL_EDGE, "pill keeps a hairline edge");
+const subNames = orgAll.filter((s) => /^LAB-unit-\d+-name$/.test(String(s.id ?? "")));
+assert.equal(subNames.length, 3, "one name per sub-role");
+assert.equal(subNames[1].text, "Fildzah Rudyah P. M.Si");
+const labBody = orgById.get("LAB-body") as Skel & { label?: unknown };
+assert.ok(!labBody.label, "a box listing sub-roles carries no name of its own");
+
+// every drawn row sits inside the box the layout reserved
+const labNode = orgPositioned.nodes.find((n) => n.id === "LAB")!;
+for (const piece of [...pills, ...subNames]) {
+  const top = Number(piece.y);
+  assert.ok(
+    top >= labNode.y && top <= labNode.y + labNode.height,
+    `${piece.id} stays inside its box`,
+  );
+}
+
+// reporting lines are bound at both ends so they follow a box that is dragged
+const orgArrows = orgAll.filter((s) => s.type === "arrow");
+assert.equal(orgArrows.length, 11);
+const toWd1 = orgArrows.find(
+  (s) => (s as Skel & { end?: { id: string } }).end?.id === "WD1",
+) as Skel & { start?: { id: string }; endArrowhead?: string };
+assert.equal(toWd1.start?.id, "DEKAN-body", "bound to the box bottom");
+assert.equal(toWd1.endArrowhead, "triangle");
+assert.equal(toWd1.strokeStyle, "solid");
+const tie = orgArrows.find(
+  (s) => (s as Skel & { strokeStyle?: string }).strokeStyle === "dashed",
+) as Skel & { endArrowhead?: unknown; start?: unknown };
+assert.ok(tie, "the advisory tie is dashed");
+assert.equal(tie.endArrowhead, null, "an advisory tie carries no arrowhead");
+assert.equal(tie.start, undefined, "an advisory tie is left unbound");
+
+// the ink only moves the wash, and one preset washes the band plain white
+const monochrome = byId(buildSkeletons(orgPositioned, inkFor("mono")));
+assert.equal(monochrome.get("DEKAN")?.backgroundColor, "#e5e7eb");
+assert.equal(monochrome.get("DEKAN")?.strokeColor, ORG_BLACK, "strokes ignore the ink");
+const plain = byId(buildSkeletons(orgPositioned, inkFor("white")));
+assert.equal(plain.get("DEKAN")?.backgroundColor, "#ffffff", "white band");
+assert.equal(plain.get("DEKAN")?.strokeColor, ORG_BLACK, "white band keeps its rule");
+assert.ok(
+  unitOf(plain.get("DEKAN") as never)?.wash,
+  "the band says it carries the wash, so re-inking can find it",
+);
+assert.ok(
+  !unitOf(plain.get("DEKAN-body") as never)?.wash,
+  "the white body is not a washed piece",
+);
 
 console.log("mapper self-check: all assertions passed");

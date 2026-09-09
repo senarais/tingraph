@@ -10,14 +10,27 @@ import {
   CaptureUpdateAction,
 } from "@excalidraw/excalidraw";
 import { PanelLeftClose, PanelLeftOpen, TriangleAlert, Wand2 } from "lucide-react";
-import { useTingraphStore, type SidePanel } from "@/lib/store";
+import { TEMPLATE_LABELS, useTingraphStore, type SidePanel } from "@/lib/store";
 import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
-import { bpmnShapeSize, computeLayout } from "@/lib/layout/compute-layout";
+import {
+  bpmnShapeSize,
+  computeLayout,
+  orgBoxLayout,
+} from "@/lib/layout/compute-layout";
 import { mapToExcalidrawElements } from "@/lib/excalidraw-mapper/map-to-elements";
-import { buildShapeSkeletons } from "@/lib/excalidraw-mapper/build-skeletons";
-import { PaletteItem, snippetFor, withSnippet } from "@/lib/palette";
+import {
+  buildOrgShapeSkeletons,
+  buildShapeSkeletons,
+} from "@/lib/excalidraw-mapper/build-skeletons";
+import {
+  PaletteItem,
+  orgSampleNode,
+  snippetFor,
+  withSnippet,
+} from "@/lib/palette";
 import { DSLError, NodeType } from "@/lib/types";
 import { unitOf } from "@/lib/canvas/units";
+import { inkFor, type Ink } from "@/lib/ink";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import ExcalidrawCanvas from "@/components/excalidraw-canvas";
@@ -52,9 +65,9 @@ function registerDslLanguage(instance: Monaco): void {
   instance.languages.setMonarchTokensProvider(DSL_LANGUAGE_ID, {
     tokenizer: {
       root: [
-        [/^\s*(flow|bpmn)\b/, "keyword"],
+        [/^\s*(flow|bpmn|org)\b/, "keyword"],
         [
-          /\b(msg-start|msg-end|send-task|recv-task|script-task|user-task|gw-ex|gw-para|gw-inc|start|process|task|decision|io|data|end|timer|event|pool|lane)\b/,
+          /\b(msg-start|msg-end|send-task|recv-task|script-task|user-task|gw-ex|gw-para|gw-inc|start|process|task|decision|io|data|end|timer|event|pool|lane|role|unit)\b/,
           "type",
         ],
         [/"(?:[^"\\]|\\.)*"/, "string"],
@@ -140,9 +153,9 @@ function readSource(code: string): Reading {
 }
 
 /** The full run: source to finished shapes. Empty when the source will not parse. */
-function drawFromSource(code: string, accent: string): ExcalidrawElement[] {
+function drawFromSource(code: string, ink: Ink): ExcalidrawElement[] {
   try {
-    return mapToExcalidrawElements(computeLayout(parseDSL(code)), accent);
+    return mapToExcalidrawElements(computeLayout(parseDSL(code)), ink);
   } catch {
     return [];
   }
@@ -159,7 +172,8 @@ export default function TingraphEditor() {
   const setCode = useTingraphStore((s) => s.setCode);
   const category = useTingraphStore((s) => s.category);
   const setCategory = useTingraphStore((s) => s.setCategory);
-  const accent = useTingraphStore((s) => s.accent);
+  const inkId = useTingraphStore((s) => s.ink);
+  const ink = inkFor(inkId);
   const panel = useTingraphStore((s) => s.panel);
   const setPanel = useTingraphStore((s) => s.setPanel);
   const sidebarOpen = useTingraphStore((s) => s.sidebarOpen);
@@ -186,7 +200,7 @@ export default function TingraphEditor() {
   }
 
   // the sheet starts on the template; from here on it is the reader's
-  const [seed] = useState(() => drawFromSource(code, accent));
+  const [seed] = useState(() => drawFromSource(code, ink));
 
   const detected = useMemo(() => detectCategory(debouncedCode), [debouncedCode]);
   const editorCategory = detected ?? category;
@@ -237,24 +251,38 @@ export default function TingraphEditor() {
       },
       appState,
     );
-    const type = item.type as NodeType;
-    const label = item.type.includes("task") || item.type === "task" ? item.label : "";
-    const size = bpmnShapeSize(type, label);
     const seq = counterRef.current++;
     const drift = (seq % 6) * 22;
-    const skeletons = buildShapeSkeletons(
-      {
-        id: `mnl-${item.type}-${seq}`,
-        type,
-        label,
-        x: Math.round(centre.x - size.width / 2 + drift),
-        y: Math.round(centre.y - size.height / 2 + drift),
-        width: size.width,
-        height: size.height,
-        rank: 0,
-      },
-      accent,
-    );
+    const at = (width: number, height: number) => ({
+      x: Math.round(centre.x - width / 2 + drift),
+      y: Math.round(centre.y - height / 2 + drift),
+      width,
+      height,
+      rank: 0,
+    });
+    let skeletons;
+    if (editorCategory === "org") {
+      const sample = orgSampleNode(item.type, seq);
+      const box = orgBoxLayout(sample);
+      skeletons = buildOrgShapeSkeletons(
+        { ...sample, id: `mnl-${item.type}-${seq}`, ...at(box.width, box.height) },
+        ink,
+      );
+    } else {
+      const type = item.type as NodeType;
+      const label =
+        item.type.includes("task") || item.type === "task" ? item.label : "";
+      const size = bpmnShapeSize(type, label);
+      skeletons = buildShapeSkeletons(
+        {
+          id: `mnl-${item.type}-${seq}`,
+          type,
+          label,
+          ...at(size.width, size.height),
+        },
+        ink,
+      );
+    }
     const added = convertToExcalidrawElements(skeletons, { regenerateIds: true });
     const unit = added.map(unitOf).find(Boolean)?.unit;
     api.updateScene({
@@ -275,7 +303,7 @@ export default function TingraphEditor() {
    */
   const generate = () => {
     const api = apiRef.current;
-    const fresh = drawFromSource(code, accent);
+    const fresh = drawFromSource(code, ink);
     if (!api || fresh.length === 0) {
       return;
     }
@@ -295,28 +323,33 @@ export default function TingraphEditor() {
   };
 
   // ink is a sheet-wide restyle, so it reaches the drawing without a redraw
-  const inkRef = useRef(accent);
+  const inkRef = useRef(inkId);
   useEffect(() => {
     const previous = inkRef.current;
-    inkRef.current = accent;
+    inkRef.current = inkId;
     const api = apiRef.current;
-    if (!api || previous === accent) {
+    if (!api || previous === inkId) {
       return;
     }
+    const was = inkFor(previous);
+    const now = inkFor(inkId);
     api.updateScene({
-      elements: api.getSceneElementsIncludingDeleted().map((element) =>
-        newElementWith(element, {
-          strokeColor:
-            element.strokeColor === previous ? accent : element.strokeColor,
-          backgroundColor:
-            element.backgroundColor === previous
-              ? accent
-              : element.backgroundColor,
-        }),
-      ),
+      elements: api.getSceneElementsIncludingDeleted().map((element) => {
+        // a washed piece says so on itself, because the wash can be plain
+        // white — the same colour half the drawing is already filled with
+        if (unitOf(element)?.wash) {
+          return newElementWith(element, { backgroundColor: now.tint });
+        }
+        const reink = (colour: string) =>
+          colour === was.color ? now.color : colour;
+        return newElementWith(element, {
+          strokeColor: reink(element.strokeColor),
+          backgroundColor: reink(element.backgroundColor),
+        });
+      }),
       captureUpdate: CaptureUpdateAction.IMMEDIATELY,
     });
-  }, [accent]);
+  }, [inkId]);
 
   const handleEditorMount: OnMount = (editor) => {
     monacoRef.current = editor;
@@ -342,20 +375,20 @@ export default function TingraphEditor() {
           <aside className="flex w-[368px] shrink-0 flex-col border-r border-rule bg-panel">
             <div className="flex items-center gap-2 border-b border-rule px-3 py-2.5">
               <div className="flex rounded-md border border-rule bg-raised p-0.5">
-                {(["flow", "bpmn"] as const).map((cat) => (
+                {(["flow", "bpmn", "org"] as const).map((cat) => (
                   <button
                     key={cat}
                     type="button"
                     onClick={() => {
                       if (cat !== category) setCategory(cat);
                     }}
-                    className={`rounded px-2.5 py-1 text-[12px] font-medium transition-colors ${
+                    className={`rounded px-2 py-1 text-[12px] font-medium transition-colors ${
                       editorCategory === cat
                         ? "bg-ink text-white"
                         : "text-ink-soft hover:text-ink"
                     }`}
                   >
-                    {cat === "flow" ? "Flowchart" : "BPMN 2.0"}
+                    {TEMPLATE_LABELS[cat]}
                   </button>
                 ))}
               </div>

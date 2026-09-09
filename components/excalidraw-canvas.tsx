@@ -16,8 +16,10 @@ import {
   normalizeUnits,
   poolBoxes,
   removePool,
+  squareEdges,
   type PoolBox,
 } from "@/lib/canvas/scene";
+import { inkFor } from "@/lib/ink";
 import PoolControls, { type CanvasView } from "@/components/pool-controls";
 
 interface ExcalidrawCanvasProps {
@@ -40,7 +42,9 @@ export default function ExcalidrawCanvas({
   propertiesOpen,
   onApi,
 }: ExcalidrawCanvasProps) {
-  const accent = useTingraphStore((s) => s.accent);
+  // the id is the snapshot; the pair is derived, so the store stays stable
+  const inkId = useTingraphStore((s) => s.ink);
+  const ink = inkFor(inkId);
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const [seeded] = useState(() => initialElements);
   const [pools, setPools] = useState<PoolBox[]>([]);
@@ -50,16 +54,20 @@ export default function ExcalidrawCanvas({
   const handleChange = useCallback(
     (elements: readonly ExcalidrawElement[], state: AppState) => {
       const fix = normalizeUnits(elements, state);
-      if (fix) {
+      // a bound connector is dragged out of square by its own ends; put it back
+      const square = squareEdges(fix?.elements ?? elements);
+      const next = square ?? fix?.elements;
+      if (next || fix?.appState) {
         // deferred: this runs inside Excalidraw's own commit
         queueMicrotask(() =>
           apiRef.current?.updateScene({
-            ...fix,
+            ...(next ? { elements: next } : {}),
+            ...(fix?.appState ? { appState: fix.appState } : {}),
             captureUpdate: CaptureUpdateAction.NEVER,
           }),
         );
       }
-      const boxes = poolBoxes(fix?.elements ?? elements);
+      const boxes = poolBoxes(next ?? elements);
       const signature =
         boxes.map((p) => `${p.unit}@${p.x},${p.y},${p.width},${p.height}`).join("|") +
         `#${state.scrollX},${state.scrollY},${state.zoom.value},${state.width},${state.height}`;
@@ -130,7 +138,8 @@ export default function ExcalidrawCanvas({
             currentItemStrokeStyle: "solid",
             currentItemRoughness: 0,
             currentItemRoundness: "sharp",
-            currentItemArrowType: "sharp",
+            // a connector the reader draws by hand stays square as well
+            currentItemArrowType: "elbow",
             currentItemFontSize: 16,
             currentItemFontFamily: 2,
             currentItemOpacity: 100,
@@ -140,9 +149,9 @@ export default function ExcalidrawCanvas({
       <PoolControls
         pools={pools}
         view={view}
-        onAddLane={(pool) => edit((elements) => addLane(elements, pool, accent))}
+        onAddLane={(pool) => edit((elements) => addLane(elements, pool, ink))}
         onAddPool={(pool) =>
-          edit((elements) => addPoolBelow(elements, pool, accent))
+          edit((elements) => addPoolBelow(elements, pool, ink))
         }
         onRemove={(pool) => edit((elements) => removePool(elements, pool))}
       />

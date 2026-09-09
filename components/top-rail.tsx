@@ -3,7 +3,8 @@
 import { useCallback, useRef } from "react";
 import { exportToBlob, exportToSvg } from "@excalidraw/excalidraw";
 import { Download, ImageDown, Maximize, SlidersHorizontal } from "lucide-react";
-import { ACCENT_PRESETS, useTingraphStore } from "@/lib/store";
+import { INK_PRESETS, TEMPLATE_LABELS, useTingraphStore } from "@/lib/store";
+import { DiagramCategory } from "@/lib/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 const EXPORT_SCALE = 4;
@@ -57,7 +58,7 @@ function Cell({
 
 interface TopRailProps {
   title: string;
-  category: "flow" | "bpmn";
+  category: DiagramCategory;
   /** nothing on the sheet worth exporting */
   empty: boolean;
   nodeCount: number;
@@ -75,8 +76,8 @@ export default function TopRail({
   errorMessage,
   apiRef,
 }: TopRailProps) {
-  const accent = useTingraphStore((s) => s.accent);
-  const setAccent = useTingraphStore((s) => s.setAccent);
+  const ink = useTingraphStore((s) => s.ink);
+  const setInk = useTingraphStore((s) => s.setInk);
   const propertiesOpen = useTingraphStore((s) => s.propertiesOpen);
   const toggleProperties = useTingraphStore((s) => s.toggleProperties);
   const busyRef = useRef(false);
@@ -169,7 +170,7 @@ export default function TopRail({
       </div>
 
       <Cell label="Drawing" value={title || "Untitled"} />
-      <Cell label="Notation" value={category === "bpmn" ? "BPMN 2.0" : "Flowchart"} />
+      <Cell label="Notation" value={TEMPLATE_LABELS[category]} />
       <Cell label="Elements" value={`${nodeCount} nodes · ${edgeCount} flows`} />
       <Cell
         label="Status"
@@ -180,20 +181,22 @@ export default function TopRail({
       <div className="ml-auto flex items-center gap-3 px-4">
         <div className="hidden items-center gap-1.5 border-r border-rule pr-4 sm:flex">
           <span className="tick mr-0.5">Ink</span>
-          {ACCENT_PRESETS.map((preset) => (
+          {INK_PRESETS.map((preset) => (
             <button
-              key={preset.color}
+              key={preset.id}
               type="button"
               title={preset.name}
               aria-label={`Ink: ${preset.name}`}
-              aria-pressed={accent === preset.color}
-              onClick={() => setAccent(preset.color)}
-              className={`h-4 w-4 rounded-full border transition-transform ${
-                accent === preset.color
-                  ? "scale-110 border-ink"
-                  : "border-rule-strong hover:scale-110"
+              aria-pressed={ink === preset.id}
+              onClick={() => setInk(preset.id)}
+              // the swatch shows both halves of the preset: the wash it fills
+              // an org band with, ringed by the ink it draws every line in
+              className={`h-4 w-4 rounded-full border-2 transition-transform ${
+                ink === preset.id
+                  ? "scale-110 ring-2 ring-ink ring-offset-1"
+                  : "hover:scale-110"
               }`}
-              style={{ backgroundColor: preset.color }}
+              style={{ backgroundColor: preset.tint, borderColor: preset.color }}
             />
           ))}
         </div>

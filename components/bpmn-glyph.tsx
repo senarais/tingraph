@@ -34,7 +34,53 @@ function TaskMarker({ children }: { children: JSX.Element }) {
   return <g transform="translate(9, 8)">{children}</g>;
 }
 
+/** An org box: a washed band over an optional white body. */
+function OrgBox({ band, body }: { band: number; body: number }) {
+  const top = 16 - (band + body) / 2;
+  return (
+    <g>
+      <rect
+        x="5"
+        y={top}
+        width="34"
+        height={band}
+        fill="currentColor"
+        fillOpacity="0.2"
+      />
+      {body > 0 && <rect x="5" y={top + band} width="34" height={body} fill="none" />}
+    </g>
+  );
+}
+
 const GLYPHS: Record<string, JSX.Element> = {
+  role: <OrgBox band={9} body={11} />,
+  "role-only": <OrgBox band={11} body={0} />,
+  "role-units": (
+    <g>
+      <rect x="5" y="4" width="34" height="7" fill="currentColor" fillOpacity="0.2" />
+      <rect x="5" y="11" width="34" height="17" fill="none" />
+      <rect
+        x="10"
+        y="14"
+        width="24"
+        height="4"
+        rx="2"
+        fill="currentColor"
+        fillOpacity="0.2"
+        stroke="none"
+      />
+      <rect
+        x="10"
+        y="21"
+        width="24"
+        height="4"
+        rx="2"
+        fill="currentColor"
+        fillOpacity="0.2"
+        stroke="none"
+      />
+    </g>
+  ),
   start: <circle cx="22" cy="16" r="10" strokeWidth="1.4" />,
   "msg-start": (
     <g>

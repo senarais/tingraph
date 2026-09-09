@@ -76,16 +76,46 @@ const BPMN_SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
   },
 ];
 
+const ORG_SECTIONS: Array<{ title: string; rows: Array<[string, string]> }> = [
+  {
+    title: "Chart",
+    rows: [['org "Title" {', "open an org chart"]],
+  },
+  {
+    title: "Boxes",
+    rows: [
+      ['role ID "Role" "Name"', "role band over a name"],
+      ['role ID "Role"', "role band on its own"],
+      ['role ID "Role" {', "role band over sub-roles"],
+      ['unit "Sub-role" "Name"', "one sub-role, inside a role block"],
+    ],
+  },
+  {
+    title: "Lines",
+    rows: [
+      ["A -> B", "B reports to A"],
+      ["A -> B -> C", "chain of reporting lines"],
+      ["A -.-> B", "advisory tie (dashed)"],
+      ["# comment", "line comment (also //)"],
+    ],
+  },
+];
+
 interface CheatSheetProps {
   category: DiagramCategory;
 }
 
 export default function CheatSheet({ category }: CheatSheetProps) {
-  const sections = category === "flow" ? FLOW_SECTIONS : BPMN_SECTIONS;
+  const sections =
+    category === "flow"
+      ? FLOW_SECTIONS
+      : category === "org"
+        ? ORG_SECTIONS
+        : BPMN_SECTIONS;
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <p className="border-b border-rule px-4 py-3 text-[12px] leading-relaxed text-ink-soft">
-        Declare every element once, then wire the flows. Layout, spacing and
+        Declare every element once, then wire the lines. Layout, spacing and
         routing are worked out for you — drag anything afterwards on the sheet.
       </p>
       {sections.map((section) => (

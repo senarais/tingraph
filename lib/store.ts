@@ -1,29 +1,21 @@
 import { create } from "zustand";
+import { DEFAULT_INK, INK_PRESETS, type InkId } from "@/lib/ink";
 import { TEMPLATE_LABELS, TEMPLATES } from "@/lib/templates";
 import { DiagramCategory } from "@/lib/types";
-
-export const ACCENT_PRESETS = [
-  { name: "Monochrome", color: "#1e1e1e" },
-  { name: "Formal Blue", color: "#1e3a8a" },
-  { name: "Formal Red", color: "#991b1b" },
-  { name: "Formal Green", color: "#065f46" },
-] as const;
-
-export type AccentColor = (typeof ACCENT_PRESETS)[number]["color"];
 
 export type SidePanel = "source" | "shapes" | "guide";
 
 interface TingraphState {
   code: string;
   category: DiagramCategory;
-  accent: AccentColor;
+  ink: InkId;
   panel: SidePanel;
   sidebarOpen: boolean;
   /** Excalidraw's shape-properties panel, off until the reader asks for it */
   propertiesOpen: boolean;
   setCode: (code: string) => void;
   setCategory: (category: DiagramCategory) => void;
-  setAccent: (accent: AccentColor) => void;
+  setInk: (ink: InkId) => void;
   setPanel: (panel: SidePanel) => void;
   toggleSidebar: () => void;
   toggleProperties: () => void;
@@ -32,13 +24,13 @@ interface TingraphState {
 export const useTingraphStore = create<TingraphState>((set) => ({
   code: TEMPLATES.bpmn,
   category: "bpmn",
-  accent: "#1e1e1e",
+  ink: DEFAULT_INK,
   panel: "source",
   sidebarOpen: true,
   propertiesOpen: false,
   setCode: (code) => set({ code }),
   setCategory: (category) => set({ category, code: TEMPLATES[category] }),
-  setAccent: (accent) => set({ accent }),
+  setInk: (ink) => set({ ink }),
   setPanel: (panel) => set({ panel }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   toggleProperties: () =>
@@ -52,4 +44,5 @@ if (typeof window !== "undefined") {
   };
 }
 
-export { TEMPLATE_LABELS, TEMPLATES };
+export { INK_PRESETS, TEMPLATE_LABELS, TEMPLATES };
+export type { InkId };

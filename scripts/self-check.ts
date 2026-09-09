@@ -1,11 +1,13 @@
 import assert from "node:assert";
 import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
 import { computeLayout } from "@/lib/layout/compute-layout";
-import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE } from "@/lib/templates";
+import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE } from "@/lib/templates";
 import { DSLError } from "@/lib/types";
+import { squareRoute, type Corner } from "@/lib/canvas/route";
 
 assert.equal(detectCategory(FLOWCHART_TEMPLATE), "flow");
 assert.equal(detectCategory(BPMN_TEMPLATE), "bpmn");
+assert.equal(detectCategory(ORG_TEMPLATE), "org");
 assert.equal(detectCategory('graph "x" {}'), null);
 
 const flowAst = parseDSL(FLOWCHART_TEMPLATE);
@@ -303,7 +305,7 @@ function expectDSLError(code: string, msgPart: string, line?: number): void {
   }
 }
 
-expectDSLError('x "Title" {}', 'must start with "flow" or "bpmn"');
+expectDSLError('x "Title" {}', 'must start with "flow", "bpmn" or "org"');
 expectDSLError('flow Missing { }', "diagram title", 1);
 expectDSLError('flow "T" { process P1 "P"\n', 'Missing closing "}"', 1);
 expectDSLError('flow "T" { process P1 "P"\n  P1 -> Q1 }', 'undeclared node "Q1"');
@@ -335,5 +337,224 @@ assert.ok(implicit.edges.length >= 1, "edges work inside a pool block");
 // dashed arrows parse in flow too (rendered solid there; bpmn styles them)
 const flowAssoc = parseDSL('flow "F" {\n  process A "A"\n  process B "B"\n  A -.-> B\n}');
 assert.equal(flowAssoc.edges[0].kind, "association");
+
+// ------------------------------------------------------------------ org chart
+
+const orgAst = parseDSL(ORG_TEMPLATE);
+assert.equal(orgAst.category, "org");
+assert.equal(orgAst.nodes.length, 12);
+const dekan = orgAst.nodes.find((n) => n.id === "DEKAN");
+assert.equal(dekan?.name, "Dr. Gumgum Gumelar F. R, M.Si");
+assert.equal(
+  orgAst.nodes.find((n) => n.id === "SENAT")?.name,
+  undefined,
+  "a role with one caption carries no name",
+);
+const lab = orgAst.nodes.find((n) => n.id === "LAB");
+assert.equal(lab?.entries?.length, 3, "sub-roles parsed");
+assert.equal(lab?.entries?.[1].label, "Lab. Komputer");
+assert.equal(lab?.entries?.[1].name, "Fildzah Rudyah P. M.Si");
+assert.equal(
+  orgAst.edges.find((e) => e.to === "SENAT")?.kind,
+  "association",
+  "the senate is tied in with a dotted line",
+);
+
+expectDSLError('org "T" { unit "a" "b" }', 'only belongs inside a role block', 1);
+expectDSLError('org "T" { role R "R" { role X "x" } }', 'Expected "unit"', 1);
+expectDSLError('org "T" { role R "R" { unit } }', "caption", 1);
+expectDSLError('org "T" { role R "R" { } }', "empty role block", 1);
+expectDSLError('org "T" { role R "R"\n  role R "S" }', 'Duplicate node id "R"', 2);
+
+// a sub-role caption with no name is allowed
+const bare = parseDSL('org "T" { role R "R" { unit "Only" } }');
+assert.equal(bare.nodes[0].entries?.[0].name, undefined);
+
+const org = computeLayout(orgAst);
+assert.equal(org.category, "org");
+assert.equal(org.pools, undefined, "an org chart has no pools");
+
+const at = (id: string) => org.nodes.find((n) => n.id === id)!;
+// rows are top aligned, so boxes of different heights start on the same line
+assert.equal(at("WD1").y, at("LAB").y, "siblings share a row");
+assert.ok(at("WD1").y > at("DEKAN").y + at("DEKAN").height, "children sit below");
+assert.equal(at("SENAT").y, at("DEKAN").y, "the satellite rides beside its host");
+assert.ok(
+  at("SENAT").x >= at("DEKAN").x + at("DEKAN").width,
+  "the satellite sits to the right of its host",
+);
+// a role with no name is a band and nothing else
+assert.ok(at("SENAT").height < at("DEKAN").height, "a role-only box is shorter");
+// the parent is centred over the run of its children
+const kids = ["WD1", "WD2", "WD3", "LAB", "S1", "S2", "GPJM"].map(at);
+const runCentre =
+  (kids[0].x +
+    kids[0].width / 2 +
+    kids[kids.length - 1].x +
+    kids[kids.length - 1].width / 2) /
+  2;
+assert.ok(
+  Math.abs(at("DEKAN").x + at("DEKAN").width / 2 - runCentre) <= 1,
+  "the parent is centred over its children",
+);
+
+// nothing overlaps
+for (let i = 0; i < org.nodes.length; i++) {
+  for (let j = i + 1; j < org.nodes.length; j++) {
+    const a = org.nodes[i];
+    const b = org.nodes[j];
+    assert.ok(
+      !(
+        a.x < b.x + b.width &&
+        b.x < a.x + a.width &&
+        a.y < b.y + b.height &&
+        b.y < a.y + a.height
+      ),
+      `${a.id} and ${b.id} overlap`,
+    );
+  }
+}
+
+// every reporting line is a bus: parent bottom, shared rail, child top
+const busses = org.edges.filter((e) => e.reporting);
+assert.equal(busses.length, 10, "ten reporting lines");
+for (const edge of busses) {
+  const from = at(edge.from);
+  const to = at(edge.to);
+  const first = edge.points[0];
+  const last = edge.points[edge.points.length - 1];
+  assert.equal(first.y, from.y + from.height, `${edge.from} leaves its bottom`);
+  assert.equal(last.y, to.y, `${edge.to} is entered at its top`);
+  assert.equal(last.x, Math.round(to.x + to.width / 2), "entered on centre");
+}
+const rails = new Set(
+  org.edges
+    .filter((e) => e.reporting && e.from === "DEKAN" && e.points.length === 4)
+    .map((e) => e.points[1].y),
+);
+assert.equal(rails.size, 1, "children of one box share a single rail");
+assert.ok(
+  !org.edges.find((e) => e.to === "SENAT")?.reporting,
+  "a dotted tie is not a reporting line",
+);
+
+// a cycle degrades to a plain connector rather than looping forever
+const cyclic = computeLayout(
+  parseDSL('org "C" { role A "A"\n  role B "B"\n  A -> B\n  B -> A }'),
+);
+assert.equal(cyclic.nodes.length, 2);
+assert.equal(cyclic.edges.filter((e) => e.reporting).length, 1);
+
+// ------------------------------------------------------------- square routes
+
+/** Every leg of a route has to run either straight down or straight across. */
+function assertSquare(points: readonly Corner[], what: string): void {
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i];
+    const b = points[i + 1];
+    assert.ok(
+      Math.abs(a[0] - b[0]) < 0.01 || Math.abs(a[1] - b[1]) < 0.01,
+      `${what}: leg ${i} runs at a slant (${a} -> ${b})`,
+    );
+  }
+}
+
+// a route that is already square is left exactly as it is
+assert.equal(
+  squareRoute([
+    [0, 0],
+    [0, 40],
+    [80, 40],
+    [80, 90],
+  ]),
+  null,
+  "a square route needs no repair",
+);
+assert.equal(squareRoute([[0, 0], [0, 50]]), null, "a straight leg is square");
+
+// the ends stay put and the corners are re-cut against them
+const dragged = squareRoute([
+  [0, 0],
+  [3, 40],
+  [80, 40],
+  [130, 90],
+]) as Corner[];
+assertSquare(dragged, "dragged route");
+assert.deepEqual(dragged[0], [0, 0], "the start does not move");
+assert.deepEqual(dragged[dragged.length - 1], [130, 90], "the end does not move");
+assert.deepEqual(dragged, [
+  [0, 0],
+  [0, 40],
+  [130, 40],
+  [130, 90],
+]);
+
+// a route that runs across the page keeps running across
+const sideways = squareRoute([
+  [0, 0],
+  [40, 6],
+  [40, 60],
+  [90, 70],
+]) as Corner[];
+assertSquare(sideways, "sideways route");
+assert.deepEqual(sideways, [
+  [0, 0],
+  [40, 0],
+  [40, 70],
+  [90, 70],
+]);
+
+// a two-point slant grows a step, taken along the longer run
+const stepped = squareRoute([[0, 0], [60, 200]]) as Corner[];
+assertSquare(stepped, "stepped route");
+assert.equal(stepped.length, 4);
+assert.deepEqual(stepped[1], [0, 100], "it leaves downwards, the longer run");
+const across = squareRoute([[0, 0], [200, 60]]) as Corner[];
+assertSquare(across, "across route");
+assert.deepEqual(across[1], [100, 0], "it leaves sideways, the longer run");
+
+// a longer route keeps every one of its bends
+const long = squareRoute([
+  [0, 0],
+  [5, 30],
+  [50, 30],
+  [50, 70],
+  [120, 74],
+]) as Corner[];
+assertSquare(long, "long route");
+assert.equal(long.length, 5);
+assert.deepEqual(long[long.length - 1], [120, 74]);
+
+// a corner that lands on the far end collapses instead of doubling back
+const collapsed = squareRoute([
+  [0, 0],
+  [4, 40],
+  [80, 40],
+  [0, 90],
+]) as Corner[];
+assertSquare(collapsed, "collapsed route");
+assert.deepEqual(collapsed, [[0, 0], [0, 90]], "it straightens out");
+
+// repairing twice changes nothing more
+assert.equal(squareRoute(dragged), null, "the repair settles");
+assert.equal(squareRoute(long), null, "the repair settles on long routes");
+assert.equal(squareRoute(stepped), null, "the repair settles on new steps");
+
+// every route the three notations lay out is already square
+for (const template of [FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE]) {
+  const drawn = computeLayout(parseDSL(template));
+  for (const edge of drawn.edges) {
+    const corners = edge.points.map((p) => [p.x, p.y] as Corner);
+    if (corners.length < 2) {
+      continue;
+    }
+    assertSquare(corners, `${drawn.category} ${edge.from}->${edge.to}`);
+    assert.equal(
+      squareRoute(corners),
+      null,
+      `${drawn.category} ${edge.from}->${edge.to} needs no repair`,
+    );
+  }
+}
 
 console.log("parse + layout self-check: all assertions passed");
