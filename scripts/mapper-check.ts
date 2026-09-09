@@ -1,7 +1,12 @@
 import assert from "node:assert";
 import { parseDSL } from "../lib/parser/parse-dsl";
 import { computeLayout } from "../lib/layout/compute-layout";
-import { buildSkeletons } from "../lib/excalidraw-mapper/build-skeletons";
+import {
+  buildLaneSkeletons,
+  buildPoolSkeletons,
+  buildSkeletons,
+} from "../lib/excalidraw-mapper/build-skeletons";
+import { unitOf } from "../lib/canvas/units";
 import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE } from "../lib/templates";
 
 type Skel = Record<string, unknown> & {
@@ -185,5 +190,76 @@ assert.equal(
   "#1e3a8a",
   "gateway marker follows accent",
 );
+
+// --- every piece of an element is stamped for the one-shape rule
+const marked = indexByPrefix(buildSkeletons(bpmn));
+for (const skeleton of marked) {
+  const mark = unitOf(skeleton as { customData?: Record<string, unknown> });
+  const id = String(skeleton.id ?? "");
+  if (id === "diagram-title") {
+    continue; // the sheet title stands on its own
+  }
+  assert.ok(mark, `${id} carries a unit mark`);
+  const groupIds = (skeleton.groupIds ?? []) as string[];
+  assert.equal(groupIds[0], mark.unit, `${id} sits in its unit group`);
+}
+// marker strokes ride along; they are never a selection of their own
+const xorMark = unitOf(
+  marked.find((s) => String(s.id ?? "").startsWith("G1-xor")) as never,
+);
+assert.equal(xorMark?.unit, "bpmn-G1", "gateway marker belongs to its gateway");
+assert.ok(!xorMark?.core, "gateway marker is not selectable on its own");
+assert.ok(unitOf(bpmnS.get("A1") as never)?.core, "task box is selectable");
+
+// --- pool boxes carry the band widths later edits need
+const poolBox = marked.find(
+  (s) => s.type === "rectangle" && String(s.id ?? "").startsWith("pool-"),
+);
+const poolMark = unitOf(poolBox as never);
+assert.equal(poolMark?.kind, "pool", "pool box marked as a pool");
+assert.equal(typeof poolMark?.band, "number", "pool records its header band");
+assert.equal(typeof poolMark?.laneBand, "number", "pool records its lane band");
+
+// --- a pool added on the canvas draws box, rule and rotated caption
+const fresh = indexByPrefix(
+  buildPoolSkeletons({
+    id: "new",
+    label: "Pool 4",
+    x: 0,
+    y: 0,
+    width: 400,
+    height: 110,
+    headerWidth: 30,
+    lanes: [],
+  }),
+);
+assert.deepEqual(
+  fresh.map((s) => s.type),
+  ["rectangle", "line", "text"],
+  "new pool: box, header rule, caption",
+);
+assert.ok(
+  fresh.every((s) => unitOf(s as never)?.unit === "pool-new"),
+  "new pool is one unit",
+);
+
+// --- a lane added on the canvas draws its split, rule and caption
+const lane = indexByPrefix(
+  buildLaneSkeletons({
+    id: "new",
+    label: "Lane 2",
+    x: 30,
+    y: 110,
+    width: 370,
+    height: 110,
+    headerWidth: 30,
+  }),
+);
+assert.deepEqual(
+  lane.map((s) => s.type),
+  ["line", "line", "text"],
+  "new lane: split, header rule, caption",
+);
+assert.equal(lane[0].y, 110, "split sits on the lane top edge");
 
 console.log("mapper self-check: all assertions passed");

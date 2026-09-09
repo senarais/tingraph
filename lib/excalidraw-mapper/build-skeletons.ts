@@ -3,8 +3,11 @@ import {
   NodeType,
   PositionedAST,
   PositionedEdge,
+  PositionedLane,
   PositionedNode,
+  PositionedPool,
 } from "@/lib/types";
+import { marked, type UnitMark } from "@/lib/canvas/units";
 import {
   BPMN_EXTERNAL_LABEL_DISTANCE,
   BPMN_LABEL_FONT_SIZE,
@@ -105,6 +108,7 @@ function externalLabelSkeleton(
     x: Math.round(node.x + node.width / 2),
     y: Math.round(node.y + node.height + BPMN_EXTERNAL_LABEL_DISTANCE),
     groupIds: [`bpmn-${node.id}`],
+    ...marked({ unit: `bpmn-${node.id}`, kind: "node", core: true }),
     ...ACADEMIC_MONOCHROME_THEME,
     strokeColor: theme.strokeColor,
     fontSize: BPMN_LABEL_FONT_SIZE,
@@ -119,22 +123,32 @@ export function bpmnNodeSkeletons(
   theme: Theme,
 ): ExcalidrawElementSkeleton[] {
   const skeletons: ExcalidrawElementSkeleton[] = [];
-  const groupIds = [`bpmn-${node.id}`];
+  const unit = `bpmn-${node.id}`;
+  const groupIds = [unit];
+  // marker strokes ride along with the shape and are never picked on their own
+  const asPart = (parts: ExcalidrawElementSkeleton[]) =>
+    parts.map(
+      (part) =>
+        ({ ...part, ...marked({ unit, kind: "node" }) }) as ExcalidrawElementSkeleton,
+    );
   const base = {
     ...ACADEMIC_MONOCHROME_THEME,
     strokeColor: theme.strokeColor,
     backgroundColor: WHITE,
     roundness: null,
     groupIds,
+    ...marked({ unit, kind: "node", core: true }),
   } as const;
 
   if (node.type === "data") {
     // data object reference: folded-corner document outline (bpmn-js path)
     skeletons.push(
-      ...buildDataObjectOutline(node, {
-        strokeColor: theme.strokeColor,
-        throwFill: theme.strokeColor,
-      }),
+      ...asPart(
+        buildDataObjectOutline(node, {
+          strokeColor: theme.strokeColor,
+          throwFill: theme.strokeColor,
+        }),
+      ),
     );
     const label = externalLabelSkeleton(node, theme);
     if (label) {
@@ -175,10 +189,12 @@ export function bpmnNodeSkeletons(
   } as ExcalidrawElementSkeleton);
 
   skeletons.push(
-    ...buildBpmnIcons(node, {
-      strokeColor: theme.strokeColor,
-      throwFill: theme.strokeColor,
-    }),
+    ...asPart(
+      buildBpmnIcons(node, {
+        strokeColor: theme.strokeColor,
+        throwFill: theme.strokeColor,
+      }),
+    ),
   );
 
   if (bpmnHasExternalLabel(node.type)) {
@@ -256,6 +272,7 @@ function edgeSkeleton(
     height: Math.max(...ys) - Math.min(...ys),
     points,
     groupIds: [`flow-${index}`],
+    ...marked({ unit: `flow-${index}`, kind: "edge", core: true }),
     ...(bindable.has(edge.from) ? { start: { id: edge.from } } : {}),
     ...(bindable.has(edge.to) ? { end: { id: edge.to } } : {}),
     ...ACADEMIC_MONOCHROME_THEME,
@@ -367,6 +384,7 @@ function edgeLabelSkeletons(
       x: Math.round(box.x),
       y: Math.round(box.y),
       groupIds: [`flow-${index}`],
+      ...marked({ unit: `flow-${index}`, kind: "edge", core: true }),
       ...ACADEMIC_MONOCHROME_THEME,
       strokeColor: theme.strokeColor,
       fontSize: BPMN_LABEL_FONT_SIZE,
@@ -446,6 +464,7 @@ function bandLabelSkeleton(
   band: { x: number; y: number; width: number; height: number },
   theme: Theme,
   fontSize: number,
+  mark: UnitMark,
 ): ExcalidrawElementSkeleton {
   return {
     type: "text",
@@ -455,6 +474,8 @@ function bandLabelSkeleton(
     x: Math.round(band.x + band.width / 2),
     y: Math.round(band.y + band.height / 2),
     angle: -Math.PI / 2,
+    groupIds: [mark.unit],
+    ...marked(mark),
     ...ACADEMIC_MONOCHROME_THEME,
     strokeColor: theme.strokeColor,
     fontSize,
@@ -464,118 +485,158 @@ function bandLabelSkeleton(
   } as ExcalidrawElementSkeleton;
 }
 
+/** Stroke settings shared by every pool / lane rule. */
+function chromeBox(theme: Theme) {
+  return {
+    ...ACADEMIC_MONOCHROME_THEME,
+    strokeColor: theme.strokeColor,
+    backgroundColor: "transparent",
+    strokeWidth: CHROME_STROKE_WIDTH,
+    roundness: null,
+  } as const;
+}
+
+/** One lane rule set: the split line above it and its header band. */
+function laneSkeletons(
+  lane: PositionedLane,
+  theme: Theme,
+  drawSplit: boolean,
+): ExcalidrawElementSkeleton[] {
+  const out: ExcalidrawElementSkeleton[] = [];
+  const box = chromeBox(theme);
+  const unit = `lane-${lane.id}`;
+  // lanes share the pool's outer border; only the split lines are drawn
+  if (drawSplit) {
+    out.push({
+      type: "line",
+      id: `${unit}-split`,
+      x: lane.x,
+      y: lane.y,
+      width: lane.width,
+      height: 0,
+      points: [
+        [0, 0],
+        [lane.width, 0],
+      ],
+      ...box,
+      groupIds: [unit],
+      ...marked({ unit, kind: "lane" }),
+    } as ExcalidrawElementSkeleton);
+  }
+  if (lane.headerWidth > 0) {
+    out.push({
+      type: "line",
+      id: `${unit}-divider`,
+      x: lane.x + lane.headerWidth,
+      y: lane.y,
+      width: 0,
+      height: lane.height,
+      points: [
+        [0, 0],
+        [0, lane.height],
+      ],
+      ...box,
+      groupIds: [unit],
+      ...marked({ unit, kind: "lane" }),
+    } as ExcalidrawElementSkeleton);
+    if (lane.label) {
+      out.push(
+        bandLabelSkeleton(
+          `${unit}-label`,
+          lane.label,
+          {
+            x: lane.x,
+            y: lane.y,
+            width: lane.headerWidth,
+            height: lane.height,
+          },
+          theme,
+          BPMN_LABEL_FONT_SIZE,
+          { unit, kind: "lane", core: true },
+        ),
+      );
+    }
+  }
+  return out;
+}
+
+/** One pool box with its vertical header band and its lane rules. */
+function poolSkeletons(
+  pool: PositionedPool,
+  theme: Theme,
+): ExcalidrawElementSkeleton[] {
+  const out: ExcalidrawElementSkeleton[] = [];
+  const box = chromeBox(theme);
+  const unit = `pool-${pool.id}`;
+  const groupIds = [unit];
+  // the band widths ride on the box so later pool edits match what was drawn
+  const mark = {
+    unit,
+    kind: "pool",
+    band: pool.headerWidth,
+    laneBand: Math.max(0, ...pool.lanes.map((lane) => lane.headerWidth)),
+  } as const;
+
+  out.push({
+    type: "rectangle",
+    id: unit,
+    x: pool.x,
+    y: pool.y,
+    width: pool.width,
+    height: pool.height,
+    ...box,
+    groupIds,
+    ...marked({ ...mark, core: true }),
+  } as ExcalidrawElementSkeleton);
+
+  if (pool.headerWidth > 0) {
+    out.push({
+      type: "line",
+      id: `${unit}-divider`,
+      x: pool.x + pool.headerWidth,
+      y: pool.y,
+      width: 0,
+      height: pool.height,
+      points: [
+        [0, 0],
+        [0, pool.height],
+      ],
+      ...box,
+      groupIds,
+      ...marked(mark),
+    } as ExcalidrawElementSkeleton);
+    if (pool.label) {
+      out.push(
+        bandLabelSkeleton(
+          `${unit}-label`,
+          pool.label,
+          { x: pool.x, y: pool.y, width: pool.headerWidth, height: pool.height },
+          theme,
+          BPMN_LABEL_FONT_SIZE + 1,
+          { ...mark, core: true },
+        ),
+      );
+    }
+  }
+
+  pool.lanes.forEach((lane, index) => {
+    out.push(...laneSkeletons(lane, theme, index > 0));
+  });
+  return out;
+}
+
 /** Pool and lane boxes with their vertical header bands. */
 function poolLaneSkeletons(
   positioned: PositionedAST,
   theme: Theme,
 ): ExcalidrawElementSkeleton[] {
   const out: ExcalidrawElementSkeleton[] = [];
-  const stroke = theme.strokeColor;
-  const box = {
-    ...ACADEMIC_MONOCHROME_THEME,
-    strokeColor: stroke,
-    backgroundColor: "transparent",
-    strokeWidth: CHROME_STROKE_WIDTH,
-    roundness: null,
-  } as const;
-
   for (const pool of positioned.pools ?? []) {
     // elements declared outside any participant get no box, per BPMN practice
     if (!pool.label && pool.lanes.every((lane) => !lane.label)) {
       continue;
     }
-    const groupIds = [`pool-${pool.id}`];
-    out.push({
-      type: "rectangle",
-      id: `pool-${pool.id}`,
-      x: pool.x,
-      y: pool.y,
-      width: pool.width,
-      height: pool.height,
-      ...box,
-      groupIds,
-    } as ExcalidrawElementSkeleton);
-
-    if (pool.headerWidth > 0) {
-      out.push({
-        type: "line",
-        id: `pool-${pool.id}-divider`,
-        x: pool.x + pool.headerWidth,
-        y: pool.y,
-        width: 0,
-        height: pool.height,
-        points: [
-          [0, 0],
-          [0, pool.height],
-        ],
-        ...box,
-        groupIds,
-      } as ExcalidrawElementSkeleton);
-      if (pool.label) {
-        out.push(
-          bandLabelSkeleton(
-            `pool-${pool.id}-label`,
-            pool.label,
-            { x: pool.x, y: pool.y, width: pool.headerWidth, height: pool.height },
-            theme,
-            BPMN_LABEL_FONT_SIZE + 1,
-          ),
-        );
-      }
-    }
-
-    pool.lanes.forEach((lane, index) => {
-      const laneGroup = [`lane-${lane.id}`];
-      // lanes share the pool's outer border; only the split lines are drawn
-      if (index > 0) {
-        out.push({
-          type: "line",
-          id: `lane-${lane.id}-split`,
-          x: lane.x,
-          y: lane.y,
-          width: lane.width,
-          height: 0,
-          points: [
-            [0, 0],
-            [lane.width, 0],
-          ],
-          ...box,
-          groupIds: laneGroup,
-        } as ExcalidrawElementSkeleton);
-      }
-      if (lane.headerWidth > 0) {
-        out.push({
-          type: "line",
-          id: `lane-${lane.id}-divider`,
-          x: lane.x + lane.headerWidth,
-          y: lane.y,
-          width: 0,
-          height: lane.height,
-          points: [
-            [0, 0],
-            [0, lane.height],
-          ],
-          ...box,
-          groupIds: laneGroup,
-        } as ExcalidrawElementSkeleton);
-        if (lane.label) {
-          out.push(
-            bandLabelSkeleton(
-              `lane-${lane.id}-label`,
-              lane.label,
-              {
-                x: lane.x,
-                y: lane.y,
-                width: lane.headerWidth,
-                height: lane.height,
-              },
-              theme,
-              BPMN_LABEL_FONT_SIZE,
-            ),
-          );
-        }
-      }
-    });
+    out.push(...poolSkeletons(pool, theme));
   }
   return out;
 }
@@ -628,4 +689,20 @@ export function buildShapeSkeletons(
   accentColor: string = ACADEMIC_MONOCHROME_THEME.strokeColor,
 ): ExcalidrawElementSkeleton[] {
   return bpmnNodeSkeletons(node, themeFor(accentColor, "bpmn"));
+}
+
+/** One pool box, for adding a participant straight on the canvas. */
+export function buildPoolSkeletons(
+  pool: PositionedPool,
+  accentColor: string = ACADEMIC_MONOCHROME_THEME.strokeColor,
+): ExcalidrawElementSkeleton[] {
+  return poolSkeletons(pool, themeFor(accentColor, "bpmn"));
+}
+
+/** One lane rule set, for splitting a pool that is already on the canvas. */
+export function buildLaneSkeletons(
+  lane: PositionedLane,
+  accentColor: string = ACADEMIC_MONOCHROME_THEME.strokeColor,
+): ExcalidrawElementSkeleton[] {
+  return laneSkeletons(lane, themeFor(accentColor, "bpmn"), true);
 }

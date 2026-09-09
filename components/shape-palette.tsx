@@ -19,9 +19,11 @@ export default function ShapePalette({
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <p className="border-b border-rule px-4 py-3 text-[12px] leading-relaxed text-ink-soft">
-        Click a shape to write it into the source. Use{" "}
+        Click a shape to write it into the source; it reaches the sheet on the
+        next <span className="whitespace-nowrap font-medium text-ink">Generate</span>.
+        Use{" "}
         <span className="whitespace-nowrap font-medium text-ink">place on canvas</span>{" "}
-        to drop one straight onto the sheet without touching the code.
+        to drop one straight onto the sheet instead.
       </p>
       {PALETTE_GROUPS[category].map((group) => (
         <section key={group.title} className="border-b border-rule px-4 py-3">

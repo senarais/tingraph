@@ -5,10 +5,11 @@ import Editor, { loader, type Monaco, type OnMount } from "@monaco-editor/react"
 import * as monaco from "monaco-editor";
 import {
   convertToExcalidrawElements,
+  newElementWith,
   viewportCoordsToSceneCoords,
   CaptureUpdateAction,
 } from "@excalidraw/excalidraw";
-import { PanelLeftClose, PanelLeftOpen, TriangleAlert } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, TriangleAlert, Wand2 } from "lucide-react";
 import { useTingraphStore, type SidePanel } from "@/lib/store";
 import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
 import { bpmnShapeSize, computeLayout } from "@/lib/layout/compute-layout";
@@ -16,9 +17,10 @@ import { mapToExcalidrawElements } from "@/lib/excalidraw-mapper/map-to-elements
 import { buildShapeSkeletons } from "@/lib/excalidraw-mapper/build-skeletons";
 import { PaletteItem, snippetFor, withSnippet } from "@/lib/palette";
 import { DSLError, NodeType } from "@/lib/types";
+import { unitOf } from "@/lib/canvas/units";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import ExcalidrawCanvas, { MANUAL_MARK } from "@/components/excalidraw-canvas";
+import ExcalidrawCanvas from "@/components/excalidraw-canvas";
 import CheatSheet from "@/components/cheat-sheet";
 import ShapePalette from "@/components/shape-palette";
 import TopRail from "@/components/top-rail";
@@ -100,48 +102,49 @@ function registerDslLanguage(instance: Monaco): void {
   });
 }
 
-interface PipelineError {
-  message: string;
-  line: number;
-}
-
-interface PipelineResult {
-  elements: ExcalidrawElement[];
+interface Reading {
   title: string;
   nodeCount: number;
   edgeCount: number;
-  error: PipelineError | null;
+  error: { message: string; line: number } | null;
 }
 
-const EMPTY: PipelineResult = {
-  elements: [],
-  title: "",
-  nodeCount: 0,
-  edgeCount: 0,
-  error: null,
-};
-
-function runPipeline(code: string, accent: string): PipelineResult {
+/**
+ * Parses and lays the source out for the readouts and the error line. Shapes
+ * are only built when the reader asks for them, in `drawFromSource`.
+ */
+function readSource(code: string): Reading {
   try {
     const ast = parseDSL(code);
-    const positioned = computeLayout(ast);
-    const elements = mapToExcalidrawElements(positioned, accent);
+    computeLayout(ast);
     return {
-      elements,
       title: ast.title,
       nodeCount: ast.nodes.length,
       edgeCount: ast.edges.length,
       error: null,
     };
   } catch (cause) {
-    const error =
-      cause instanceof DSLError
-        ? { message: cause.message, line: cause.line }
-        : {
-            message: cause instanceof Error ? cause.message : String(cause),
-            line: 0,
-          };
-    return { ...EMPTY, error };
+    return {
+      title: "",
+      nodeCount: 0,
+      edgeCount: 0,
+      error:
+        cause instanceof DSLError
+          ? { message: cause.message, line: cause.line }
+          : {
+              message: cause instanceof Error ? cause.message : String(cause),
+              line: 0,
+            },
+    };
+  }
+}
+
+/** The full run: source to finished shapes. Empty when the source will not parse. */
+function drawFromSource(code: string, accent: string): ExcalidrawElement[] {
+  try {
+    return mapToExcalidrawElements(computeLayout(parseDSL(code)), accent);
+  } catch {
+    return [];
   }
 }
 
@@ -173,17 +176,17 @@ export default function TingraphEditor() {
     return () => clearTimeout(handle);
   }, [code]);
 
-  const result = useMemo(
-    () => runPipeline(debouncedCode, accent),
-    [debouncedCode, accent],
-  );
+  const result = useMemo(() => readSource(debouncedCode), [debouncedCode]);
 
-  // the sheet keeps the last drawing that parsed, so a half-typed line does not
-  // blank the canvas or the readouts
+  // the readouts keep the last source that parsed, so a half-typed line does
+  // not blank them out
   const [drawn, setDrawn] = useState(result);
   if (!result.error && drawn !== result) {
     setDrawn(result);
   }
+
+  // the sheet starts on the template; from here on it is the reader's
+  const [seed] = useState(() => drawFromSource(code, accent));
 
   const detected = useMemo(() => detectCategory(debouncedCode), [debouncedCode]);
   const editorCategory = detected ?? category;
@@ -252,19 +255,68 @@ export default function TingraphEditor() {
       },
       accent,
     );
-    const added = convertToExcalidrawElements(skeletons, {
-      regenerateIds: false,
-    }).map((element) => ({ ...element, customData: { ...MANUAL_MARK } }));
+    const added = convertToExcalidrawElements(skeletons, { regenerateIds: true });
+    const unit = added.map(unitOf).find(Boolean)?.unit;
     api.updateScene({
       elements: [...api.getSceneElements(), ...added],
       appState: {
         selectedElementIds: Object.fromEntries(
-          added.map((element) => [element.id, true]),
+          added.map((element) => [element.id, true as const]),
         ),
+        selectedGroupIds: unit ? { [unit]: true } : {},
       },
       captureUpdate: CaptureUpdateAction.IMMEDIATELY,
     });
   };
+
+  /**
+   * Redraws the sheet from the source. This is the only moment the code
+   * touches the canvas: everything after it belongs to the reader.
+   */
+  const generate = () => {
+    const api = apiRef.current;
+    const fresh = drawFromSource(code, accent);
+    if (!api || fresh.length === 0) {
+      return;
+    }
+    api.updateScene({
+      elements: fresh,
+      appState: {
+        selectedElementIds: {},
+        selectedGroupIds: {},
+        editingGroupId: null,
+      },
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    });
+    api.scrollToContent(api.getSceneElements(), {
+      fitToViewport: true,
+      viewportZoomFactor: 0.85,
+    });
+  };
+
+  // ink is a sheet-wide restyle, so it reaches the drawing without a redraw
+  const inkRef = useRef(accent);
+  useEffect(() => {
+    const previous = inkRef.current;
+    inkRef.current = accent;
+    const api = apiRef.current;
+    if (!api || previous === accent) {
+      return;
+    }
+    api.updateScene({
+      elements: api.getSceneElementsIncludingDeleted().map((element) =>
+        newElementWith(element, {
+          strokeColor:
+            element.strokeColor === previous ? accent : element.strokeColor,
+          backgroundColor:
+            element.backgroundColor === previous
+              ? accent
+              : element.backgroundColor,
+        }),
+      ),
+      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+    });
+  }, [accent]);
 
   const handleEditorMount: OnMount = (editor) => {
     monacoRef.current = editor;
@@ -278,7 +330,7 @@ export default function TingraphEditor() {
       <TopRail
         title={drawn.title}
         category={editorCategory}
-        elements={drawn.elements}
+        empty={drawn.nodeCount === 0}
         nodeCount={drawn.nodeCount}
         edgeCount={drawn.edgeCount}
         errorMessage={result.error?.message ?? null}
@@ -375,7 +427,7 @@ export default function TingraphEditor() {
 
             {panel === "guide" && <CheatSheet category={editorCategory} />}
 
-            {result.error ? (
+            {result.error && (
               <div className="flex items-start gap-2 border-t border-alert/30 bg-alert-tint px-4 py-2.5 text-[12px] leading-relaxed text-alert">
                 <TriangleAlert size={14} className="mt-0.5 shrink-0" />
                 <span>
@@ -383,20 +435,30 @@ export default function TingraphEditor() {
                   {result.error.message}
                 </span>
               </div>
-            ) : (
-              <div className="flex items-center gap-2 border-t border-rule px-4 py-2.5">
-                <span className="h-1.5 w-1.5 rounded-full bg-blueprint" />
-                <span className="text-[11px] text-ink-soft">
-                  {drawn.nodeCount} nodes · {drawn.edgeCount} flows · drawn
-                </span>
-              </div>
             )}
+            <div className="flex items-center gap-3 border-t border-rule px-4 py-2.5">
+              <span className="min-w-0 flex-1 truncate text-[11px] text-ink-soft">
+                {result.error
+                  ? "Source has a syntax error"
+                  : `${result.nodeCount} nodes · ${result.edgeCount} flows in source`}
+              </span>
+              <button
+                type="button"
+                onClick={generate}
+                disabled={!!result.error}
+                title="Redraw the sheet from the source, replacing what is on it"
+                className="flex shrink-0 items-center gap-1.5 rounded-md bg-ink px-2.5 py-1.5 text-[12px] font-medium text-white transition-colors hover:bg-blueprint disabled:cursor-not-allowed disabled:bg-rule-strong"
+              >
+                <Wand2 size={13} />
+                Generate
+              </button>
+            </div>
           </aside>
         )}
 
         <main className="relative min-w-0 flex-1 bg-paper">
           <ExcalidrawCanvas
-            elements={drawn.elements}
+            initialElements={seed}
             propertiesOpen={propertiesOpen}
             onApi={(api) => {
               apiRef.current = api;

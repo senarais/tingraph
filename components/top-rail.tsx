@@ -4,7 +4,6 @@ import { useCallback, useRef } from "react";
 import { exportToBlob, exportToSvg } from "@excalidraw/excalidraw";
 import { Download, ImageDown, Maximize, SlidersHorizontal } from "lucide-react";
 import { ACCENT_PRESETS, useTingraphStore } from "@/lib/store";
-import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 
 const EXPORT_SCALE = 4;
@@ -59,7 +58,8 @@ function Cell({
 interface TopRailProps {
   title: string;
   category: "flow" | "bpmn";
-  elements: ExcalidrawElement[];
+  /** nothing on the sheet worth exporting */
+  empty: boolean;
   nodeCount: number;
   edgeCount: number;
   errorMessage: string | null;
@@ -69,7 +69,7 @@ interface TopRailProps {
 export default function TopRail({
   title,
   category,
-  elements,
+  empty,
   nodeCount,
   edgeCount,
   errorMessage,
@@ -83,11 +83,12 @@ export default function TopRail({
 
   const exportTargets = useCallback(() => {
     const api = apiRef.current;
-    if (!api || elements.length === 0) {
+    const scene = api?.getSceneElements() ?? [];
+    if (!api || scene.length === 0) {
       return null;
     }
-    return { elements: api.getSceneElements(), appState: api.getAppState() };
-  }, [apiRef, elements]);
+    return { elements: scene, appState: api.getAppState() };
+  }, [apiRef]);
 
   const handleExportPng = useCallback(async () => {
     const target = exportTargets();
@@ -145,8 +146,6 @@ export default function TopRail({
     });
   }, [apiRef]);
 
-  const empty = elements.length === 0;
-
   return (
     <header className="flex h-14 shrink-0 items-stretch border-b border-rule bg-panel">
       <div className="flex items-center gap-2.5 border-r border-rule px-4">
@@ -174,7 +173,7 @@ export default function TopRail({
       <Cell label="Elements" value={`${nodeCount} nodes · ${edgeCount} flows`} />
       <Cell
         label="Status"
-        value={errorMessage ? "Syntax error" : "Drawn"}
+        value={errorMessage ? "Syntax error" : "Parsed"}
         tone={errorMessage ? "alert" : "ink"}
       />
 

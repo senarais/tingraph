@@ -2,68 +2,99 @@
 
 import "@excalidraw/excalidraw/index.css";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { CaptureUpdateAction, Excalidraw } from "@excalidraw/excalidraw";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type {
+  AppState,
+  ExcalidrawImperativeAPI,
+} from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
-
-/** Shapes the reader dropped by hand survive every re-generation of the code. */
-export const MANUAL_MARK = { tingraph: "manual" } as const;
-
-export function isManual(element: ExcalidrawElement): boolean {
-  return (
-    (element.customData as { tingraph?: string } | undefined)?.tingraph ===
-    "manual"
-  );
-}
+import { useTingraphStore } from "@/lib/store";
+import {
+  addLane,
+  addPoolBelow,
+  normalizeUnits,
+  poolBoxes,
+  removePool,
+  type PoolBox,
+} from "@/lib/canvas/scene";
+import PoolControls, { type CanvasView } from "@/components/pool-controls";
 
 interface ExcalidrawCanvasProps {
-  elements: ExcalidrawElement[];
+  /** first drawing, seeded once; afterwards the sheet is the reader's */
+  initialElements: ExcalidrawElement[];
   propertiesOpen: boolean;
   onApi: (api: ExcalidrawImperativeAPI) => void;
 }
 
+const NO_VIEW: CanvasView = {
+  scrollX: 0,
+  scrollY: 0,
+  zoom: 1,
+  width: 0,
+  height: 0,
+};
+
 export default function ExcalidrawCanvas({
-  elements,
+  initialElements,
   propertiesOpen,
   onApi,
 }: ExcalidrawCanvasProps) {
+  const accent = useTingraphStore((s) => s.accent);
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
-  const elementsRef = useRef<ExcalidrawElement[]>(elements);
-  const [initialElements] = useState(() => elements);
-  const fitted = useRef(false);
+  const [seeded] = useState(() => initialElements);
+  const [pools, setPools] = useState<PoolBox[]>([]);
+  const [view, setView] = useState<CanvasView>(NO_VIEW);
+  const overlayRef = useRef("");
 
-  useEffect(() => {
-    elementsRef.current = elements;
-  }, [elements]);
-
-  const sync = useCallback(() => {
-    const api = apiRef.current;
-    const next = elementsRef.current;
-    if (!api || next.length === 0) {
-      return;
-    }
-    const handDrawn = api.getSceneElements().filter(isManual);
-    api.updateScene({
-      elements: [...next, ...handDrawn],
-      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
-    });
-    if (!fitted.current) {
-      // fit once on load; afterwards the reader owns the viewport
-      fitted.current = true;
-      api.scrollToContent(api.getSceneElements(), {
-        fitToViewport: true,
-        viewportZoomFactor: 0.85,
+  const handleChange = useCallback(
+    (elements: readonly ExcalidrawElement[], state: AppState) => {
+      const fix = normalizeUnits(elements, state);
+      if (fix) {
+        // deferred: this runs inside Excalidraw's own commit
+        queueMicrotask(() =>
+          apiRef.current?.updateScene({
+            ...fix,
+            captureUpdate: CaptureUpdateAction.NEVER,
+          }),
+        );
+      }
+      const boxes = poolBoxes(fix?.elements ?? elements);
+      const signature =
+        boxes.map((p) => `${p.unit}@${p.x},${p.y},${p.width},${p.height}`).join("|") +
+        `#${state.scrollX},${state.scrollY},${state.zoom.value},${state.width},${state.height}`;
+      if (signature === overlayRef.current) {
+        return;
+      }
+      overlayRef.current = signature;
+      setPools(boxes);
+      setView({
+        scrollX: state.scrollX,
+        scrollY: state.scrollY,
+        zoom: state.zoom.value,
+        width: state.width,
+        height: state.height,
       });
-    }
-  }, []);
+    },
+    [],
+  );
 
-  useEffect(() => {
-    sync();
-  }, [elements, sync]);
+  const edit = useCallback(
+    (rewrite: (elements: readonly ExcalidrawElement[]) => ExcalidrawElement[]) => {
+      const api = apiRef.current;
+      if (!api) {
+        return;
+      }
+      api.updateScene({
+        elements: rewrite(api.getSceneElementsIncludingDeleted()),
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+    },
+    [],
+  );
 
   return (
-    <div className="h-full w-full">
+    <div className="relative h-full w-full">
       <Excalidraw
         name="tingraph-scene"
         excalidrawAPI={(api) => {
@@ -72,6 +103,7 @@ export default function ExcalidrawCanvas({
             api;
           onApi(api);
         }}
+        onChange={handleChange}
         UIOptions={{
           canvasActions: {
             export: false,
@@ -85,8 +117,7 @@ export default function ExcalidrawCanvas({
         objectsSnapModeEnabled
         zenModeEnabled={!propertiesOpen}
         initialData={{
-          // seeded here as well so the first paint never races the API handshake
-          elements: initialElements,
+          elements: seeded,
           scrollToContent: true,
           appState: {
             viewBackgroundColor: "#ffffff",
@@ -105,6 +136,15 @@ export default function ExcalidrawCanvas({
             currentItemOpacity: 100,
           },
         }}
+      />
+      <PoolControls
+        pools={pools}
+        view={view}
+        onAddLane={(pool) => edit((elements) => addLane(elements, pool, accent))}
+        onAddPool={(pool) =>
+          edit((elements) => addPoolBelow(elements, pool, accent))
+        }
+        onRemove={(pool) => edit((elements) => removePool(elements, pool))}
       />
     </div>
   );
