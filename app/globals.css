@@ -127,3 +127,12 @@ body {
     transition-duration: 0.01ms !important;
   }
 }
+
+/*
+ * Excalidraw's shape-properties island lives behind the Style toggle in the top
+ * rail. Zen mode used to hide it, but zen mode also strips the alignment guides
+ * down to two-pixel crosses, and the guides are worth more than the island.
+ */
+.shape-actions-off .App-menu__left {
+  display: none;
+}

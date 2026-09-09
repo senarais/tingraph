@@ -594,15 +594,23 @@ function diagramBounds(positioned: PositionedAST): {
   minY: number;
 } {
   const pools = positioned.pools ?? [];
+  // routes count too: a chart that grows sideways sends its loops over the top
+  const routes = positioned.edges.flatMap((edge) => edge.points);
   const xs = [
     ...positioned.nodes.map((n) => n.x),
     ...pools.map((p) => p.x),
+    ...routes.map((p) => p.x),
   ];
   const rights = [
     ...positioned.nodes.map((n) => n.x + n.width),
     ...pools.map((p) => p.x + p.width),
+    ...routes.map((p) => p.x),
   ];
-  const ys = [...positioned.nodes.map((n) => n.y), ...pools.map((p) => p.y)];
+  const ys = [
+    ...positioned.nodes.map((n) => n.y),
+    ...pools.map((p) => p.y),
+    ...routes.map((p) => p.y),
+  ];
   return {
     minX: Math.min(...xs),
     maxX: Math.max(...rights),

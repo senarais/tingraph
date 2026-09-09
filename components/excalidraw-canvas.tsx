@@ -118,7 +118,11 @@ export default function ExcalidrawCanvas({
   );
 
   return (
-    <div className="relative h-full w-full">
+    <div
+      className={`relative h-full w-full ${
+        propertiesOpen ? "" : "shape-actions-off"
+      }`}
+    >
       <Excalidraw
         name="tingraph-scene"
         excalidrawAPI={(api) => {
@@ -138,13 +142,13 @@ export default function ExcalidrawCanvas({
             clearCanvas: false,
           },
         }}
-        objectsSnapModeEnabled
-        zenModeEnabled={!propertiesOpen}
         initialData={{
           elements: seeded,
           scrollToContent: true,
           appState: {
             viewBackgroundColor: "#ffffff",
+            // guides that show when a shape lines up with the ones around it
+            objectsSnapModeEnabled: true,
             // formal defaults: sharp lines, sans-serif, near-black stroke —
             // distinguishes Tingraph output from default Excalidraw style
             currentItemStrokeColor: "#1e1e1e",

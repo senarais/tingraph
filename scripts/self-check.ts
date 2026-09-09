@@ -450,6 +450,105 @@ const cyclic = computeLayout(
 assert.equal(cyclic.nodes.length, 2);
 assert.equal(cyclic.edges.filter((e) => e.reporting).length, 1);
 
+// ------------------------------------------------------- growing sideways
+
+// a flowchart laid out across the page keeps its ranks, turned a quarter turn
+const flowDown = computeLayout(parseDSL(FLOWCHART_TEMPLATE), "down");
+const flowRight = computeLayout(parseDSL(FLOWCHART_TEMPLATE), "right");
+const rank = (drawn: typeof flowDown, id: string) =>
+  drawn.nodes.find((n) => n.id === id)!;
+assert.ok(
+  rank(flowDown, "E1").y > rank(flowDown, "S1").y &&
+    Math.abs(rank(flowDown, "E1").x - rank(flowDown, "S1").x) < 200,
+  "top down: the chart runs down the page",
+);
+assert.ok(
+  rank(flowRight, "E1").x > rank(flowRight, "S1").x &&
+    Math.abs(rank(flowRight, "E1").y - rank(flowRight, "S1").y) < 200,
+  "sideways: the chart runs across the page",
+);
+assert.equal(
+  flowDown.nodes.length,
+  flowRight.nodes.length,
+  "the same boxes either way",
+);
+
+// an org chart the same: levels step across, the boxes on one level stack
+const orgRight = computeLayout(parseDSL(ORG_TEMPLATE), "right");
+const acrossAt = (id: string) => orgRight.nodes.find((n) => n.id === id)!;
+assert.ok(
+  acrossAt("WD1").x > acrossAt("DEKAN").x + acrossAt("DEKAN").width,
+  "children stand to the right of their parent",
+);
+assert.equal(acrossAt("WD1").x, acrossAt("GPJM").x, "one level shares a column");
+assert.ok(acrossAt("GPJM").y > acrossAt("WD1").y, "siblings stack down the column");
+assert.ok(
+  acrossAt("LAYANAN").x > acrossAt("S1").x + acrossAt("S1").width,
+  "the next level steps across again",
+);
+// the parent is centred on the run of its children, across the column now
+const column = ["WD1", "WD2", "WD3", "LAB", "S1", "S2", "GPJM"].map(acrossAt);
+const runMiddle =
+  (column[0].y +
+    column[0].height / 2 +
+    column[column.length - 1].y +
+    column[column.length - 1].height / 2) /
+  2;
+assert.ok(
+  Math.abs(acrossAt("DEKAN").y + acrossAt("DEKAN").height / 2 - runMiddle) <= 1,
+  "the parent is centred on its children",
+);
+// the satellite parks under its host rather than beside it
+assert.equal(acrossAt("SENAT").x, acrossAt("DEKAN").x, "the satellite shares the column");
+assert.ok(
+  acrossAt("SENAT").y >= acrossAt("DEKAN").y + acrossAt("DEKAN").height,
+  "the satellite sits below its host",
+);
+// reporting lines leave the trailing edge and enter the leading one
+for (const edge of orgRight.edges.filter((e) => e.reporting)) {
+  const from = acrossAt(edge.from);
+  const to = acrossAt(edge.to);
+  const first = edge.points[0];
+  const last = edge.points[edge.points.length - 1];
+  assert.equal(first.x, from.x + from.width, `${edge.from} leaves its right edge`);
+  assert.equal(last.x, to.x, `${edge.to} is entered on its left edge`);
+  assert.equal(last.y, Math.round(to.y + to.height / 2), "entered on centre");
+}
+const railsRight = new Set(
+  orgRight.edges
+    .filter((e) => e.reporting && e.from === "DEKAN" && e.points.length === 4)
+    .map((e) => e.points[1].x),
+);
+assert.equal(railsRight.size, 1, "children of one box share a single rail");
+
+// nothing overlaps either way
+for (const drawn of [flowRight, orgRight]) {
+  for (let i = 0; i < drawn.nodes.length; i++) {
+    for (let j = i + 1; j < drawn.nodes.length; j++) {
+      const a = drawn.nodes[i];
+      const b = drawn.nodes[j];
+      assert.ok(
+        !(
+          a.x < b.x + b.width &&
+          b.x < a.x + a.width &&
+          a.y < b.y + b.height &&
+          b.y < a.y + a.height
+        ),
+        `${drawn.category} sideways: ${a.id} and ${b.id} overlap`,
+      );
+    }
+  }
+}
+
+// a BPMN diagram reads along its lanes whichever way the picker is set
+const bpmnDown = computeLayout(parseDSL(BPMN_TEMPLATE), "down");
+const bpmnRight = computeLayout(parseDSL(BPMN_TEMPLATE), "right");
+assert.deepEqual(
+  bpmnRight.nodes.map((n) => [n.id, n.x, n.y]),
+  bpmnDown.nodes.map((n) => [n.id, n.x, n.y]),
+  "BPMN ignores the direction",
+);
+
 // ------------------------------------------------------------- square routes
 
 /** Every leg of a route has to run either straight down or straight across. */
@@ -545,9 +644,10 @@ assert.equal(squareRoute(dragged), null, "the repair settles");
 assert.equal(squareRoute(long), null, "the repair settles on long routes");
 assert.equal(squareRoute(stepped), null, "the repair settles on new steps");
 
-// every route the three notations lay out is already square
+// every route the three notations lay out is already square, either way round
 for (const template of [FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE]) {
-  const drawn = computeLayout(parseDSL(template));
+  for (const heading of ["down", "right"] as const) {
+  const drawn = computeLayout(parseDSL(template), heading);
   for (const edge of drawn.edges) {
     const corners = edge.points.map((p) => [p.x, p.y] as Corner);
     if (corners.length < 2) {
@@ -557,8 +657,9 @@ for (const template of [FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE]) {
     assert.equal(
       squareRoute(corners),
       null,
-      `${drawn.category} ${edge.from}->${edge.to} needs no repair`,
+      `${drawn.category} ${heading} ${edge.from}->${edge.to} needs no repair`,
     );
+  }
   }
 }
 

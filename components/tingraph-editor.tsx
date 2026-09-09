@@ -9,7 +9,14 @@ import {
   viewportCoordsToSceneCoords,
   CaptureUpdateAction,
 } from "@excalidraw/excalidraw";
-import { PanelLeftClose, PanelLeftOpen, TriangleAlert, Wand2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowRight,
+  PanelLeftClose,
+  PanelLeftOpen,
+  TriangleAlert,
+  Wand2,
+} from "lucide-react";
 import { TEMPLATE_LABELS, useTingraphStore, type SidePanel } from "@/lib/store";
 import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
 import {
@@ -29,7 +36,7 @@ import {
   snippetFor,
   withSnippet,
 } from "@/lib/palette";
-import { DSLError, NodeType } from "@/lib/types";
+import { DSLError, LayoutDirection, NodeType } from "@/lib/types";
 import { unitOf } from "@/lib/canvas/units";
 import { inkFor, type Ink } from "@/lib/ink";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
@@ -127,10 +134,10 @@ interface Reading {
  * Parses and lays the source out for the readouts and the error line. Shapes
  * are only built when the reader asks for them, in `drawFromSource`.
  */
-function readSource(code: string): Reading {
+function readSource(code: string, direction: LayoutDirection): Reading {
   try {
     const ast = parseDSL(code);
-    computeLayout(ast);
+    computeLayout(ast, direction);
     return {
       title: ast.title,
       nodeCount: ast.nodes.length,
@@ -154,13 +161,26 @@ function readSource(code: string): Reading {
 }
 
 /** The full run: source to finished shapes. Empty when the source will not parse. */
-function drawFromSource(code: string, ink: Ink): ExcalidrawElement[] {
+function drawFromSource(
+  code: string,
+  ink: Ink,
+  direction: LayoutDirection,
+): ExcalidrawElement[] {
   try {
-    return mapToExcalidrawElements(computeLayout(parseDSL(code)), ink);
+    return mapToExcalidrawElements(computeLayout(parseDSL(code), direction), ink);
   } catch {
     return [];
   }
 }
+
+const DIRECTIONS = [
+  { id: "down", icon: ArrowDown, title: "Grow the drawing down the page" },
+  { id: "right", icon: ArrowRight, title: "Grow the drawing across the page" },
+] as const satisfies ReadonlyArray<{
+  id: LayoutDirection;
+  icon: typeof ArrowDown;
+  title: string;
+}>;
 
 const PANELS: Array<{ id: SidePanel; label: string }> = [
   { id: "source", label: "Source" },
@@ -173,6 +193,8 @@ export default function TingraphEditor() {
   const setCode = useTingraphStore((s) => s.setCode);
   const category = useTingraphStore((s) => s.category);
   const setCategory = useTingraphStore((s) => s.setCategory);
+  const direction = useTingraphStore((s) => s.direction);
+  const setDirection = useTingraphStore((s) => s.setDirection);
   const inkId = useTingraphStore((s) => s.ink);
   const ink = inkFor(inkId);
   const panel = useTingraphStore((s) => s.panel);
@@ -191,7 +213,10 @@ export default function TingraphEditor() {
     return () => clearTimeout(handle);
   }, [code]);
 
-  const result = useMemo(() => readSource(debouncedCode), [debouncedCode]);
+  const result = useMemo(
+    () => readSource(debouncedCode, direction),
+    [debouncedCode, direction],
+  );
 
   // the readouts keep the last source that parsed, so a half-typed line does
   // not blank them out
@@ -201,7 +226,7 @@ export default function TingraphEditor() {
   }
 
   // the sheet starts on the template; from here on it is the reader's
-  const [seed] = useState(() => drawFromSource(code, ink));
+  const [seed] = useState(() => drawFromSource(code, ink, direction));
 
   const detected = useMemo(() => detectCategory(debouncedCode), [debouncedCode]);
   const editorCategory = detected ?? category;
@@ -304,7 +329,7 @@ export default function TingraphEditor() {
    */
   const generate = () => {
     const api = apiRef.current;
-    const fresh = drawFromSource(code, ink);
+    const fresh = drawFromSource(code, ink, direction);
     if (!api || fresh.length === 0) {
       return;
     }
@@ -470,12 +495,33 @@ export default function TingraphEditor() {
                 </span>
               </div>
             )}
-            <div className="flex items-center gap-3 border-t border-rule px-4 py-2.5">
+            <div className="flex items-center gap-2 border-t border-rule px-4 py-2.5">
               <span className="min-w-0 flex-1 truncate text-[11px] text-ink-soft">
                 {result.error
                   ? "Source has a syntax error"
-                  : `${result.nodeCount} nodes · ${result.edgeCount} flows in source`}
+                  : `${result.nodeCount} nodes · ${result.edgeCount} flows`}
               </span>
+              {editorCategory !== "bpmn" && (
+                <div className="flex shrink-0 rounded-md border border-rule bg-raised p-0.5">
+                  {DIRECTIONS.map((entry) => (
+                    <button
+                      key={entry.id}
+                      type="button"
+                      onClick={() => setDirection(entry.id)}
+                      aria-pressed={direction === entry.id}
+                      title={entry.title}
+                      aria-label={entry.title}
+                      className={`rounded p-1 transition-colors ${
+                        direction === entry.id
+                          ? "bg-ink text-white"
+                          : "text-ink-faint hover:text-ink"
+                      }`}
+                    >
+                      <entry.icon size={13} />
+                    </button>
+                  ))}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={generate}

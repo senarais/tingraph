@@ -66,6 +66,12 @@ export interface DSLEdge {
 
 export type DiagramCategory = "flow" | "bpmn" | "org";
 
+/**
+ * Which way a drawing grows: down the page, or across it. A BPMN diagram
+ * always reads left to right along its lanes, so it ignores the setting.
+ */
+export type LayoutDirection = "down" | "right";
+
 export interface AST {
   category: DiagramCategory;
   title: string;

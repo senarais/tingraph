@@ -4,6 +4,7 @@ import {
   DSLEdge,
   DSLEntry,
   DSLNode,
+  LayoutDirection,
   NodeType,
   PositionedAST,
   PositionedEdge,
@@ -186,10 +187,13 @@ function flowDimensions(
   }
 }
 
-function computeFlowLayout(ast: AST): PositionedAST {
+function computeFlowLayout(
+  ast: AST,
+  direction: LayoutDirection,
+): PositionedAST {
   const graph = new dagre.graphlib.Graph({ multigraph: true });
   graph.setGraph({
-    rankdir: "TB",
+    rankdir: direction === "right" ? "LR" : "TB",
     nodesep: 52,
     ranksep: 66,
     marginx: MARGIN,
@@ -230,19 +234,35 @@ function computeFlowLayout(ast: AST): PositionedAST {
     category: ast.category,
     title: ast.title,
     nodes,
-    edges: routeFlowEdges(nodes, ast.edges),
+    edges: routeFlowEdges(nodes, ast.edges, direction),
   };
+}
+
+/** A box seen with its axes swapped, for laying a chart out sideways. */
+function turned<T extends Box>(box: T): T {
+  return { ...box, x: box.y, y: box.x, width: box.height, height: box.width };
 }
 
 /**
  * Top-down orthogonal routing for flowcharts: straight down where the boxes
  * line up, a step through the channel between two ranks otherwise, and a run
  * down the side for edges that loop back up.
+ *
+ * A chart that grows sideways is the same drawing reflected across the
+ * diagonal, so it is routed by turning the boxes a quarter turn, routing it as
+ * a top-down chart, and turning the route back.
  */
 function routeFlowEdges(
   nodes: PositionedNode[],
   edges: DSLEdge[],
+  direction: LayoutDirection = "down",
 ): PositionedEdge[] {
+  if (direction === "right") {
+    return routeFlowEdges(nodes.map(turned), edges).map((edge) => ({
+      ...edge,
+      points: edge.points.map((point) => ({ x: point.y, y: point.x })),
+    }));
+  }
   const byId = new Map(nodes.map((node) => [node.id, node]));
   return edges.map((edge) => {
     const from = byId.get(edge.from);
@@ -1068,7 +1088,13 @@ export function orgBoxLayout(node: DSLNode): OrgLayout {
  * a dotted edge to a box that reports to nobody parks that box beside its
  * partner, the way a senate sits next to a dean.
  */
-function computeOrgLayout(ast: AST): PositionedAST {
+function computeOrgLayout(
+  ast: AST,
+  direction: LayoutDirection,
+): PositionedAST {
+  // the tree is laid out along two axes: levels stack along the one the chart
+  // grows in, and the boxes on one level are packed along the other
+  const sideways = direction === "right";
   const boxes = new Map<string, OrgLayout>(
     ast.nodes.map((node) => [node.id, orgBoxLayout(node)]),
   );
@@ -1158,20 +1184,25 @@ function computeOrgLayout(ast: AST): PositionedAST {
     }
   }
 
-  const rowHeight: number[] = [];
+  const grows = (id: string): number =>
+    (sideways ? boxes.get(id)?.width : boxes.get(id)?.height) ?? 0;
+  const packs = (id: string): number =>
+    (sideways ? boxes.get(id)?.height : boxes.get(id)?.width) ?? ORG_MIN_WIDTH;
+
+  const levelSize: number[] = [];
   for (const [id, level] of depth) {
-    rowHeight[level] = Math.max(rowHeight[level] ?? 0, boxes.get(id)?.height ?? 0);
+    levelSize[level] = Math.max(levelSize[level] ?? 0, grows(id));
   }
-  const rowTop: number[] = [];
+  const levelStart: number[] = [];
   let stack = MARGIN;
-  for (let level = 0; level < rowHeight.length; level++) {
-    rowTop[level] = stack;
-    stack += (rowHeight[level] ?? 0) + ORG_ROW_GAP;
+  for (let level = 0; level < levelSize.length; level++) {
+    levelStart[level] = stack;
+    stack += (levelSize[level] ?? 0) + ORG_ROW_GAP;
   }
 
   const span = new Map<string, number>();
   const measure = (id: string): number => {
-    const own = boxes.get(id)?.width ?? ORG_MIN_WIDTH;
+    const own = packs(id);
     const kids = children.get(id) ?? [];
     const inner =
       kids.length === 0
@@ -1183,13 +1214,13 @@ function computeOrgLayout(ast: AST): PositionedAST {
     return total;
   };
 
-  const left = new Map<string, number>();
+  const across = new Map<string, number>();
   const place = (id: string, slot: number): void => {
-    const own = boxes.get(id)?.width ?? ORG_MIN_WIDTH;
+    const own = packs(id);
     const total = span.get(id) ?? own;
     const kids = children.get(id) ?? [];
     if (kids.length === 0) {
-      left.set(id, Math.round(slot + (total - own) / 2));
+      across.set(id, Math.round(slot + (total - own) / 2));
       return;
     }
     const inner =
@@ -1203,12 +1234,12 @@ function computeOrgLayout(ast: AST): PositionedAST {
     const first = kids[0];
     const last = kids[kids.length - 1];
     const centre =
-      ((left.get(first) ?? 0) +
-        (boxes.get(first)?.width ?? 0) / 2 +
-        (left.get(last) ?? 0) +
-        (boxes.get(last)?.width ?? 0) / 2) /
+      ((across.get(first) ?? 0) +
+        packs(first) / 2 +
+        (across.get(last) ?? 0) +
+        packs(last) / 2) /
       2;
-    left.set(id, Math.round(centre - own / 2));
+    across.set(id, Math.round(centre - own / 2));
   };
 
   let cursor = MARGIN;
@@ -1218,37 +1249,35 @@ function computeOrgLayout(ast: AST): PositionedAST {
     cursor += (span.get(root) ?? 0) + ORG_COL_GAP;
   }
 
-  // satellites sit to the right of their host, nudged clear of anything else
-  // already standing on that row
+  // a satellite parks just past its host on the packing axis, nudged clear of
+  // anything else already standing on that level
   for (const [rider, host] of satelliteOf) {
-    const hostLeft = left.get(host) ?? MARGIN;
-    const hostWidth = boxes.get(host)?.width ?? 0;
-    const riderWidth = boxes.get(rider)?.width ?? 0;
-    let x = hostLeft + hostWidth + ORG_SATELLITE_GAP;
+    let at = (across.get(host) ?? MARGIN) + packs(host) + ORG_SATELLITE_GAP;
     const row = depth.get(rider) ?? 0;
     for (const [other, level] of depth) {
       if (other === rider || other === host || level !== row) {
         continue;
       }
-      const otherLeft = left.get(other);
-      if (otherLeft === undefined) {
+      const start = across.get(other);
+      if (start === undefined) {
         continue;
       }
-      const otherWidth = boxes.get(other)?.width ?? 0;
-      if (x < otherLeft + otherWidth && otherLeft < x + riderWidth) {
-        x = otherLeft + otherWidth + ORG_COL_GAP;
+      if (at < start + packs(other) && start < at + packs(rider)) {
+        at = start + packs(other) + ORG_COL_GAP;
       }
     }
-    left.set(rider, Math.round(x));
+    across.set(rider, Math.round(at));
   }
 
   const nodes: PositionedNode[] = ast.nodes.map((node) => {
     const box = boxes.get(node.id) as OrgLayout;
     const level = depth.get(node.id) ?? 0;
+    const along = levelStart[level] ?? MARGIN;
+    const cross = across.get(node.id) ?? MARGIN;
     return {
       ...node,
-      x: left.get(node.id) ?? MARGIN,
-      y: rowTop[level] ?? MARGIN,
+      x: sideways ? along : cross,
+      y: sideways ? cross : along,
       width: box.width,
       height: box.height,
       rank: level,
@@ -1263,7 +1292,9 @@ function computeOrgLayout(ast: AST): PositionedAST {
     const reporting = edge.kind !== "association" && parent.get(edge.to) === edge.from;
     return {
       ...edge,
-      points: reporting ? orgTreeRoute(from, to) : orgSideRoute(from, to),
+      points: reporting
+        ? orgTreeRoute(from, to, sideways)
+        : orgSideRoute(from, to),
       ...(reporting ? { reporting: true } : {}),
     };
   });
@@ -1271,24 +1302,32 @@ function computeOrgLayout(ast: AST): PositionedAST {
   return { category: "org", title: ast.title, nodes, edges };
 }
 
-/** Parent bottom, down to the shared bus, across, then into the child's top. */
-function orgTreeRoute(from: Box, to: Box): Point[] {
-  const fromX = Math.round(from.x + from.width / 2);
-  const toX = Math.round(to.x + to.width / 2);
-  const bottom = Math.round(from.y + from.height);
-  const top = Math.round(to.y);
-  if (fromX === toX) {
-    return [
-      { x: fromX, y: bottom },
-      { x: toX, y: top },
-    ];
+/**
+ * Out of the parent's trailing edge, onto the rail every one of its children
+ * shares, along it, then into the child's leading edge.
+ */
+function orgTreeRoute(from: Box, to: Box, sideways: boolean): Point[] {
+  const at = (along: number, across: number): Point =>
+    sideways ? { x: along, y: across } : { x: across, y: along };
+  const leave = sideways
+    ? Math.round(from.x + from.width)
+    : Math.round(from.y + from.height);
+  const reach = Math.round(sideways ? to.x : to.y);
+  const fromMid = sideways
+    ? Math.round(from.y + from.height / 2)
+    : Math.round(from.x + from.width / 2);
+  const toMid = sideways
+    ? Math.round(to.y + to.height / 2)
+    : Math.round(to.x + to.width / 2);
+  if (fromMid === toMid) {
+    return [at(leave, fromMid), at(reach, toMid)];
   }
-  const bus = Math.round((bottom + top) / 2);
+  const rail = Math.round((leave + reach) / 2);
   return [
-    { x: fromX, y: bottom },
-    { x: fromX, y: bus },
-    { x: toX, y: bus },
-    { x: toX, y: top },
+    at(leave, fromMid),
+    at(rail, fromMid),
+    at(rail, toMid),
+    at(reach, toMid),
   ];
 }
 
@@ -1322,13 +1361,17 @@ function orgSideRoute(from: Box, to: Box): Point[] {
 
 // --------------------------------------------------------------------- api
 
-export function computeLayout(ast: AST): PositionedAST {
+export function computeLayout(
+  ast: AST,
+  direction: LayoutDirection = "down",
+): PositionedAST {
   switch (ast.category) {
     case "bpmn":
+      // a BPMN diagram already reads along its lanes; it has one direction
       return computeBpmnLayout(ast);
     case "org":
-      return computeOrgLayout(ast);
+      return computeOrgLayout(ast, direction);
     default:
-      return computeFlowLayout(ast);
+      return computeFlowLayout(ast, direction);
   }
 }

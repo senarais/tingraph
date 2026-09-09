@@ -1,13 +1,15 @@
 import { create } from "zustand";
 import { DEFAULT_INK, INK_PRESETS, type InkId } from "@/lib/ink";
 import { TEMPLATE_LABELS, TEMPLATES } from "@/lib/templates";
-import { DiagramCategory } from "@/lib/types";
+import { DiagramCategory, LayoutDirection } from "@/lib/types";
 
 export type SidePanel = "source" | "shapes" | "guide";
 
 interface TingraphState {
   code: string;
   category: DiagramCategory;
+  /** which way the next drawing grows; BPMN ignores it */
+  direction: LayoutDirection;
   ink: InkId;
   panel: SidePanel;
   sidebarOpen: boolean;
@@ -15,6 +17,7 @@ interface TingraphState {
   propertiesOpen: boolean;
   setCode: (code: string) => void;
   setCategory: (category: DiagramCategory) => void;
+  setDirection: (direction: LayoutDirection) => void;
   setInk: (ink: InkId) => void;
   setPanel: (panel: SidePanel) => void;
   toggleSidebar: () => void;
@@ -24,12 +27,14 @@ interface TingraphState {
 export const useTingraphStore = create<TingraphState>((set) => ({
   code: TEMPLATES.bpmn,
   category: "bpmn",
+  direction: "down",
   ink: DEFAULT_INK,
   panel: "source",
   sidebarOpen: true,
   propertiesOpen: false,
   setCode: (code) => set({ code }),
   setCategory: (category) => set({ category, code: TEMPLATES[category] }),
+  setDirection: (direction) => set({ direction }),
   setInk: (ink) => set({ ink }),
   setPanel: (panel) => set({ panel }),
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
