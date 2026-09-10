@@ -2,6 +2,7 @@ import assert from "node:assert";
 import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
 import { computeLayout } from "@/lib/layout/compute-layout";
 import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE } from "@/lib/templates";
+import { READY_DIAGRAMS } from "@/lib/diagrams";
 import { DSLError } from "@/lib/types";
 import {
   clipEnds,
@@ -710,5 +711,14 @@ assert.equal(
   null,
   "clipping never eats a whole leg",
 );
+
+// the samples the public pages type out are real source, not prose that looks
+// like it: every one of them parses and lays out
+for (const kind of READY_DIAGRAMS) {
+  assert.ok(kind.sample, `${kind.id} has a sample`);
+  const ast = parseDSL(kind.sample!);
+  assert.equal(ast.category, kind.keyword, `${kind.id} sample opens with its own keyword`);
+  computeLayout(ast, "down");
+}
 
 console.log("parse + layout self-check: all assertions passed");

@@ -18,6 +18,19 @@
   --blueprint-tint: #e5eef3;
   --alert: #a32a1c;
   --alert-tint: #fbeeec;
+
+  /*
+   * The public pages run the same drafting sheet through brutalist hardware:
+   * a bone ground, pure-black rules and unblurred offset shadows. Colour is
+   * rationed — it only ever appears inside a diagram preview, and only in the
+   * formal inks the editor itself can draw with (see lib/ink.ts).
+   */
+  --bone: #efede6;
+  --edge: #000000;
+  --grid: rgba(0, 0, 0, 0.13);
+  --navy: #1e3a8a;
+  --oxblood: #991b1b;
+  --forest: #065f46;
 }
 
 @theme inline {
@@ -33,6 +46,11 @@
   --color-blueprint-tint: var(--blueprint-tint);
   --color-alert: var(--alert);
   --color-alert-tint: var(--alert-tint);
+  --color-bone: var(--bone);
+  --color-edge: var(--edge);
+  --color-navy: var(--navy);
+  --color-oxblood: var(--oxblood);
+  --color-forest: var(--forest);
   --font-sans: var(--font-plex-sans);
   --font-mono: var(--font-plex-mono);
 }
@@ -134,5 +152,126 @@ body {
  * down to two-pixel crosses, and the guides are worth more than the island.
  */
 .shape-actions-off .App-menu__left {
+  display: none;
+}
+
+/* ---------------------------------------------------------- public pages */
+/*
+ * Landing and catalogue chrome. Three rules hold the whole look together:
+ * every border is 2px of pure black, every shadow is an offset with no blur,
+ * and nothing has a corner radius unless it is round on purpose.
+ */
+
+.slab {
+  border: 2px solid var(--edge);
+  box-shadow: 5px 5px 0 var(--edge);
+}
+
+.slab-tight {
+  border: 2px solid var(--edge);
+  box-shadow: 3px 3px 0 var(--edge);
+}
+
+/* A slab that answers the pointer: it lifts, then takes the press. */
+.press {
+  transition:
+    transform 160ms cubic-bezier(0.2, 0.8, 0.3, 1),
+    box-shadow 160ms cubic-bezier(0.2, 0.8, 0.3, 1);
+}
+.press:hover,
+.press:focus-visible {
+  transform: translate(-3px, -3px);
+  box-shadow: 9px 9px 0 var(--edge);
+}
+.press:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--edge);
+}
+
+/* Corner registration marks, the way a plotter sheet is pre-printed. */
+.bracket-grid {
+  background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='148'%20height='148'%3E%3Cpath%20d='M0%2022V0h22M126%200h22v22M148%20126v22h-22M22%20148H0v-22'%20fill='none'%20stroke='%23000'%20stroke-opacity='.14'%20stroke-width='1'/%3E%3C/svg%3E");
+  background-size: 148px 148px;
+}
+
+/* the ground fades out under the fold so the grid never fights the content */
+.grid-fade {
+  mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
+}
+
+/*
+ * Diagram previews draw themselves in. Every stroke carries pathLength="1", so
+ * one dash length covers any path whatever its real geometry. A preview is
+ * fully drawn at rest; `drawn` on an ancestor plays the inking once, and
+ * `redraw` replays it whenever the pointer or the keyboard enters the card.
+ */
+.ink-path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+.drawn .ink-path,
+.redraw:hover .ink-path,
+.redraw:focus-within .ink-path {
+  animation: ink-draw 700ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+
+.drawn .ink-fill,
+.redraw:hover .ink-fill,
+.redraw:focus-within .ink-fill {
+  animation: ink-in 380ms ease-out both;
+}
+
+@keyframes ink-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes ink-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* the caret at the end of the hero's typed source */
+@keyframes caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  55%,
+  100% {
+    opacity: 0;
+  }
+}
+.caret {
+  animation: caret 1s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .drawn .ink-path,
+  .redraw:hover .ink-path,
+  .redraw:focus-within .ink-path,
+  .drawn .ink-fill,
+  .redraw:hover .ink-fill,
+  .redraw:focus-within .ink-fill {
+    animation: none;
+  }
+  .press:hover,
+  .press:focus-visible,
+  .press:active {
+    transform: none;
+  }
+}
+
+/* the FAQ rows carry their own +/− mark, so Safari's triangle has to go */
+summary::-webkit-details-marker {
   display: none;
 }

@@ -4,13 +4,13 @@ import "./globals.css";
 
 const plexSans = IBM_Plex_Sans({
   variable: "--font-plex-sans",
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
 });
 
 const plexMono = IBM_Plex_Mono({
   variable: "--font-plex-mono",
-  weight: ["400", "500"],
+  weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
 });
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useRef } from "react";
 import { exportToBlob, exportToSvg } from "@excalidraw/excalidraw";
 import { Download, ImageDown, Maximize, SlidersHorizontal } from "lucide-react";
@@ -149,7 +150,11 @@ export default function TopRail({
 
   return (
     <header className="flex h-14 shrink-0 items-stretch border-b border-rule bg-panel">
-      <div className="flex items-center gap-2.5 border-r border-rule px-4">
+      <Link
+        href="/"
+        title="Back to the Tingraph home page"
+        className="flex items-center gap-2.5 border-r border-rule px-4"
+      >
         <svg viewBox="0 0 16 16" className="h-4 w-4 text-blueprint" aria-hidden="true">
           <path
             d="M1 15V1h14"
@@ -167,7 +172,7 @@ export default function TopRail({
         <span className="font-mono text-[13px] font-medium tracking-tight text-ink">
           tingraph
         </span>
-      </div>
+      </Link>
 
       <Cell label="Drawing" value={title || "Untitled"} />
       <Cell label="Notation" value={TEMPLATE_LABELS[category]} />
