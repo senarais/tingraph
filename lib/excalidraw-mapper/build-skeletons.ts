@@ -22,6 +22,7 @@ import {
   wrapExternalLabel,
 } from "@/lib/layout/compute-layout";
 import { MONOCHROME, type Ink } from "@/lib/ink";
+import { FORMAL, type SheetStyle } from "@/lib/sheet";
 import {
   buildBpmnIcons,
   buildDataObjectOutline,
@@ -67,15 +68,32 @@ interface Theme {
   tint: string;
   fontSize: number;
   fontFamily: number;
+  lineHeight: number;
+  /** 0 draws true lines, 1 wobbles them */
+  roughness: number;
+  /** corner radius for the boxes the notation leaves free */
+  corner: number;
 }
 
-function themeFor(ink: Ink, category: PositionedAST["category"]): Theme {
+function themeFor(
+  ink: Ink,
+  category: PositionedAST["category"],
+  style: SheetStyle = FORMAL,
+): Theme {
   return {
     strokeColor: category === "org" ? ORG_STROKE : ink.color,
     tint: ink.tint,
-    fontFamily: ACADEMIC_MONOCHROME_THEME.fontFamily,
+    fontFamily: style.fontFamily,
+    lineHeight: style.lineHeight,
+    roughness: style.roughness,
+    corner: style.corner,
     fontSize: category === "bpmn" ? BPMN_LABEL_FONT_SIZE : 16,
   };
+}
+
+/** Corner setting for a box the notation lets the style round. */
+function softRoundness(theme: Theme) {
+  return theme.corner > 0 ? { type: 3, value: theme.corner } : null;
 }
 
 /**
@@ -88,7 +106,7 @@ function connectorFrom(theme: Theme) {
     backgroundColor: "transparent",
     strokeWidth: CONNECTOR_STROKE_WIDTH,
     strokeStyle: "solid",
-    roughness: 0,
+    roughness: theme.roughness,
     opacity: 100,
     roundness: null,
     startArrowhead: null,
@@ -102,8 +120,9 @@ export type ConnectorStyle = ReturnType<typeof connectorFrom>;
 export function connectorStyle(
   ink: Ink = MONOCHROME,
   category: PositionedAST["category"] = "bpmn",
+  style: SheetStyle = FORMAL,
 ): ConnectorStyle {
-  return connectorFrom(themeFor(ink, category));
+  return connectorFrom(themeFor(ink, category, style));
 }
 
 function bpmnEventStrokeWidth(type: NodeType): number {
@@ -157,6 +176,7 @@ function externalLabelSkeleton(
     groupIds: [`bpmn-${node.id}`],
     ...marked({ unit: `bpmn-${node.id}`, kind: "node", core: true }),
     ...ACADEMIC_MONOCHROME_THEME,
+    roughness: theme.roughness,
     strokeColor: theme.strokeColor,
     fontSize: BPMN_LABEL_FONT_SIZE,
     fontFamily: theme.fontFamily,
@@ -180,6 +200,7 @@ export function bpmnNodeSkeletons(
     );
   const base = {
     ...ACADEMIC_MONOCHROME_THEME,
+    roughness: theme.roughness,
     strokeColor: theme.strokeColor,
     backgroundColor: WHITE,
     roundness: null,
@@ -235,6 +256,8 @@ export function bpmnNodeSkeletons(
       : {}),
   } as ExcalidrawElementSkeleton);
 
+  // the markers are ported bpmn.io geometry, not decoration: they keep their
+  // true lines in every style, the way the notation defines them
   skeletons.push(
     ...asPart(
       buildBpmnIcons(node, {
@@ -263,10 +286,10 @@ function flowNodeSkeletons(
       : node.type === "decision"
         ? "diamond"
         : "rectangle";
-  const style =
-    node.type === "io"
-      ? { backgroundColor: ACCENT_GRAY, roundness: null }
-      : { backgroundColor: WHITE, roundness: null };
+  // a terminator and a decision own their outline; only the plain step and the
+  // input/output box have corners a style is free to soften
+  const soft = shape === "rectangle";
+  const unit = `flow-node-${node.id}`;
   return [
     {
       type: shape,
@@ -276,9 +299,13 @@ function flowNodeSkeletons(
       width: node.width,
       height: node.height,
       ...ACADEMIC_MONOCHROME_THEME,
+      roughness: theme.roughness,
       strokeColor: theme.strokeColor,
       fontFamily: theme.fontFamily,
-      ...style,
+      backgroundColor: node.type === "io" ? ACCENT_GRAY : WHITE,
+      roundness: soft ? softRoundness(theme) : null,
+      groupIds: [unit],
+      ...marked({ unit, kind: "node", core: true, ...(soft ? { soft: true } : {}) }),
       label: {
         text: node.label,
         fontSize: theme.fontSize,
@@ -304,6 +331,7 @@ function orgNodeSkeletons(
   const unit = `org-${node.id}`;
   const rule = {
     ...ACADEMIC_MONOCHROME_THEME,
+    roughness: theme.roughness,
     strokeColor: theme.strokeColor,
     strokeWidth: CHROME_STROKE_WIDTH,
     roundness: null,
@@ -328,8 +356,9 @@ function orgNodeSkeletons(
       width: box.width,
       height: box.bandHeight,
       ...rule,
+      roundness: softRoundness(theme),
       backgroundColor: theme.tint,
-      ...marked({ unit, kind: "node", core: true, wash: true }),
+      ...marked({ unit, kind: "node", core: true, wash: true, soft: true }),
       ...caption(box.title, ORG_TITLE_FONT_SIZE),
     } as ExcalidrawElementSkeleton,
   ];
@@ -344,6 +373,8 @@ function orgNodeSkeletons(
       width: box.width,
       height: bodyHeight,
       ...rule,
+      roundness: softRoundness(theme),
+      ...marked({ unit, kind: "node", core: true, soft: true }),
       backgroundColor: WHITE,
       ...(box.name.length > 0 ? caption(box.name, ORG_NAME_FONT_SIZE) : {}),
     } as ExcalidrawElementSkeleton);
@@ -358,6 +389,7 @@ function orgNodeSkeletons(
       width: row.pillWidth,
       height: row.pillHeight,
       ...ACADEMIC_MONOCHROME_THEME,
+      roughness: theme.roughness,
       // a wash with a hairline, so the pill survives a white wash too
       strokeColor: ORG_PILL_EDGE,
       backgroundColor: theme.tint,
@@ -378,6 +410,7 @@ function orgNodeSkeletons(
       x: Math.round(node.x + box.width / 2),
       y: node.y + row.nameTop,
       ...ACADEMIC_MONOCHROME_THEME,
+      roughness: theme.roughness,
       strokeColor: theme.strokeColor,
       fontSize: ORG_NAME_FONT_SIZE,
       fontFamily: theme.fontFamily,
@@ -533,6 +566,7 @@ function edgeLabelSkeletons(
       groupIds: [`flow-${index}`],
       ...marked({ unit: `flow-${index}`, kind: "edge", core: true }),
       ...ACADEMIC_MONOCHROME_THEME,
+      roughness: theme.roughness,
       strokeColor: theme.strokeColor,
       fontSize: BPMN_LABEL_FONT_SIZE,
       fontFamily: theme.fontFamily,
@@ -632,6 +666,7 @@ function titleSkeleton(
     x: Math.round((minX + maxX) / 2),
     y: Math.round(minY - height - TITLE_GAP),
     ...ACADEMIC_MONOCHROME_THEME,
+    roughness: theme.roughness,
     strokeColor: theme.strokeColor,
     fontSize: TITLE_FONT_SIZE,
     fontFamily: theme.fontFamily,
@@ -660,6 +695,7 @@ function bandLabelSkeleton(
     groupIds: [mark.unit],
     ...marked(mark),
     ...ACADEMIC_MONOCHROME_THEME,
+    roughness: theme.roughness,
     strokeColor: theme.strokeColor,
     fontSize,
     fontFamily: theme.fontFamily,
@@ -672,6 +708,7 @@ function bandLabelSkeleton(
 function chromeBox(theme: Theme) {
   return {
     ...ACADEMIC_MONOCHROME_THEME,
+    roughness: theme.roughness,
     strokeColor: theme.strokeColor,
     backgroundColor: "transparent",
     strokeWidth: CHROME_STROKE_WIDTH,
@@ -827,8 +864,9 @@ function poolLaneSkeletons(
 export function buildSkeletons(
   positioned: PositionedAST,
   ink: Ink = MONOCHROME,
+  style: SheetStyle = FORMAL,
 ): ExcalidrawElementSkeleton[] {
-  const theme = themeFor(ink, positioned.category);
+  const theme = themeFor(ink, positioned.category, style);
   const skeletons: ExcalidrawElementSkeleton[] = [];
   const isBpmn = positioned.category === "bpmn";
   const isOrg = positioned.category === "org";
@@ -887,30 +925,43 @@ export function buildSkeletons(
 export function buildShapeSkeletons(
   node: PositionedNode,
   ink: Ink = MONOCHROME,
+  style: SheetStyle = FORMAL,
 ): ExcalidrawElementSkeleton[] {
-  return bpmnNodeSkeletons(node, themeFor(ink, "bpmn"));
+  return bpmnNodeSkeletons(node, themeFor(ink, "bpmn", style));
+}
+
+/** One free-standing flowchart shape, dropped straight onto the canvas. */
+export function buildFlowShapeSkeletons(
+  node: PositionedNode,
+  ink: Ink = MONOCHROME,
+  style: SheetStyle = FORMAL,
+): ExcalidrawElementSkeleton[] {
+  return flowNodeSkeletons(node, themeFor(ink, "flow", style));
 }
 
 /** One pool box, for adding a participant straight on the canvas. */
 export function buildPoolSkeletons(
   pool: PositionedPool,
   ink: Ink = MONOCHROME,
+  style: SheetStyle = FORMAL,
 ): ExcalidrawElementSkeleton[] {
-  return poolSkeletons(pool, themeFor(ink, "bpmn"));
+  return poolSkeletons(pool, themeFor(ink, "bpmn", style));
 }
 
 /** One lane rule set, for splitting a pool that is already on the canvas. */
 export function buildLaneSkeletons(
   lane: PositionedLane,
   ink: Ink = MONOCHROME,
+  style: SheetStyle = FORMAL,
 ): ExcalidrawElementSkeleton[] {
-  return laneSkeletons(lane, themeFor(ink, "bpmn"), true);
+  return laneSkeletons(lane, themeFor(ink, "bpmn", style), true);
 }
 
 /** One free-standing org box, for dropping a role straight onto the sheet. */
 export function buildOrgShapeSkeletons(
   node: PositionedNode,
   ink: Ink = MONOCHROME,
+  style: SheetStyle = FORMAL,
 ): ExcalidrawElementSkeleton[] {
-  return orgNodeSkeletons(node, themeFor(ink, "org"));
+  return orgNodeSkeletons(node, themeFor(ink, "org", style));
 }

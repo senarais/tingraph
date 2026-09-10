@@ -415,7 +415,7 @@ export function OrgArt({ accent = "oxblood", className }: ArtProps) {
       role="img"
       aria-label="Org chart preview: a dean over two vice deans, with a dashed advisory tie to the faculty senate"
     >
-      {box(102, 16, 116, "DEKAN", "Dr. Gumgum Gumelar", 0)}
+      {box(102, 16, 116, "DEAN", "Dr. Marion Hale", 0)}
 
       {/* dashed advisory tie out to the senate */}
       <path
@@ -439,7 +439,7 @@ export function OrgArt({ accent = "oxblood", className }: ArtProps) {
         style={{ animationDelay: "160ms" }}
       />
       <Caption x={289} y={37} ink={ink} size={7} weight={600}>
-        SENAT
+        SENATE
       </Caption>
 
       {/* the reporting bus: down out of the dean, across, down into each box */}
@@ -450,8 +450,8 @@ export function OrgArt({ accent = "oxblood", className }: ArtProps) {
       <Head x={74} y={124} dir="down" ink={ink} delay={470} />
       <Head x={246} y={124} dir="down" ink={ink} delay={470} />
 
-      {box(16, 125, 116, "WAKIL DEKAN I", "Mira Ariyani, Ph.D", 420)}
-      {box(188, 125, 116, "WAKIL DEKAN II", "Dr. Lussy Dwiutami", 460)}
+      {box(16, 125, 116, "VICE DEAN I", "Priya Raman, Ph.D", 420)}
+      {box(188, 125, 116, "VICE DEAN II", "Dr. Elena Sorbo", 460)}
     </svg>
   );
 }

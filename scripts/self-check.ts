@@ -349,19 +349,19 @@ assert.equal(flowAssoc.edges[0].kind, "association");
 const orgAst = parseDSL(ORG_TEMPLATE);
 assert.equal(orgAst.category, "org");
 assert.equal(orgAst.nodes.length, 12);
-const dekan = orgAst.nodes.find((n) => n.id === "DEKAN");
-assert.equal(dekan?.name, "Dr. Gumgum Gumelar F. R, M.Si");
+const dean = orgAst.nodes.find((n) => n.id === "DEAN");
+assert.equal(dean?.name, "Dr. Marion Hale");
 assert.equal(
-  orgAst.nodes.find((n) => n.id === "SENAT")?.name,
+  orgAst.nodes.find((n) => n.id === "SENATE")?.name,
   undefined,
   "a role with one caption carries no name",
 );
-const lab = orgAst.nodes.find((n) => n.id === "LAB");
+const lab = orgAst.nodes.find((n) => n.id === "LABS");
 assert.equal(lab?.entries?.length, 3, "sub-roles parsed");
-assert.equal(lab?.entries?.[1].label, "Lab. Komputer");
-assert.equal(lab?.entries?.[1].name, "Fildzah Rudyah P. M.Si");
+assert.equal(lab?.entries?.[1].label, "Computing Lab");
+assert.equal(lab?.entries?.[1].name, "Karel Sandvik, M.Sc");
 assert.equal(
-  orgAst.edges.find((e) => e.to === "SENAT")?.kind,
+  orgAst.edges.find((e) => e.to === "SENATE")?.kind,
   "association",
   "the senate is tied in with a dotted line",
 );
@@ -382,17 +382,17 @@ assert.equal(org.pools, undefined, "an org chart has no pools");
 
 const at = (id: string) => org.nodes.find((n) => n.id === id)!;
 // rows are top aligned, so boxes of different heights start on the same line
-assert.equal(at("WD1").y, at("LAB").y, "siblings share a row");
-assert.ok(at("WD1").y > at("DEKAN").y + at("DEKAN").height, "children sit below");
-assert.equal(at("SENAT").y, at("DEKAN").y, "the satellite rides beside its host");
+assert.equal(at("VD1").y, at("LABS").y, "siblings share a row");
+assert.ok(at("VD1").y > at("DEAN").y + at("DEAN").height, "children sit below");
+assert.equal(at("SENATE").y, at("DEAN").y, "the satellite rides beside its host");
 assert.ok(
-  at("SENAT").x >= at("DEKAN").x + at("DEKAN").width,
+  at("SENATE").x >= at("DEAN").x + at("DEAN").width,
   "the satellite sits to the right of its host",
 );
 // a role with no name is a band and nothing else
-assert.ok(at("SENAT").height < at("DEKAN").height, "a role-only box is shorter");
+assert.ok(at("SENATE").height < at("DEAN").height, "a role-only box is shorter");
 // the parent is centred over the run of its children
-const kids = ["WD1", "WD2", "WD3", "LAB", "S1", "S2", "GPJM"].map(at);
+const kids = ["VD1", "VD2", "VD3", "LABS", "UG", "PG", "QA"].map(at);
 const runCentre =
   (kids[0].x +
     kids[0].width / 2 +
@@ -400,7 +400,7 @@ const runCentre =
     kids[kids.length - 1].width / 2) /
   2;
 assert.ok(
-  Math.abs(at("DEKAN").x + at("DEKAN").width / 2 - runCentre) <= 1,
+  Math.abs(at("DEAN").x + at("DEAN").width / 2 - runCentre) <= 1,
   "the parent is centred over its children",
 );
 
@@ -435,12 +435,12 @@ for (const edge of busses) {
 }
 const rails = new Set(
   org.edges
-    .filter((e) => e.reporting && e.from === "DEKAN" && e.points.length === 4)
+    .filter((e) => e.reporting && e.from === "DEAN" && e.points.length === 4)
     .map((e) => e.points[1].y),
 );
 assert.equal(rails.size, 1, "children of one box share a single rail");
 assert.ok(
-  !org.edges.find((e) => e.to === "SENAT")?.reporting,
+  !org.edges.find((e) => e.to === "SENATE")?.reporting,
   "a dotted tie is not a reporting line",
 );
 
@@ -478,17 +478,17 @@ assert.equal(
 const orgRight = computeLayout(parseDSL(ORG_TEMPLATE), "right");
 const acrossAt = (id: string) => orgRight.nodes.find((n) => n.id === id)!;
 assert.ok(
-  acrossAt("WD1").x > acrossAt("DEKAN").x + acrossAt("DEKAN").width,
+  acrossAt("VD1").x > acrossAt("DEAN").x + acrossAt("DEAN").width,
   "children stand to the right of their parent",
 );
-assert.equal(acrossAt("WD1").x, acrossAt("GPJM").x, "one level shares a column");
-assert.ok(acrossAt("GPJM").y > acrossAt("WD1").y, "siblings stack down the column");
+assert.equal(acrossAt("VD1").x, acrossAt("QA").x, "one level shares a column");
+assert.ok(acrossAt("QA").y > acrossAt("VD1").y, "siblings stack down the column");
 assert.ok(
-  acrossAt("LAYANAN").x > acrossAt("S1").x + acrossAt("S1").width,
+  acrossAt("SERVICES").x > acrossAt("UG").x + acrossAt("UG").width,
   "the next level steps across again",
 );
 // the parent is centred on the run of its children, across the column now
-const column = ["WD1", "WD2", "WD3", "LAB", "S1", "S2", "GPJM"].map(acrossAt);
+const column = ["VD1", "VD2", "VD3", "LABS", "UG", "PG", "QA"].map(acrossAt);
 const runMiddle =
   (column[0].y +
     column[0].height / 2 +
@@ -496,13 +496,13 @@ const runMiddle =
     column[column.length - 1].height / 2) /
   2;
 assert.ok(
-  Math.abs(acrossAt("DEKAN").y + acrossAt("DEKAN").height / 2 - runMiddle) <= 1,
+  Math.abs(acrossAt("DEAN").y + acrossAt("DEAN").height / 2 - runMiddle) <= 1,
   "the parent is centred on its children",
 );
 // the satellite parks under its host rather than beside it
-assert.equal(acrossAt("SENAT").x, acrossAt("DEKAN").x, "the satellite shares the column");
+assert.equal(acrossAt("SENATE").x, acrossAt("DEAN").x, "the satellite shares the column");
 assert.ok(
-  acrossAt("SENAT").y >= acrossAt("DEKAN").y + acrossAt("DEKAN").height,
+  acrossAt("SENATE").y >= acrossAt("DEAN").y + acrossAt("DEAN").height,
   "the satellite sits below its host",
 );
 // reporting lines leave the trailing edge and enter the leading one
@@ -517,7 +517,7 @@ for (const edge of orgRight.edges.filter((e) => e.reporting)) {
 }
 const railsRight = new Set(
   orgRight.edges
-    .filter((e) => e.reporting && e.from === "DEKAN" && e.points.length === 4)
+    .filter((e) => e.reporting && e.from === "DEAN" && e.points.length === 4)
     .map((e) => e.points[1].x),
 );
 assert.equal(railsRight.size, 1, "children of one box share a single rail");

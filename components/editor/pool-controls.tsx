@@ -47,14 +47,14 @@ export default function PoolControls({
           <div
             key={pool.unit}
             style={{ left, top: middle }}
-            className="pointer-events-auto absolute -translate-y-1/2 rounded-md border border-rule bg-raised p-0.5 shadow-sm"
+            className="slab-tight pointer-events-auto absolute -translate-y-1/2 bg-white"
           >
             <button
               type="button"
               onClick={() => onAddLane(pool)}
               title="Add a lane to this pool"
               aria-label="Add a lane to this pool"
-              className="block rounded p-1 text-ink-soft transition-colors hover:bg-blueprint-tint hover:text-blueprint"
+              className="block border-b-2 border-edge p-1.5 text-ink transition-colors hover:bg-bone"
             >
               <Rows3 size={14} />
             </button>
@@ -63,7 +63,7 @@ export default function PoolControls({
               onClick={() => onAddPool(pool)}
               title="Add a pool below this one"
               aria-label="Add a pool below this one"
-              className="block rounded p-1 text-ink-soft transition-colors hover:bg-blueprint-tint hover:text-blueprint"
+              className="block border-b-2 border-edge p-1.5 text-ink transition-colors hover:bg-bone"
             >
               <Plus size={14} />
             </button>
@@ -72,7 +72,7 @@ export default function PoolControls({
               onClick={() => onRemove(pool)}
               title="Delete this pool and everything in it"
               aria-label="Delete this pool and everything in it"
-              className="block rounded p-1 text-ink-soft transition-colors hover:bg-alert-tint hover:text-alert"
+              className="block p-1.5 text-ink transition-colors hover:bg-alert-tint hover:text-alert"
             >
               <Trash2 size={14} />
             </button>

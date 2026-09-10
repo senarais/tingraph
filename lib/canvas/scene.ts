@@ -5,6 +5,7 @@ import {
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { marked, unitOf } from "@/lib/canvas/units";
 import type { Ink } from "@/lib/ink";
+import { FORMAL, type SheetStyle } from "@/lib/sheet";
 import {
   clipEnds,
   squareRoute,
@@ -382,6 +383,7 @@ export function addPoolBelow(
   elements: Elements,
   pool: PoolBox,
   ink: Ink,
+  style: SheetStyle = FORMAL,
 ): ExcalidrawElement[] {
   const bottom = pool.y + pool.height;
   const height = MIN_LANE_HEIGHT;
@@ -398,6 +400,7 @@ export function addPoolBelow(
         lanes: [],
       },
       ink,
+      style,
     ),
   );
   return [...shiftBelow(elements, bottom, POOL_GAP + height), ...added];
@@ -408,6 +411,7 @@ export function addLane(
   elements: Elements,
   pool: PoolBox,
   ink: Ink,
+  style: SheetStyle = FORMAL,
 ): ExcalidrawElement[] {
   const bottom = pool.y + pool.height;
   const height = MIN_LANE_HEIGHT;
@@ -450,6 +454,7 @@ export function addLane(
         poolId: pool.unit,
       },
       ink,
+      style,
     ),
   );
   return [...grown, ...added];

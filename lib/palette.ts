@@ -15,6 +15,9 @@ export interface PaletteGroup {
   items: PaletteItem[];
 }
 
+/** The drag payload a shape card writes, and the canvas reads back on drop. */
+export const SHAPE_DRAG_TYPE = "application/x-tingraph-shape";
+
 const BPMN_GROUPS: PaletteGroup[] = [
   {
     title: "Events",
@@ -58,11 +61,11 @@ const FLOW_GROUPS: PaletteGroup[] = [
   {
     title: "Nodes",
     items: [
-      { type: "start", label: "Start", hint: "terminator", droppable: false },
-      { type: "process", label: "Process", hint: "step", droppable: false },
-      { type: "decision", label: "Decision", hint: "branch point", droppable: false },
-      { type: "io", label: "Input / output", hint: "shaded step", droppable: false },
-      { type: "end", label: "End", hint: "terminator", droppable: false },
+      { type: "start", label: "Start", hint: "terminator", droppable: true },
+      { type: "process", label: "Process", hint: "step", droppable: true },
+      { type: "decision", label: "Decision", hint: "branch point", droppable: true },
+      { type: "io", label: "Input / output", hint: "shaded step", droppable: true },
+      { type: "end", label: "End", hint: "terminator", droppable: true },
     ],
   },
 ];

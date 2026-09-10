@@ -104,39 +104,52 @@ body {
 }
 
 /* -------------------------------------------------------------- excalidraw */
-/* The canvas is ours, not Excalidraw's: same rules, same ink, no shadows. */
+/*
+ * The canvas is a renderer, not an interface. Every piece of Excalidraw's own
+ * chrome lives inside `.layer-ui__wrapper` — the toolbar, the shape island,
+ * the zoom footer, the menus, the welcome screen — and all of it is gone: the
+ * rail, the drawers, the properties panel and the zoom cluster are Tingraph's
+ * own. What sits outside that wrapper is kept, because the editor needs it:
+ * the caption editor, the context menu and the colour picker.
+ */
 
-.excalidraw {
-  --color-primary: var(--blueprint);
-  --color-primary-darker: #163f56;
-  --color-primary-darkest: #102e3f;
-  --color-primary-light: var(--blueprint-tint);
-  --color-primary-light-darker: #d6e5ed;
-  --color-primary-hover: #17475f;
-  --island-bg-color: var(--raised);
-  --shadow-island: none;
-  --border-radius-lg: 6px;
-  --ui-font: var(--font-plex-sans), system-ui, sans-serif;
-}
-
-.excalidraw .Island {
-  border: 1px solid var(--rule);
-}
-
-/* our own rail owns the menu, the library and the help affordances */
-.excalidraw .layer-ui__wrapper__top-right,
-.excalidraw .dropdown-menu-button,
-.excalidraw .help-icon,
-.excalidraw .HintViewer {
+.excalidraw .layer-ui__wrapper {
   display: none !important;
 }
 
-.excalidraw .App-toolbar {
-  padding: 2px;
+/* doubled up on purpose: Excalidraw's own stylesheet sets these on `.excalidraw`
+   too, and it is bundled after this file */
+.excalidraw.excalidraw {
+  --ui-font: var(--font-plex-mono), ui-monospace, monospace;
+  --border-radius-lg: 0;
+  --border-radius-md: 0;
+  --shadow-island: none;
 }
 
-.excalidraw .ToolIcon__keybinding {
-  color: var(--ink-faint);
+/* the caption editor writes in the font the caption is drawn in, so it is
+   left alone; the two surfaces that are still ours take the sheet's hardware */
+.excalidraw .context-menu,
+.excalidraw .excalidraw-eye-dropper-backdrop + *,
+.excalidraw .popover {
+  border: 2px solid var(--edge);
+  border-radius: 0;
+  box-shadow: 3px 3px 0 var(--edge);
+}
+
+.excalidraw .context-menu-item {
+  border-radius: 0;
+}
+
+/*
+ * Four entries in the context menu lead somewhere Tingraph does not go: two
+ * open chrome that was removed with the rest of Excalidraw's interface, and
+ * two attach a web link to a shape, which means nothing in a printed figure.
+ */
+.excalidraw .context-menu li[data-testid="wrapSelectionInFrame"],
+.excalidraw .context-menu li[data-testid="addToLibrary"],
+.excalidraw .context-menu li[data-testid="hyperlink"],
+.excalidraw .context-menu li[data-testid="copyElementLink"] {
+  display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -144,15 +157,6 @@ body {
     animation-duration: 0.01ms !important;
     transition-duration: 0.01ms !important;
   }
-}
-
-/*
- * Excalidraw's shape-properties island lives behind the Style toggle in the top
- * rail. Zen mode used to hide it, but zen mode also strips the alignment guides
- * down to two-pixel crosses, and the guides are worth more than the island.
- */
-.shape-actions-off .App-menu__left {
-  display: none;
 }
 
 /* ---------------------------------------------------------- public pages */

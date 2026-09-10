@@ -24,7 +24,7 @@ const STEPS = [
   {
     n: "03",
     title: "Edit, then export",
-    body: "The result is a live canvas, not a picture. Drag anything, add shapes from the palette, then take a 4× PNG or an SVG.",
+    body: "The result is a live canvas, not a picture. Drag anything, add shapes from the palette, then take a PNG, JPG, SVG or PDF at the size you need.",
     art: <ExportArt />,
   },
 ];

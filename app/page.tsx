@@ -38,7 +38,7 @@ const FEATURES = [
   {
     span: false,
     title: "Formal ink when a template asks",
-    body: "Five presets, all print-safe: monochrome, white band, and formal blue, red or green. Changing one re-inks the whole sheet.",
+    body: "Five print-safe presets, or a colour you mix yourself, and the sheet is re-inked at once. A second setting swaps the whole drawing between a formal hand and a sketched one.",
   },
   {
     span: false,
@@ -47,8 +47,8 @@ const FEATURES = [
   },
   {
     span: false,
-    title: "Export at four times scale",
-    body: "PNG at 4× for print, or SVG for LaTeX and Word. The white background is baked in, so nothing turns transparent in the document.",
+    title: "Export exactly what the document needs",
+    body: "One dialog with the picture in it: PNG, JPG, SVG or PDF, at a scale you set or a pixel size you type, with the margin and the background decided before anything is written.",
   },
 ];
 
@@ -63,7 +63,7 @@ const FAQ = [
   },
   {
     q: "Is the output good enough for a journal or a thesis?",
-    a: "It is drawn for that: black on white, even stroke weights, a formal sans for labels, and BPMN shapes that follow the BPMN 2.0 conventions. Export PNG at 4× for a print submission, or SVG when the template takes vectors.",
+    a: "It is drawn for that: black on white, even stroke weights, a formal sans for labels, and BPMN shapes that follow the BPMN 2.0 conventions. Export a PNG or a JPG at whatever scale the submission asks for, an SVG when the template takes vectors, or a one-page PDF.",
   },
   {
     q: "How much of a language do I have to learn?",
@@ -75,7 +75,7 @@ const FAQ = [
   },
   {
     q: "Where is my work saved?",
-    a: "Nowhere but the tab you are in. Export a PNG or an SVG, and keep the source next to your document, before you close it.",
+    a: "Nowhere but the tab you are in. Export the drawing and keep the source next to your document before you close it.",
   },
 ];
 

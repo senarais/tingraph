@@ -27,3 +27,49 @@ export function inkFor(id: InkId): Ink {
 }
 
 export const MONOCHROME: Ink = inkFor("mono");
+
+/** An ink the reader is using, preset or mixed by hand. */
+export interface InkChoice extends Ink {
+  id: string;
+  name: string;
+}
+
+export const DEFAULT_INK_CHOICE: InkChoice = {
+  id: DEFAULT_INK,
+  name: "Monochrome",
+  ...MONOCHROME,
+};
+
+function channels(hex: string): [number, number, number] {
+  const value = hex.replace("#", "");
+  const full =
+    value.length === 3
+      ? value
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : value;
+  return [
+    parseInt(full.slice(0, 2), 16),
+    parseInt(full.slice(2, 4), 16),
+    parseInt(full.slice(4, 6), 16),
+  ];
+}
+
+/**
+ * The wash that goes with a stroke the reader mixed themselves: the same hue
+ * taken most of the way to paper, so a band stays readable under black text
+ * and still prints.
+ */
+export function washFor(color: string): string {
+  const [r, g, b] = channels(color);
+  const pale = (channel: number) => Math.round(channel + (255 - channel) * 0.66);
+  return `#${[pale(r), pale(g), pale(b)]
+    .map((c) => c.toString(16).padStart(2, "0"))
+    .join("")}`;
+}
+
+/** An ink mixed from one colour the reader picked. */
+export function customInk(color: string): InkChoice {
+  return { id: "custom", name: "Custom", color, tint: washFor(color) };
+}

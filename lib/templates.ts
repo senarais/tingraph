@@ -38,38 +38,38 @@ export const BPMN_TEMPLATE = `bpmn "Vacation Request" {
 }
 `;
 
-export const ORG_TEMPLATE = `org "BAGAN STRUKTUR ORGANISASI FAKULTAS PSIKOLOGI UNIVERSITAS NEGERI JAKARTA" {
-  role DEKAN "DEKAN" "Dr. Gumgum Gumelar F. R, M.Si"
-  role SENAT "SENAT FAKULTAS"
+export const ORG_TEMPLATE = `org "FACULTY OF PSYCHOLOGY ORGANISATIONAL CHART" {
+  role DEAN "DEAN" "Dr. Marion Hale"
+  role SENATE "FACULTY SENATE"
 
-  role WD1 "WAKIL DEKAN I" "Mira Ariyani, Ph.D"
-  role WD2 "WAKIL DEKAN II" "Dr. Lussy Dwiutami W., M.Pd"
-  role WD3 "WAKIL DEKAN III" "Herdiyan Maulana, Ph.D"
+  role VD1 "VICE DEAN I" "Priya Raman, Ph.D"
+  role VD2 "VICE DEAN II" "Dr. Elena Sorbo, M.Ed"
+  role VD3 "VICE DEAN III" "Tomas Weller, Ph.D"
 
-  role LAB "KEPALA LAB" {
-    unit "Lab. Psikodiagnostik" "Ernita Zakiah, M.Psi"
-    unit "Lab. Komputer" "Fildzah Rudyah P. M.Si"
-    unit "Lab. Eksperimen & Multimedia" "Adhissa Qonita, M.Psi. Psikolog"
+  role LABS "HEAD OF LABORATORIES" {
+    unit "Psychodiagnostics Lab" "Ines Fabri, M.Sc"
+    unit "Computing Lab" "Karel Sandvik, M.Sc"
+    unit "Experimental and Media Lab" "Ada Moreau, M.Sc"
   }
-  role S1 "KOORPRODI SARJANA (S1)" "Irma Rosalinda, M.Si. Psikolog"
-  role S2 "KOORPRODI MAGISTER SAINS (S2)" "Dr. Anna Armeini Rangkuti, M.Si"
-  role GPJM "KETUA GPJM" "Gita Irianda Rizkyani M., M.Psi. Psikolog"
+  role UG "HEAD OF UNDERGRADUATE PROGRAMME" "Nadia Brenner, M.Sc"
+  role PG "HEAD OF MASTER PROGRAMME" "Dr. Owen Castellan"
+  role QA "QUALITY ASSURANCE CHAIR" "Sofia Lindqvist, M.Sc"
 
-  role LAYANAN "KOORDINATOR LAYANAN" "Aris Parmono, S.AP, M.AP"
-  role TPJM1 "TPJM PRODI S1" "Ernawati, M.Psi.Psikolog"
-  role TPJM2 "TPJM PRODI S2" "Liza Yudhita Widyastuti, M.Psi. Psikolog"
+  role SERVICES "SERVICES COORDINATOR" "Rafael Duarte, M.A"
+  role QA1 "QA TEAM, UNDERGRADUATE" "Hana Oyelaan, M.Sc"
+  role QA2 "QA TEAM, MASTER" "Iris Kovak, M.Sc"
 
-  DEKAN -> WD1
-  DEKAN -> WD2
-  DEKAN -> WD3
-  DEKAN -> LAB
-  DEKAN -> S1
-  DEKAN -> S2
-  DEKAN -> GPJM
-  S1 -> LAYANAN
-  GPJM -> TPJM1
-  GPJM -> TPJM2
-  DEKAN -.-> SENAT
+  DEAN -> VD1
+  DEAN -> VD2
+  DEAN -> VD3
+  DEAN -> LABS
+  DEAN -> UG
+  DEAN -> PG
+  DEAN -> QA
+  UG -> SERVICES
+  QA -> QA1
+  QA -> QA2
+  DEAN -.-> SENATE
 }
 `;
 

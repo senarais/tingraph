@@ -198,7 +198,7 @@ export default function HeroDemo() {
       <div className="grid grid-cols-2 border-t-2 border-edge bg-bone sm:grid-cols-4">
         <Cell label="Drawing" value={reading.title} />
         <Cell label="Elements" value={`${reading.nodes} nodes, ${reading.edges} flows`} />
-        <Cell label="Export" value="PNG at 4×, SVG" />
+        <Cell label="Export" value="PNG, JPG, SVG, PDF" />
         <div className="flex items-center border-l-2 border-edge sm:border-l-0">
           <Link
             href={`/editor?type=${kind.id}`}

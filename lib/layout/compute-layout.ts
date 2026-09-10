@@ -160,7 +160,7 @@ export function bpmnShapeSize(
 
 // ------------------------------------------------------------ flow (dagre)
 
-function flowDimensions(
+export function flowDimensions(
   type: NodeType,
   label: string,
 ): { width: number; height: number } {

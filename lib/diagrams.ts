@@ -57,15 +57,15 @@ export const BPMN_SAMPLE = `bpmn "Vacation Request" {
 }
 `;
 
-export const ORG_SAMPLE = `org "Fakultas Psikologi" {
-  role DEKAN "DEKAN" "Dr. Gumgum Gumelar"
-  role WD1 "WAKIL DEKAN I" "Mira Ariyani, Ph.D"
-  role WD2 "WAKIL DEKAN II" "Dr. Lussy Dwiutami"
-  role SENAT "SENAT FAKULTAS"
+export const ORG_SAMPLE = `org "Faculty of Psychology" {
+  role DEAN "DEAN" "Dr. Marion Hale"
+  role VD1 "VICE DEAN I" "Priya Raman, Ph.D"
+  role VD2 "VICE DEAN II" "Dr. Elena Sorbo"
+  role SENATE "FACULTY SENATE"
 
-  DEKAN -> WD1
-  DEKAN -> WD2
-  DEKAN -.-> SENAT
+  DEAN -> VD1
+  DEAN -> VD2
+  DEAN -.-> SENATE
 }
 `;
 

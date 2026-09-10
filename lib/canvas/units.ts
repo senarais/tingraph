@@ -17,6 +17,8 @@ export interface UnitMark {
   core?: true;
   /** a piece filled with the ink's wash, so re-inking can find it by name */
   wash?: true;
+  /** a box whose corners the notation leaves free, so a style may round them */
+  soft?: true;
   /** pool only: width of its own header band */
   band?: number;
   /** pool only: width of the header band its lanes use */
