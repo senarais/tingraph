@@ -1,5 +1,8 @@
 import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
+import type { Arrowhead } from "@excalidraw/excalidraw/element/types";
 import {
+  DiagramCategory,
+  EdgeKind,
   NodeType,
   PositionedAST,
   PositionedEdge,
@@ -8,6 +11,7 @@ import {
   PositionedPool,
 } from "@/lib/types";
 import { marked, type UnitMark } from "@/lib/canvas/units";
+import { connectorInk, connectorKind, defaultConnector } from "@/lib/connectors";
 import {
   BPMN_EXTERNAL_LABEL_DISTANCE,
   BPMN_LABEL_FONT_SIZE,
@@ -17,6 +21,7 @@ import {
   ORG_TITLE_FONT_SIZE,
   bpmnHasExternalLabel,
   orgBoxLayout,
+  shapeFamily,
   textWidth,
   wrapByWidth,
   wrapExternalLabel,
@@ -100,7 +105,19 @@ function softRoundness(theme: Theme) {
  * How every connector on the sheet is drawn. The generated flows spread this,
  * and so does an arrow the reader draws by hand, so the two are the same line.
  */
-function connectorFrom(theme: Theme) {
+export interface ConnectorStyle {
+  strokeColor: string;
+  backgroundColor: string;
+  strokeWidth: number;
+  strokeStyle: "solid" | "dashed" | "dotted";
+  roughness: number;
+  opacity: number;
+  roundness: null;
+  startArrowhead: Arrowhead | null;
+  endArrowhead: Arrowhead | null;
+}
+
+function connectorFrom(theme: Theme): ConnectorStyle {
   return {
     strokeColor: theme.strokeColor,
     backgroundColor: "transparent",
@@ -112,10 +129,8 @@ function connectorFrom(theme: Theme) {
     startArrowhead: null,
     // bpmn.io draws a sequence flow with a filled triangle head
     endArrowhead: "triangle",
-  } as const;
+  };
 }
-
-export type ConnectorStyle = ReturnType<typeof connectorFrom>;
 
 export function connectorStyle(
   ink: Ink = MONOCHROME,
@@ -225,18 +240,12 @@ export function bpmnNodeSkeletons(
     return skeletons;
   }
 
-  const isTask = !bpmnHasExternalLabel(node.type);
-  const isEvent =
-    node.type === "start" ||
-    node.type === "end" ||
-    node.type === "msg-start" ||
-    node.type === "msg-end" ||
-    node.type === "timer";
-  const isGateway =
-    node.type === "gw-ex" || node.type === "gw-para" || node.type === "gw-inc";
+  const family = shapeFamily(node.type, "bpmn");
+  const isTask = family === "task";
+  const isEvent = family === "ellipse";
 
   skeletons.push({
-    type: isEvent ? "ellipse" : isGateway ? "diamond" : "rectangle",
+    type: isEvent ? "ellipse" : family === "diamond" ? "diamond" : "rectangle",
     id: node.id,
     x: node.x,
     y: node.y,
@@ -280,12 +289,9 @@ function flowNodeSkeletons(
   node: PositionedNode,
   theme: Theme,
 ): ExcalidrawElementSkeleton[] {
+  const family = shapeFamily(node.type, "flow");
   const shape =
-    node.type === "start" || node.type === "end"
-      ? "ellipse"
-      : node.type === "decision"
-        ? "diamond"
-        : "rectangle";
+    family === "ellipse" ? "ellipse" : family === "diamond" ? "diamond" : "rectangle";
   // a terminator and a decision own their outline; only the plain step and the
   // input/output box have corners a style is free to soften
   const soft = shape === "rectangle";
@@ -423,17 +429,37 @@ function orgNodeSkeletons(
   return out;
 }
 
+/** The unit each notation stamps the pieces of one node with. */
+export function nodeUnit(category: DiagramCategory, id: string): string {
+  if (category === "bpmn") {
+    return `bpmn-${id}`;
+  }
+  return category === "org" ? `org-${id}` : `flow-node-${id}`;
+}
+
+/** Which of the notation's lines an edge in the source is drawn as. */
+function lineFor(category: DiagramCategory, kind: EdgeKind | undefined): string {
+  if (kind !== "association") {
+    return defaultConnector(category);
+  }
+  return category === "bpmn" ? "association" : category === "org" ? "advisory" : "annotation";
+}
+
 /**
- * Sequence flows and associations. Endpoints are bound to their shapes so the
- * arrow keeps up when the reader drags a node around on the canvas; shapes
- * drawn as raw outlines (data objects) have no bindable container, so those
- * ends stay unbound.
+ * Sequence flows and associations.
+ *
+ * A connector names the two elements it joins rather than binding to them:
+ * Excalidraw's binding slides an endpoint around a shape's outline, which is
+ * what sends a reporting line out of the side of a box instead of its bottom.
+ * The canvas cuts the route itself, from the rule the notation carries, the
+ * moment either box moves. Until then the route the source laid out — legs
+ * that step around whatever stands in the way — is the one on the sheet.
  */
 function edgeSkeleton(
   edge: PositionedEdge,
   index: number,
   theme: Theme,
-  bindable: Set<string>,
+  category: DiagramCategory,
 ): ExcalidrawElementSkeleton | null {
   if (edge.points.length < 2) {
     return null;
@@ -444,7 +470,7 @@ function edgeSkeleton(
   );
   const xs = points.map((p) => p[0]);
   const ys = points.map((p) => p[1]);
-  const isAssociation = edge.kind === "association";
+  const line = lineFor(category, edge.kind);
   return {
     type: "arrow",
     id: `edge-${index}`,
@@ -454,18 +480,19 @@ function edgeSkeleton(
     height: Math.max(...ys) - Math.min(...ys),
     points,
     groupIds: [`flow-${index}`],
-    ...marked({ unit: `flow-${index}`, kind: "edge", core: true }),
-    ...(bindable.has(edge.from) ? { start: { id: edge.from } } : {}),
-    ...(bindable.has(edge.to) ? { end: { id: edge.to } } : {}),
+    ...marked({
+      unit: `flow-${index}`,
+      kind: "edge",
+      core: true,
+      link: {
+        line,
+        from: { unit: nodeUnit(category, edge.from) },
+        to: { unit: nodeUnit(category, edge.to) },
+      },
+    }),
     ...ACADEMIC_MONOCHROME_THEME,
     ...connectorFrom(theme),
-    // an association is the same line, dotted, with an open head
-    ...(isAssociation
-      ? {
-          strokeStyle: "dotted",
-          endArrowhead: "triangle_outline",
-        }
-      : { endArrowhead: "triangle" }),
+    ...connectorInk(connectorKind(line, category)),
   } as unknown as ExcalidrawElementSkeleton;
 }
 
@@ -577,38 +604,13 @@ function edgeLabelSkeletons(
   return out;
 }
 
-/**
- * Org connectors. A reporting line is a filled arrow bound to the two boxes it
- * joins, so it keeps up when either is dragged; anything else is a plain
- * dashed rule, the way a chart marks an advisory tie.
- */
-function orgEdgeSkeleton(
-  edge: PositionedEdge,
-  index: number,
-  theme: Theme,
-  bottomOf: (id: string) => string,
-): ExcalidrawElementSkeleton | null {
-  const skeleton = edgeSkeleton(edge, index, theme, new Set());
-  if (!skeleton) {
-    return null;
-  }
-  const dashed = edge.kind === "association";
-  return {
-    ...skeleton,
-    ...(edge.reporting
-      ? { start: { id: bottomOf(edge.from) }, end: { id: edge.to } }
-      : {}),
-    strokeStyle: dashed ? "dashed" : "solid",
-    endArrowhead: dashed ? null : "triangle",
-  } as unknown as ExcalidrawElementSkeleton;
-}
-
 function flowEdgeSkeleton(
   edge: PositionedEdge,
   index: number,
   theme: Theme,
+  category: DiagramCategory,
 ): ExcalidrawElementSkeleton | null {
-  const skeleton = edgeSkeleton(edge, index, theme, new Set([edge.from, edge.to]));
+  const skeleton = edgeSkeleton(edge, index, theme, category);
   if (!skeleton || !edge.label) {
     return skeleton;
   }
@@ -885,25 +887,10 @@ export function buildSkeletons(
     );
   }
 
-  const bindable = new Set(
-    positioned.nodes.filter((n) => n.type !== "data").map((n) => n.id),
-  );
-  // a reporting line leaves the bottom of a box, which is its body when the
-  // box carries a name and the band itself when it does not
-  const bottomOf = (id: string): string => {
-    const node = positioned.nodes.find((n) => n.id === id);
-    if (!node) {
-      return id;
-    }
-    const box = orgBoxLayout(node);
-    return box.height > box.bandHeight ? `${id}-body` : id;
-  };
   positioned.edges.forEach((edge, index) => {
     const skeleton = isBpmn
-      ? edgeSkeleton(edge, index, theme, bindable)
-      : isOrg
-        ? orgEdgeSkeleton(edge, index, theme, bottomOf)
-        : flowEdgeSkeleton(edge, index, theme);
+      ? edgeSkeleton(edge, index, theme, positioned.category)
+      : flowEdgeSkeleton(edge, index, theme, positioned.category);
     if (skeleton) {
       skeletons.push(skeleton);
     }

@@ -13,24 +13,34 @@ import { useTingraphStore, type CanvasTool } from "@/lib/store";
 import {
   addLane,
   addPoolBelow,
-  adoptArrows,
   normalizeUnits,
   poolBoxes,
   removePool,
-  squareEdges,
+  reunit,
+  syncConnectors,
   type PoolBox,
 } from "@/lib/canvas/scene";
-import { selection } from "@/lib/canvas/inspect";
+import { held, selection } from "@/lib/canvas/inspect";
+import { unitOf } from "@/lib/canvas/units";
+import type { Rules } from "@/lib/canvas/connect";
 import type { ConnectorStyle } from "@/lib/excalidraw-mapper/build-skeletons";
-import { SHAPE_DRAG_TYPE } from "@/lib/palette";
+import { SHAPE_DRAG_TYPE, paletteShapeSize, type PaletteItem } from "@/lib/palette";
+import { DiagramCategory } from "@/lib/types";
+import ConnectLayer from "@/components/editor/connect-layer";
+import ShapeGhost from "@/components/editor/shape-ghost";
 import PoolControls, { type CanvasView } from "@/components/editor/pool-controls";
 import CanvasTools from "@/components/editor/canvas-tools";
 
 interface CanvasProps {
   /** first drawing, seeded once; afterwards the sheet is the reader's */
   initialElements: ExcalidrawElement[];
-  /** the one connector this sheet draws, generated or by hand */
-  connector: ConnectorStyle;
+  category: DiagramCategory;
+  /** the shape being dragged in from the palette, drawn under the pointer */
+  dragging: PaletteItem | null;
+  /** the sheet's own line: colour, weight and roughness */
+  connectorStyle: ConnectorStyle;
+  /** which notation the sheet is in, and which way it grows */
+  rules: Rules;
   onApi: (api: ExcalidrawImperativeAPI) => void;
   onSelection: (picked: ExcalidrawElement[]) => void;
   /** a shape card let go over the sheet, in viewport coordinates */
@@ -56,14 +66,16 @@ const RAIL_TOOLS = new Set<string>([
   "hand",
   "text",
   "image",
-  "arrow",
   "freedraw",
   "eraser",
 ]);
 
 export default function Canvas({
   initialElements,
-  connector,
+  category,
+  dragging,
+  connectorStyle,
+  rules,
   onApi,
   onSelection,
   onDropShape,
@@ -73,19 +85,24 @@ export default function Canvas({
   const ink = useTingraphStore((s) => s.ink);
   const tool = useTingraphStore((s) => s.tool);
   const setTool = useTingraphStore((s) => s.setTool);
+  const holding = useTingraphStore((s) => s.connector);
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
+  const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [seeded] = useState(() => initialElements);
   const [pools, setPools] = useState<PoolBox[]>([]);
   const [empty, setEmpty] = useState(false);
   const [view, setView] = useState<CanvasView>(NO_VIEW);
+  const [line, setLine] = useState<ExcalidrawElement | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  const ghostRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef("");
   const pickedRef = useRef("");
   const toolRef = useRef<CanvasTool>(tool);
-  const connectorRef = useRef(connector);
+  const lineRef = useRef("");
+  const rulesRef = useRef(rules);
   useEffect(() => {
-    connectorRef.current = connector;
-  }, [connector]);
+    rulesRef.current = rules;
+  }, [rules]);
 
   /**
    * Zoom about the middle of the sheet. Excalidraw scales around the canvas
@@ -128,6 +145,28 @@ export default function Canvas({
     );
   }, []);
 
+  // Excalidraw binds redo to Ctrl+Shift+Z everywhere but only binds Ctrl+Y on
+  // Windows, so the other half of the shortcut is added here.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target;
+      const typing =
+        target instanceof HTMLInputElement ||
+        target instanceof HTMLTextAreaElement ||
+        target instanceof HTMLSelectElement ||
+        (target instanceof HTMLElement && target.isContentEditable);
+      if (typing || event.shiftKey || event.altKey) {
+        return;
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "y") {
+        event.preventDefault();
+        history("redo");
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [history]);
+
   const fit = useCallback(() => {
     const api = apiRef.current;
     if (api) {
@@ -152,29 +191,36 @@ export default function Canvas({
   const handleChange = useCallback(
     (elements: readonly ExcalidrawElement[], state: AppState) => {
       const fix = normalizeUnits(elements, state);
-      // an arrow still under the pointer is left alone until it is finished
-      const drawing = state.multiElement?.id ?? state.newElement?.id ?? null;
-      const adopted = adoptArrows(
-        fix?.elements ?? elements,
-        connectorRef.current,
-        drawing,
+      // a connector the reader has hold of is left alone until the pointer is
+      // up: one being dragged by its box, one being resized with its shapes
+      const busy = held(state);
+      const cut = syncConnectors(fix?.elements ?? elements, rulesRef.current, busy);
+      const next = cut ?? fix?.elements;
+      // Excalidraw offers its own point editor for any line it is shown, and
+      // its handles fight the routing; a Tingraph connector carries its own
+      // handles instead, so the editor is put away the moment it opens
+      const scene = next ?? elements;
+      const editing =
+        state.editingLinearElement?.elementId ?? state.selectedLinearElement?.elementId;
+      const routed = scene.some(
+        (element) => element.id === editing && unitOf(element)?.link,
       );
-      // a bound connector is dragged out of square by its own ends; put it back
-      const square = squareEdges(adopted ?? fix?.elements ?? elements, drawing);
-      const next = square ?? adopted ?? fix?.elements;
-      if (next || fix?.appState) {
+      const patch = {
+        ...(fix?.appState ?? {}),
+        ...(routed ? { editingLinearElement: null, selectedLinearElement: null } : {}),
+      };
+      if (next || Object.keys(patch).length > 0) {
         // deferred: this runs inside Excalidraw's own commit
         queueMicrotask(() =>
           apiRef.current?.updateScene({
             ...(next ? { elements: next } : {}),
-            ...(fix?.appState ? { appState: fix.appState } : {}),
+            ...(Object.keys(patch).length > 0 ? { appState: patch as never } : {}),
             captureUpdate: CaptureUpdateAction.NEVER,
           }),
         );
       }
 
       // --- what the properties panel is looking at
-      const scene = next ?? elements;
       const picked = selection(
         scene,
         fix?.appState?.selectedElementIds ?? state.selectedElementIds,
@@ -187,12 +233,30 @@ export default function Canvas({
         onSelection(picked);
       }
 
+      // --- the one connector the handles are drawn on, when just one is picked
+      const lines = picked.filter(
+        (element) => element.type === "arrow" && unitOf(element)?.link,
+      );
+      const alone =
+        lines.length === 1 &&
+        picked.every((element) => element.type === "arrow" || element.type === "text")
+          ? lines[0]
+          : null;
+      const mark = alone ? `${alone.id}.${alone.version}` : "";
+      if (mark !== lineRef.current) {
+        lineRef.current = mark;
+        setLine(alone);
+      }
+
       // --- the canvas can put a tool back itself, so the rail follows it
       const active = state.activeTool.type;
-      const railed = (RAIL_TOOLS.has(active) ? active : "selection") as CanvasTool;
-      if (railed !== toolRef.current) {
-        toolRef.current = railed;
-        setTool(railed);
+      if (!RAIL_TOOLS.has(active)) {
+        // a keyboard shortcut for a tool the rail does not carry: Tingraph
+        // draws its shapes from the notation, so the pointer comes back
+        queueMicrotask(() => apiRef.current?.setActiveTool({ type: "selection" }));
+      } else if (active !== toolRef.current) {
+        toolRef.current = active as CanvasTool;
+        setTool(active as CanvasTool);
       }
 
       const blank = scene.every((element) => element.isDeleted);
@@ -224,9 +288,20 @@ export default function Canvas({
       ref={wrapRef}
       className="relative h-full w-full"
       onDragOver={(event) => {
-        if (event.dataTransfer.types.includes(SHAPE_DRAG_TYPE)) {
-          event.preventDefault();
-          event.dataTransfer.dropEffect = "copy";
+        if (!event.dataTransfer.types.includes(SHAPE_DRAG_TYPE)) {
+          return;
+        }
+        event.preventDefault();
+        event.dataTransfer.dropEffect = "copy";
+        // moved through the DOM rather than through state: a dragover fires
+        // many times a second, and the sheet must not re-render for each one
+        const ghost = ghostRef.current;
+        const box = wrapRef.current?.getBoundingClientRect();
+        if (ghost && box) {
+          ghost.style.transform = `translate(${event.clientX - box.left}px, ${
+            event.clientY - box.top
+          }px)`;
+          ghost.style.opacity = "1";
         }
       }}
       onDrop={(event) => {
@@ -240,13 +315,21 @@ export default function Canvas({
     >
       <Excalidraw
         name="tingraph-scene"
-        excalidrawAPI={(api) => {
-          apiRef.current = api;
-          (window as unknown as { __excalidrawAPI?: typeof api }).__excalidrawAPI =
-            api;
-          onApi(api);
+        excalidrawAPI={(handle) => {
+          apiRef.current = handle;
+          (window as unknown as { __excalidrawAPI?: typeof handle }).__excalidrawAPI =
+            handle;
+          setApi(handle);
+          onApi(handle);
         }}
+        // a copy is its own element, never a second piece of the original
+        onDuplicate={reunit}
         onChange={handleChange}
+        // the whole page is the editor: a shortcut has to work after pressing a
+        // swatch in the properties panel, not only when the sheet has focus.
+        // Excalidraw ignores a key pressed inside an input, a textarea or a
+        // caption editor, so nothing here can swallow typing.
+        handleKeyboardGlobally
         UIOptions={{
           canvasActions: {
             export: false,
@@ -283,6 +366,31 @@ export default function Canvas({
           },
         }}
       />
+      <ConnectLayer
+        api={api}
+        holding={holding}
+        rules={rules}
+        style={connectorStyle}
+        view={view}
+        picked={line}
+      />
+      {dragging && (
+        <div
+          ref={ghostRef}
+          aria-hidden="true"
+          className="pointer-events-none absolute left-0 top-0 z-30 opacity-0"
+        >
+          <div className="-translate-x-1/2 -translate-y-1/2 opacity-70">
+            <ShapeGhost
+              type={dragging.type}
+              category={category}
+              width={paletteShapeSize(dragging, category).width * view.zoom}
+              height={paletteShapeSize(dragging, category).height * view.zoom}
+              ink={ink.color}
+            />
+          </div>
+        </div>
+      )}
       <CanvasTools
         zoom={view.zoom}
         onZoom={zoomBy}

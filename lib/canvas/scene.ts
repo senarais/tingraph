@@ -3,16 +3,17 @@ import {
   newElementWith,
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
-import { marked, unitOf } from "@/lib/canvas/units";
+import { marked, unitOf, type LinkMark, type UnitMark } from "@/lib/canvas/units";
+import { renameCopies } from "@/lib/canvas/copies";
 import type { Ink } from "@/lib/ink";
 import { FORMAL, type SheetStyle } from "@/lib/sheet";
 import {
-  clipEnds,
-  squareRoute,
-  type Bound,
-  type Bounds,
-  type Corner,
-} from "@/lib/canvas/route";
+  asElement,
+  linkSignature,
+  routeBetween,
+  type Box,
+  type Rules,
+} from "@/lib/canvas/connect";
 import {
   buildLaneSkeletons,
   buildPoolSkeletons,
@@ -184,122 +185,213 @@ export function normalizeUnits(
   return fix.elements || fix.appState ? fix : null;
 }
 
-// -------------------------------------------------------------- square edges
+// ------------------------------------------------------------------- copies
 
 /**
- * Takes an arrow the reader just drew into the drawing: it is restyled to the
- * one connector this sheet uses and stamped as a flow, which puts it under the
- * same square rule as the generated ones. It happens once, at the moment the
- * arrow appears, so a later restyle by hand survives.
+ * Makes a copy its own element, the moment it is made. The renaming itself is
+ * in `lib/canvas/copies.ts`; this only writes it back.
  */
-export function adoptArrows(
-  elements: Elements,
-  style: ConnectorStyle,
-  drawing: string | null,
-): ExcalidrawElement[] | null {
-  let next: ExcalidrawElement[] | null = null;
-  elements.forEach((element, index) => {
-    if (
-      element.isDeleted ||
-      element.type !== "arrow" ||
-      element.id === drawing ||
-      unitOf(element)
-    ) {
-      return;
+export function reunit(next: Elements, prev: Elements): ExcalidrawElement[] | void {
+  const patches = renameCopies(next, prev, freshId);
+  if (patches.size === 0) {
+    return;
+  }
+  return next.map((element) => {
+    const patch = patches.get(element.id);
+    const mark = patch ? unitOf(element) : null;
+    if (!patch || !mark) {
+      return element;
     }
-    next ??= elements.slice();
-    next[index] = newElementWith(element, {
-      ...style,
-      ...marked({ unit: `hand-${element.id}`, kind: "edge", core: true }),
-    } as never);
+    const tingraph: UnitMark = { ...mark, unit: patch.unit };
+    if (patch.link === null) {
+      delete tingraph.link;
+    } else if (patch.link) {
+      tingraph.link = patch.link;
+    }
+    return newElementWith(element, {
+      groupIds: patch.groupIds,
+      customData: { ...element.customData, tingraph },
+    });
   });
-  return next;
 }
+
+// ---------------------------------------------------------------- connectors
 
 const SHAPES = new Set(["rectangle", "ellipse", "diamond", "image"]);
 
 /**
- * What each element counts as when an arrow points at it. A Tingraph element
- * is drawn as several shapes but reads as one, so an arrow that lands on any
- * of its pieces stops at the outline of the whole thing.
+ * What a connector may tie itself to.
+ *
+ * A Tingraph element is drawn as several Excalidraw shapes but reads as one,
+ * so a connector points at the whole thing: the key is the element's unit, and
+ * the box is the outline around every piece of it that carries an outline. A
+ * shape the reader drew or dropped on its own stands for itself, under its own
+ * id. Anything drawn as bare strokes — a BPMN data object — falls back to the
+ * outline around all of its pieces.
  */
-function bindingBounds(elements: Elements): Map<string, Bounds> {
-  const units = new Map<string, Bounds>();
-  const own = new Map<string, Bounds>();
-  for (const element of elements) {
-    if (element.isDeleted) {
-      continue;
-    }
-    const box = {
-      left: element.x,
-      top: element.y,
-      right: element.x + element.width,
-      bottom: element.y + element.height,
-    };
-    own.set(element.id, box);
-    const unit = unitOf(element)?.unit;
-    if (!unit || !SHAPES.has(element.type)) {
-      continue;
-    }
-    const grown = units.get(unit);
-    units.set(
-      unit,
-      grown
-        ? {
-            left: Math.min(grown.left, box.left),
-            top: Math.min(grown.top, box.top),
-            right: Math.max(grown.right, box.right),
-            bottom: Math.max(grown.bottom, box.bottom),
-          }
-        : box,
+export function linkTargets(elements: Elements): Map<string, Box> {
+  const shapes = new Map<string, Box>();
+  const all = new Map<string, Box>();
+  const grow = (into: Map<string, Box>, key: string, element: ExcalidrawElement) => {
+    const held = into.get(key);
+    const left = held ? Math.min(held.x, element.x) : element.x;
+    const top = held ? Math.min(held.y, element.y) : element.y;
+    const right = Math.max(held ? held.x + held.width : -Infinity, element.x + element.width);
+    const bottom = Math.max(
+      held ? held.y + held.height : -Infinity,
+      element.y + element.height,
     );
-  }
-  const out = new Map<string, Bounds>();
+    into.set(key, { x: left, y: top, width: right - left, height: bottom - top });
+  };
   for (const element of elements) {
-    if (element.isDeleted) {
+    const mark = element.isDeleted ? null : unitOf(element);
+    // a connector joins elements, and a loose caption is not one of them
+    if (element.isDeleted || element.type === "arrow" || (element.type === "text" && !mark)) {
       continue;
     }
-    const unit = unitOf(element)?.unit;
-    const box = (unit ? units.get(unit) : undefined) ?? own.get(element.id);
-    if (box) {
-      out.set(element.id, box);
+    const key = mark?.unit ?? element.id;
+    grow(all, key, element);
+    if (SHAPES.has(element.type)) {
+      grow(shapes, key, element);
     }
+  }
+  // kept in the order the sheet stacks them, so the shape on top wins a hit
+  const out = new Map<string, Box>();
+  for (const [key, box] of all) {
+    out.set(key, shapes.get(key) ?? box);
   }
   return out;
 }
 
-/** Keeps every connector on the sheet running square. */
-export function squareEdges(
+/**
+ * One connector the reader has just drawn, cut to the notation's rule and
+ * added to the sheet. Returns null when either end is no longer there.
+ */
+export function newConnector(
   elements: Elements,
-  drawing: string | null = null,
+  link: LinkMark,
+  rules: Rules,
+  style: ConnectorStyle,
+): ExcalidrawElement[] | null {
+  const boxes = linkTargets(elements);
+  const from = boxes.get(link.from.unit);
+  const to = boxes.get(link.to.unit);
+  if (!from || !to) {
+    return null;
+  }
+  const cut = asElement(
+    routeBetween(from, to, {
+      ...rules,
+      fromSide: link.from.side,
+      toSide: link.to.side,
+      bend: link.bend,
+    }),
+  );
+  const unit = `line-${freshId()}`;
+  const [made] = convertToExcalidrawElements(
+    [
+      {
+        type: "arrow",
+        x: cut.x,
+        y: cut.y,
+        width: cut.width,
+        height: cut.height,
+        points: cut.points,
+        ...style,
+        ...marked({
+          unit,
+          kind: "edge",
+          core: true,
+          link: { ...link, at: linkSignature(from, to, link, cut) },
+        }),
+      } as never,
+    ],
+    { regenerateIds: true },
+  );
+  // Excalidraw nudges the first point of a line it is handed; the route is the
+  // one this file cut, so it is written back over the top
+  const arrow = newElementWith(made, {
+    x: cut.x,
+    y: cut.y,
+    width: cut.width,
+    height: cut.height,
+    points: cut.points,
+  } as never);
+  return [...elements, arrow];
+}
+
+/**
+ * Cuts every connector's route again whenever what it is tied to has moved.
+ *
+ * The route on the sheet carries the boxes it was cut against, so a drawing
+ * nobody has touched is left exactly as the source laid it out — routes that
+ * step around the shapes in their way are not thrown away and re-guessed. The
+ * moment a box moves, or the reader drags the connector's middle leg, or drags
+ * the connector itself out of place, the route is cut again from the notation's
+ * own rule.
+ *
+ * `busy` names the connectors under the reader's hand this frame, which are
+ * left alone until the pointer is up.
+ */
+export function syncConnectors(
+  elements: Elements,
+  rules: Rules,
+  busy: ReadonlySet<string> = new Set(),
 ): ExcalidrawElement[] | null {
   let next: ExcalidrawElement[] | null = null;
-  let boxes: Map<string, Bounds> | null = null;
+  let boxes: Map<string, Box> | null = null;
   elements.forEach((element, index) => {
-    if (element.isDeleted || element.type !== "arrow" || element.id === drawing) {
+    if (element.isDeleted || element.type !== "arrow" || busy.has(element.id)) {
       return;
     }
-    // an elbow arrow is routed by Excalidraw and is square already
-    if ((element as { elbowed?: boolean }).elbowed) {
+    const mark = unitOf(element);
+    const link = mark?.link;
+    if (!mark || !link) {
       return;
     }
-    if (unitOf(element)?.kind !== "edge") {
+    boxes ??= linkTargets(elements);
+    const from = boxes.get(link.from.unit);
+    const to = boxes.get(link.to.unit);
+    if (!from || !to) {
       return;
     }
-    const arrow = element as unknown as Bound & { points: readonly Corner[] };
-    const square = squareRoute(arrow.points);
-    boxes ??= bindingBounds(elements);
-    const route = clipEnds(square ?? arrow.points, arrow, boxes) ?? square;
-    if (!route) {
+    const signature = linkSignature(from, to, link, element);
+    if (signature === link.at) {
       return;
     }
-    const xs = route.map((point) => point[0]);
-    const ys = route.map((point) => point[1]);
+    if (!link.at) {
+      // a route that has never been cut here came from the source, which laid
+      // it out around whatever stood in the way; it is adopted as it is
+      next ??= elements.slice();
+      next[index] = newElementWith(element, {
+        customData: {
+          ...element.customData,
+          tingraph: { ...mark, link: { ...link, at: signature } },
+        },
+      });
+      return;
+    }
+    const route = routeBetween(from, to, {
+      ...rules,
+      fromSide: link.from.side,
+      toSide: link.to.side,
+      bend: link.bend,
+    });
+    const cut = asElement(route);
     next ??= elements.slice();
     next[index] = newElementWith(element, {
-      points: route as never,
-      width: Math.max(...xs) - Math.min(...xs),
-      height: Math.max(...ys) - Math.min(...ys),
+      x: cut.x,
+      y: cut.y,
+      points: cut.points as never,
+      width: cut.width,
+      height: cut.height,
+      customData: {
+        ...element.customData,
+        tingraph: {
+          ...mark,
+          link: { ...link, at: linkSignature(from, to, link, cut) },
+        },
+      },
     });
   });
   return next;

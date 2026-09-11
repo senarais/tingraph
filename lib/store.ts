@@ -18,7 +18,6 @@ export type CanvasTool =
   | "hand"
   | "text"
   | "image"
-  | "arrow"
   | "freedraw"
   | "eraser";
 
@@ -35,6 +34,14 @@ interface TingraphState {
   /** the source drawer shows either the code or the language guide */
   sourceTab: "code" | "guide";
   tool: CanvasTool;
+  /**
+   * The connector the rail is holding, by name, or null when it is holding
+   * none. Connectors are Tingraph's own instrument rather than one of
+   * Excalidraw's tools, so they are held apart from `tool`.
+   */
+  connector: string | null;
+  /** space is down, so the sheet is being panned whatever else is held */
+  panning: boolean;
   exportOpen: boolean;
   setCode: (code: string) => void;
   setCategory: (category: DiagramCategory) => void;
@@ -46,6 +53,8 @@ interface TingraphState {
   closeDrawer: () => void;
   setSourceTab: (tab: "code" | "guide") => void;
   setTool: (tool: CanvasTool) => void;
+  setConnector: (connector: string | null) => void;
+  setPanning: (panning: boolean) => void;
   setExportOpen: (open: boolean) => void;
 }
 
@@ -59,6 +68,8 @@ export const useTingraphStore = create<TingraphState>((set) => ({
   drawer: null,
   sourceTab: "code",
   tool: "selection",
+  connector: null,
+  panning: false,
   exportOpen: false,
   setCode: (code) => set({ code }),
   setCategory: (category) => set({ category, code: TEMPLATES[category] }),
@@ -71,7 +82,10 @@ export const useTingraphStore = create<TingraphState>((set) => ({
     set((state) => ({ drawer: state.drawer === drawer ? null : drawer })),
   closeDrawer: () => set({ drawer: null }),
   setSourceTab: (sourceTab) => set({ sourceTab }),
-  setTool: (tool) => set({ tool }),
+  // the two instruments are exclusive: picking one puts the other back
+  setTool: (tool) => set({ tool, connector: null }),
+  setConnector: (connector) => set({ connector, tool: "selection" }),
+  setPanning: (panning) => set({ panning }),
   setExportOpen: (exportOpen) => set({ exportOpen }),
 }));
 

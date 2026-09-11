@@ -7,7 +7,35 @@
  * strokes never become a separate selection.
  */
 
+import type { Side } from "@/lib/canvas/connect";
+
 export type UnitKind = "node" | "edge" | "pool" | "lane";
+
+/** One end of a connector: the element it is tied to, and the side it uses. */
+export interface LinkEnd {
+  /** a unit name, or an element id when the shape it points at has no unit */
+  unit: string;
+  /** set only when the reader chose the side themselves */
+  side?: Side;
+}
+
+/**
+ * What makes a connector Tingraph's rather than Excalidraw's. The two ends
+ * name what they join, and the route between them is cut by
+ * `lib/canvas/connect.ts` rather than by Excalidraw's binding, which is what
+ * keeps a reporting line leaving the bottom of a box and meeting the top of
+ * the next one instead of sliding around the outline.
+ */
+export interface LinkMark {
+  /** which of the notation's lines this is, from `lib/connectors.ts` */
+  line: string;
+  from: LinkEnd;
+  to: LinkEnd;
+  /** where the reader dragged the middle leg to, on its own axis */
+  bend?: number | null;
+  /** the two boxes the route on the sheet was last cut against */
+  at?: string;
+}
 
 export interface UnitMark {
   /** group id shared by every piece of this element */
@@ -23,6 +51,8 @@ export interface UnitMark {
   band?: number;
   /** pool only: width of the header band its lanes use */
   laneBand?: number;
+  /** edge only: the two ends this connector joins, and how it is routed */
+  link?: LinkMark;
 }
 
 interface Marked {

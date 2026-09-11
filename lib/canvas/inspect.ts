@@ -3,15 +3,56 @@ import { unitOf } from "@/lib/canvas/units";
 import { DiagramCategory } from "@/lib/types";
 
 /**
- * What the properties panel is allowed to offer for what is picked.
- *
- * A notation owns part of every shape it draws: a BPMN end event is a thick
- * circle, a task is a rounded box, a connector is a square line with a filled
- * head. Those are not preferences, so the panel does not offer them — it says
- * so instead, and offers only what is genuinely the reader's to choose.
+ * Reading the sheet: what is picked, what is under the reader's hand, and what
+ * the properties panel is allowed to offer for it. Nothing here writes — the
+ * writing half lives in `restyle.ts` — so all of it can be checked without a
+ * browser.
  */
 
 type Elements = readonly ExcalidrawElement[];
+
+/**
+ * The elements under the reader's hand this frame: one being drawn, dragged,
+ * resized, turned, or edited point by point. Repairing a connector's route
+ * while it is being dragged is what makes an arrow snap back, shrink or
+ * vanish, so these are left exactly as Excalidraw has them until the pointer
+ * comes up.
+ */
+export interface HandState {
+  multiElement?: { id: string } | null;
+  newElement?: { id: string } | null;
+  editingLinearElement?: { elementId: string } | null;
+  selectedLinearElement?: { elementId: string; isDragging: boolean } | null;
+  selectedElementsAreBeingDragged?: boolean;
+  isResizing?: boolean;
+  isRotating?: boolean;
+  selectedElementIds: Readonly<{ [id: string]: boolean }>;
+}
+
+export function held(state: HandState): Set<string> {
+  const busy = new Set<string>();
+  const add = (id: string | null | undefined) => {
+    if (id) {
+      busy.add(id);
+    }
+  };
+  add(state.multiElement?.id);
+  add(state.newElement?.id);
+  add(state.editingLinearElement?.elementId);
+  if (state.selectedLinearElement?.isDragging) {
+    add(state.selectedLinearElement.elementId);
+  }
+  // a whole connector being moved, resized or turned by its selection box
+  if (state.selectedElementsAreBeingDragged || state.isResizing || state.isRotating) {
+    for (const id of Object.keys(state.selectedElementIds)) {
+      if (state.selectedElementIds[id]) {
+        busy.add(id);
+      }
+    }
+  }
+  return busy;
+}
+
 
 export interface Controls {
   /** what the panel calls what is picked */
@@ -28,6 +69,12 @@ export interface Controls {
   fixed: string | null;
 }
 
+/**
+ * A notation owns part of every shape it draws: a BPMN end event is a thick
+ * circle, a task is a rounded box, a connector is a square line with a filled
+ * head. Those are not preferences, so the panel does not offer them — it says
+ * so instead, and offers only what is genuinely the reader's to choose.
+ */
 const NOTHING: Controls = {
   name: "",
   stroke: false,
@@ -50,10 +97,10 @@ export function selection(
   const picked = elements.filter(
     (element) => !element.isDeleted && ids[element.id],
   );
-  const held = new Set(picked.map((element) => element.id));
+  const boxes = new Set(picked.map((element) => element.id));
   const captions = elements.filter((element) => {
     const container = (element as { containerId?: string | null }).containerId;
-    return !element.isDeleted && !!container && held.has(container);
+    return !element.isDeleted && !!container && boxes.has(container);
   });
   return [...picked, ...captions];
 }

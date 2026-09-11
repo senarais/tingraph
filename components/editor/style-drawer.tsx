@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { INK_PRESETS, useTingraphStore } from "@/lib/store";
 import { SHEET_STYLES, type SheetStyle } from "@/lib/sheet";
 import { customInk, washFor } from "@/lib/ink";
@@ -70,6 +71,15 @@ export default function StyleDrawer({ category }: { category: DiagramCategory })
   const style = useTingraphStore((s) => s.style);
   const setStyle = useTingraphStore((s) => s.setStyle);
 
+  // a half-typed colour is not a colour: the field holds what is being written
+  // and only hands it over once it reads as one
+  const [draft, setDraft] = useState(mixed);
+  const [shown, setShown] = useState(mixed);
+  if (shown !== mixed) {
+    setShown(mixed);
+    setDraft(mixed);
+  }
+
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <Field label="Ink" className="border-b-2 border-edge p-3">
@@ -110,13 +120,15 @@ export default function StyleDrawer({ category }: { category: DiagramCategory })
             />
           </label>
           <input
-            value={mixed}
+            value={draft}
             onChange={(event) => {
               const value = event.target.value;
+              setDraft(value);
               if (/^#[0-9a-fA-F]{6}$/.test(value)) {
                 mix(value.toLowerCase());
               }
             }}
+            onBlur={() => setDraft(mixed)}
             spellCheck={false}
             aria-label="Ink colour, as a hex value"
             className="w-[86px] border-2 border-edge bg-white px-2 py-1 font-mono text-[11.5px] text-ink"

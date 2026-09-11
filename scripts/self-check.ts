@@ -4,12 +4,18 @@ import { computeLayout } from "@/lib/layout/compute-layout";
 import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE } from "@/lib/templates";
 import { READY_DIAGRAMS } from "@/lib/diagrams";
 import { DSLError } from "@/lib/types";
+import { renameCopies } from "@/lib/canvas/copies";
 import {
-  clipEnds,
-  squareRoute,
-  type Bounds,
-  type Corner,
-} from "@/lib/canvas/route";
+  asElement,
+  gripSide,
+  linkSignature,
+  movableLeg,
+  routeBetween,
+  sideAnchor,
+  sidesFor,
+  type Point,
+  type Rules,
+} from "@/lib/canvas/connect";
 
 assert.equal(detectCategory(FLOWCHART_TEMPLATE), "flow");
 assert.equal(detectCategory(BPMN_TEMPLATE), "bpmn");
@@ -550,166 +556,240 @@ assert.deepEqual(
   "BPMN ignores the direction",
 );
 
-// ------------------------------------------------------------- square routes
+// ---------------------------------------------------------------- connectors
 
 /** Every leg of a route has to run either straight down or straight across. */
-function assertSquare(points: readonly Corner[], what: string): void {
+function assertSquare(points: readonly Point[], what: string): void {
   for (let i = 0; i < points.length - 1; i++) {
     const a = points[i];
     const b = points[i + 1];
     assert.ok(
-      Math.abs(a[0] - b[0]) < 0.01 || Math.abs(a[1] - b[1]) < 0.01,
-      `${what}: leg ${i} runs at a slant (${a} -> ${b})`,
+      Math.abs(a.x - b.x) < 0.01 || Math.abs(a.y - b.y) < 0.01,
+      `${what}: leg ${i} runs at a slant (${JSON.stringify(a)} -> ${JSON.stringify(b)})`,
     );
   }
 }
 
-// a route that is already square is left exactly as it is
-assert.equal(
-  squareRoute([
-    [0, 0],
-    [0, 40],
-    [80, 40],
-    [80, 90],
-  ]),
-  null,
-  "a square route needs no repair",
+const CHART: Rules = { category: "org", direction: "down" };
+const SHEET: Rules = { category: "bpmn", direction: "down" };
+
+const parentBox = { x: 300, y: 100, width: 160, height: 48 };
+const leftChild = { x: 100, y: 240, width: 160, height: 48 };
+const rightChild = { x: 500, y: 240, width: 160, height: 48 };
+const belowChild = { x: 300, y: 240, width: 160, height: 48 };
+
+// a chart hangs a child off the bottom of its parent, never off the side
+assert.deepEqual(
+  sidesFor(parentBox, leftChild, CHART),
+  ["bottom", "top"],
+  "a reporting line leaves the bottom of the box above",
 );
-assert.equal(squareRoute([[0, 0], [0, 50]]), null, "a straight leg is square");
+assert.deepEqual(
+  sidesFor(leftChild, parentBox, CHART),
+  ["top", "bottom"],
+  "and the same line drawn the other way round leaves the top",
+);
+// two boxes on one level are joined across, whichever notation they are in
+assert.deepEqual(
+  sidesFor(leftChild, rightChild, CHART),
+  ["right", "left"],
+  "two boxes on one level are joined side to side",
+);
+// a BPMN sheet reads across, so a flow between two clear shapes runs across
+assert.deepEqual(
+  sidesFor(parentBox, rightChild, SHEET),
+  ["right", "left"],
+  "a sequence flow reads left to right",
+);
 
-// the ends stay put and the corners are re-cut against them
-const dragged = squareRoute([
-  [0, 0],
-  [3, 40],
-  [80, 40],
-  [130, 90],
-]) as Corner[];
-assertSquare(dragged, "dragged route");
-assert.deepEqual(dragged[0], [0, 0], "the start does not move");
-assert.deepEqual(dragged[dragged.length - 1], [130, 90], "the end does not move");
-assert.deepEqual(dragged, [
-  [0, 0],
-  [0, 40],
-  [130, 40],
-  [130, 90],
-]);
+const toLeft = routeBetween(parentBox, leftChild, CHART);
+const toRight = routeBetween(parentBox, rightChild, CHART);
+assertSquare(toLeft, "chart route left");
+assertSquare(toRight, "chart route right");
+assert.equal(toLeft.length, 4, "an offset child is reached over one rail");
+assert.equal(
+  toLeft[1].y,
+  toRight[1].y,
+  "every child of one box turns on the same rail",
+);
+assert.equal(
+  toLeft[0].x,
+  parentBox.x + parentBox.width / 2,
+  "the rail hangs from the middle of the parent",
+);
+assert.equal(toLeft[0].y, parentBox.y + parentBox.height, "and from its bottom edge");
+assert.equal(
+  toLeft[3].x,
+  leftChild.x + leftChild.width / 2,
+  "and meets the middle of the child",
+);
+assert.equal(toLeft[3].y, leftChild.y, "at its top edge");
 
-// a route that runs across the page keeps running across
-const sideways = squareRoute([
-  [0, 0],
-  [40, 6],
-  [40, 60],
-  [90, 70],
-]) as Corner[];
-assertSquare(sideways, "sideways route");
-assert.deepEqual(sideways, [
-  [0, 0],
-  [40, 0],
-  [40, 70],
-  [90, 70],
-]);
+// a child standing directly under its parent is reached by one straight line
+const straight = routeBetween(parentBox, belowChild, CHART);
+assert.equal(straight.length, 2, "a child underneath needs no turn");
+assert.equal(straight[0].x, straight[1].x, "and the line is plumb");
 
-// a two-point slant grows a step, taken along the longer run
-const stepped = squareRoute([[0, 0], [60, 200]]) as Corner[];
-assertSquare(stepped, "stepped route");
-assert.equal(stepped.length, 4);
-assert.deepEqual(stepped[1], [0, 100], "it leaves downwards, the longer run");
-const across = squareRoute([[0, 0], [200, 60]]) as Corner[];
-assertSquare(across, "across route");
-assert.deepEqual(across[1], [100, 0], "it leaves sideways, the longer run");
+// two boxes of different heights standing side by side are joined by one rule
+const short = { x: 100, y: 100, width: 120, height: 24 };
+const tall = { x: 320, y: 80, width: 120, height: 64 };
+const across = routeBetween(short, tall, CHART);
+assert.equal(across.length, 2, "side by side is one straight rule");
+assert.equal(across[0].y, across[1].y, "and it is level");
 
-// a longer route keeps every one of its bends
-const long = squareRoute([
-  [0, 0],
-  [5, 30],
-  [50, 30],
-  [50, 70],
-  [120, 74],
-]) as Corner[];
-assertSquare(long, "long route");
-assert.equal(long.length, 5);
-assert.deepEqual(long[long.length - 1], [120, 74]);
+// a box that sits on top of the one it points at is gone round, not through
+const overlapping = { x: 320, y: 120, width: 160, height: 48 };
+const round = routeBetween(parentBox, overlapping, CHART);
+assertSquare(round, "route with no room between the boxes");
+assert.ok(round.length >= 4, "with no room between them the line goes round");
 
-// a corner that lands on the far end collapses instead of doubling back
-const collapsed = squareRoute([
-  [0, 0],
-  [4, 40],
-  [80, 40],
-  [0, 90],
-]) as Corner[];
-assertSquare(collapsed, "collapsed route");
-assert.deepEqual(collapsed, [[0, 0], [0, 90]], "it straightens out");
+// the middle leg answers to the reader: it moves, and takes its corners with it
+const moved = routeBetween(parentBox, leftChild, { ...CHART, bend: 200 });
+assertSquare(moved, "route with the rail moved");
+assert.equal(moved[1].y, 200, "the rail lands where it was dragged");
+const leg = movableLeg(moved);
+assert.ok(leg && !leg.upright && leg.value === 200, "and it is the leg with a handle");
+assert.equal(movableLeg(straight), null, "a straight line has no handle");
+assert.equal(movableLeg(round), null, "nor has one that goes round the outside");
 
-// repairing twice changes nothing more
-assert.equal(squareRoute(dragged), null, "the repair settles");
-assert.equal(squareRoute(long), null, "the repair settles on long routes");
-assert.equal(squareRoute(stepped), null, "the repair settles on new steps");
+// an end pinned to a side is used even when the rule would have picked another
+const pinned = routeBetween(parentBox, leftChild, { ...CHART, fromSide: "left" });
+assertSquare(pinned, "route pinned to a side");
+assert.equal(pinned[0].x, parentBox.x, "a pinned end leaves the side it was given");
+
+// a dot is grabbed from the outline: a press in the middle of a short box is
+// not a press on its top edge, whatever the reach
+assert.equal(gripSide(parentBox, { x: 380, y: 100 }, 10), "top", "a press on the dot");
+assert.equal(gripSide(parentBox, { x: 380, y: 94 }, 10), "top", "and just above it");
+assert.equal(
+  gripSide(parentBox, { x: 380, y: 111 }, 10),
+  undefined,
+  "a press well inside is the notation's to route",
+);
+assert.equal(
+  gripSide(parentBox, { x: 300, y: 124 }, 10),
+  "left",
+  "and each side has its own dot",
+);
+
+// the dot on a side is what pins that side, and it sits at the side's middle
+assert.deepEqual(
+  sideAnchor(parentBox, "left", leftChild),
+  { x: 300, y: 124 },
+  "the left dot sits on the left edge",
+);
+assert.deepEqual(
+  sideAnchor(parentBox, "bottom", leftChild),
+  { x: 380, y: 148 },
+  "and the bottom dot under the middle",
+);
+
+// Excalidraw holds a connector as an origin plus points measured from it, and
+// the first of those points has to be [0, 0]
+const held = asElement(toLeft);
+assert.deepEqual(held.points[0], [0, 0], "a route is anchored on its first point");
+assert.equal(held.x, toLeft[0].x, "the origin carries the offset instead");
+assert.equal(held.y, toLeft[0].y);
+assert.equal(
+  held.width,
+  Math.max(...toLeft.map((p) => p.x)) - Math.min(...toLeft.map((p) => p.x)),
+  "and the box is the span of the route",
+);
 
 // every route the three notations lay out is already square, either way round
 for (const template of [FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE]) {
   for (const heading of ["down", "right"] as const) {
-  const drawn = computeLayout(parseDSL(template), heading);
-  for (const edge of drawn.edges) {
-    const corners = edge.points.map((p) => [p.x, p.y] as Corner);
-    if (corners.length < 2) {
-      continue;
+    const drawn = computeLayout(parseDSL(template), heading);
+    for (const edge of drawn.edges) {
+      if (edge.points.length < 2) {
+        continue;
+      }
+      assertSquare(edge.points, `${drawn.category} ${edge.from}->${edge.to}`);
     }
-    assertSquare(corners, `${drawn.category} ${edge.from}->${edge.to}`);
-    assert.equal(
-      squareRoute(corners),
-      null,
-      `${drawn.category} ${heading} ${edge.from}->${edge.to} needs no repair`,
-    );
-  }
   }
 }
 
-// --------------------------------------------------- ends that land on a box
+// ---------------------------------------------------------------- copies
 
-const target: Bounds = { left: 100, top: 0, right: 200, bottom: 100 };
-const boxes = new Map<string, Bounds>([["box", target]]);
-const arrow = { x: 0, y: 0, endBinding: { elementId: "box" } };
+const mark = (unit: string, link?: object) => ({
+  customData: { tingraph: { unit, kind: "node", ...(link ? { link } : {}) } },
+});
+const original = [
+  { id: "box", groupIds: ["u1"], ...mark("u1") },
+  { id: "cap", groupIds: ["u1"], ...mark("u1") },
+  { id: "other", groupIds: ["u2"], ...mark("u2") },
+  {
+    id: "line",
+    groupIds: [],
+    ...mark("e1", { line: "report", from: { unit: "u1" }, to: { unit: "u2" }, at: "x" }),
+  },
+];
+let stamp = 0;
+const copied = [
+  ...original,
+  { id: "box~", groupIds: ["g9"], ...mark("u1") },
+  { id: "cap~", groupIds: ["g9"], ...mark("u1") },
+  { id: "other~", groupIds: ["g8"], ...mark("u2") },
+  {
+    id: "line~",
+    groupIds: [],
+    ...mark("e1", { line: "report", from: { unit: "u1" }, to: { unit: "u2" }, at: "x" }),
+  },
+];
+const patched = renameCopies(copied, original, () => `c${++stamp}`);
 
-// an end dropped in the middle of the box is pulled back onto its outline
+assert.equal(patched.size, 4, "only the copies are renamed");
+assert.equal(patched.get("box"), undefined, "the original keeps its name");
+assert.equal(
+  patched.get("box~")!.unit,
+  patched.get("cap~")!.unit,
+  "both pieces of one copy answer to the same new name",
+);
+assert.notEqual(patched.get("box~")!.unit, "u1", "which is not the original's");
 assert.deepEqual(
-  clipEnds([[0, 50], [150, 50]], arrow, boxes),
-  [[0, 50], [100, 50]],
-  "an end inside the box comes back to the near edge",
+  patched.get("box~")!.groupIds,
+  [patched.get("box~")!.unit],
+  "and the copy is a group of its own, not the original's",
 );
-// coming up from below, it stops at the bottom
-assert.deepEqual(
-  clipEnds([[150, 200], [150, 50]], arrow, boxes),
-  [[150, 200], [150, 100]],
-  "an end reached from below stops at the bottom edge",
+assert.notEqual(
+  patched.get("other~")!.unit,
+  patched.get("box~")!.unit,
+  "two copied elements stay two elements",
 );
-// an end that is already outside is left exactly where Excalidraw put it
+const tie = patched.get("line~")!.link!;
+assert.equal(tie.from.unit, patched.get("box~")!.unit, "a copied line joins the copies");
+assert.equal(tie.to.unit, patched.get("other~")!.unit, "at both ends");
+assert.equal(tie.at, "", "and is re-cut where it was put down");
+
+// a connector copied without the elements it joined comes away loose
+const alone = renameCopies(
+  [...original, { id: "line~", groupIds: [], ...mark("e1", { line: "report", from: { unit: "u1" }, to: { unit: "u2" }, at: "x" }) }],
+  original,
+  () => "c9",
+);
+assert.equal(alone.get("line~")!.link, null, "a line copied on its own is let go");
+
+// a connector only reads as unchanged while both boxes stand where they were
+const signature = linkSignature(
+  parentBox,
+  leftChild,
+  { from: {}, to: {} },
+  toLeft[0],
+);
 assert.equal(
-  clipEnds([[0, 50], [100, 50]], arrow, boxes),
-  null,
-  "an end on the outline is left alone",
+  signature,
+  linkSignature(parentBox, leftChild, { from: {}, to: {} }, toLeft[0]),
+  "the same drawing reads the same",
 );
-assert.equal(
-  clipEnds([[0, 50], [80, 50]], arrow, boxes),
-  null,
-  "an end short of the box is left alone",
+assert.notEqual(
+  signature,
+  linkSignature(parentBox, { ...leftChild, y: 260 }, { from: {}, to: {} }, toLeft[0]),
+  "a box that has moved reads different",
 );
-// an unbound end is never touched
-assert.equal(
-  clipEnds([[0, 50], [150, 50]], { x: 0, y: 0 }, boxes),
-  null,
-  "an unbound end is left alone",
-);
-// the arrow's own origin is taken into account
-assert.deepEqual(
-  clipEnds([[0, 0], [130, 0]], { x: 20, y: 50, endBinding: { elementId: "box" } }, boxes),
-  [[0, 0], [80, 0]],
-  "clipping works in the arrow's own frame",
-);
-// a leg that would collapse onto its neighbour is left as it is
-assert.equal(
-  clipEnds([[100, 50], [150, 50]], arrow, boxes),
-  null,
-  "clipping never eats a whole leg",
+assert.notEqual(
+  signature,
+  linkSignature(parentBox, leftChild, { from: {}, to: {} }, { x: 0, y: 0 }),
+  "and so does a connector dragged off its route",
 );
 
 // the samples the public pages type out are real source, not prose that looks

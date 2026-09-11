@@ -14,12 +14,7 @@ import { X } from "lucide-react";
 import { useTingraphStore, type Drawer } from "@/lib/store";
 import { styleFor, type SheetStyle } from "@/lib/sheet";
 import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
-import {
-  bpmnShapeSize,
-  computeLayout,
-  flowDimensions,
-  orgBoxLayout,
-} from "@/lib/layout/compute-layout";
+import { computeLayout } from "@/lib/layout/compute-layout";
 import { mapToExcalidrawElements } from "@/lib/excalidraw-mapper/map-to-elements";
 import {
   buildFlowShapeSkeletons,
@@ -30,7 +25,9 @@ import {
 import {
   PALETTE_GROUPS,
   PaletteItem,
+  droppedLabel,
   orgSampleNode,
+  paletteShapeSize,
   snippetFor,
   withSnippet,
 } from "@/lib/palette";
@@ -127,6 +124,7 @@ export default function EditorRoot() {
 
   const [debouncedCode, setDebouncedCode] = useState(code);
   const [picked, setPicked] = useState<ExcalidrawElement[]>([]);
+  const [dragging, setDragging] = useState<PaletteItem | null>(null);
   const [empty, setEmpty] = useState(false);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const monacoRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
@@ -210,58 +208,33 @@ export default function EditorRoot() {
       return;
     }
     const seq = counterRef.current++;
-    const box = (width: number, height: number) => ({
-      x: Math.round(at.x - width / 2),
-      y: Math.round(at.y - height / 2),
-      width,
-      height,
+    const size = paletteShapeSize(item, editorCategory);
+    const box = {
+      id: `mnl-${item.type}-${seq}`,
+      x: Math.round(at.x - size.width / 2),
+      y: Math.round(at.y - size.height / 2),
+      ...size,
       rank: 0,
-    });
+    };
 
-    let skeletons;
-    if (editorCategory === "org") {
-      const sample = orgSampleNode(item.type, seq);
-      const layout = orgBoxLayout(sample);
-      skeletons = buildOrgShapeSkeletons(
-        {
-          ...sample,
-          id: `mnl-${item.type}-${seq}`,
-          ...box(layout.width, layout.height),
-        },
-        ink,
-        style,
-      );
-    } else if (editorCategory === "flow") {
-      const type = item.type as NodeType;
-      const size = flowDimensions(type, item.label);
-      skeletons = buildFlowShapeSkeletons(
-        {
-          id: `mnl-${item.type}-${seq}`,
-          type,
-          label: item.label,
-          ...box(size.width, size.height),
-        },
-        ink,
-        style,
-      );
-    } else {
-      const type = item.type as NodeType;
-      // an event or a gateway carries its caption underneath, and an unnamed
-      // one is cleaner to type over than a placeholder
-      const label =
-        item.type.includes("task") || item.type === "task" ? item.label : "";
-      const size = bpmnShapeSize(type, label);
-      skeletons = buildShapeSkeletons(
-        {
-          id: `mnl-${item.type}-${seq}`,
-          type,
-          label,
-          ...box(size.width, size.height),
-        },
-        ink,
-        style,
-      );
-    }
+    const skeletons =
+      editorCategory === "org"
+        ? buildOrgShapeSkeletons(
+            { ...orgSampleNode(item.type, seq), ...box },
+            ink,
+            style,
+          )
+        : editorCategory === "flow"
+          ? buildFlowShapeSkeletons(
+              { ...box, type: item.type as NodeType, label: item.label },
+              ink,
+              style,
+            )
+          : buildShapeSkeletons(
+              { ...box, type: item.type as NodeType, label: droppedLabel(item) },
+              ink,
+              style,
+            );
 
     const added = convertToExcalidrawElements(skeletons, { regenerateIds: true });
     const unit = added.map(unitOf).find(Boolean)?.unit;
@@ -391,7 +364,7 @@ export default function EditorRoot() {
       />
 
       <div className="flex min-h-0 flex-1">
-        <Rail />
+        <Rail category={editorCategory} />
 
         {drawer && (
           <aside className="flex w-[352px] shrink-0 flex-col border-r-2 border-edge bg-bone">
@@ -413,6 +386,7 @@ export default function EditorRoot() {
                 category={editorCategory}
                 onPlace={(item) => placeShape(item.type, centre())}
                 onWrite={insertSnippet}
+                onDrag={setDragging}
               />
             )}
             {drawer === "source" && (
@@ -432,7 +406,10 @@ export default function EditorRoot() {
         <main className="relative min-w-0 flex-1 bg-paper">
           <Canvas
             initialElements={seed}
-            connector={connectorStyle(ink, editorCategory, style)}
+            category={editorCategory}
+            dragging={dragging}
+            connectorStyle={connectorStyle(ink, editorCategory, style)}
+            rules={{ category: editorCategory, direction }}
             onApi={setApi}
             onSelection={setPicked}
             onDropShape={(type, clientX, clientY) => {

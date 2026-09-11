@@ -1,4 +1,9 @@
-import { DiagramCategory } from "@/lib/types";
+import {
+  bpmnShapeSize,
+  flowDimensions,
+  orgBoxLayout,
+} from "@/lib/layout/compute-layout";
+import { DiagramCategory, NodeType } from "@/lib/types";
 
 export interface PaletteItem {
   /** DSL keyword */
@@ -172,4 +177,32 @@ export function withSnippet(
   const block = snippet.replace(/^\n/, "").replace(/\n$/, "").split("\n");
   lines.splice(insertAt, 0, ...block);
   return lines.join("\n");
+}
+
+/**
+ * How big the item lands on the sheet. The preview that follows the pointer
+ * during a drag and the shape that is finally dropped read this same
+ * measurement, so the box the reader is shown is the box they get.
+ */
+export function paletteShapeSize(
+  item: PaletteItem,
+  category: DiagramCategory,
+): { width: number; height: number } {
+  if (category === "org") {
+    const box = orgBoxLayout(orgSampleNode(item.type, 1));
+    return { width: box.width, height: box.height };
+  }
+  if (category === "flow") {
+    return flowDimensions(item.type as NodeType, item.label);
+  }
+  return bpmnShapeSize(item.type as NodeType, droppedLabel(item));
+}
+
+/**
+ * The caption a dropped BPMN shape starts with. An event or a gateway carries
+ * its caption underneath, and an unnamed one is cleaner to type over than a
+ * placeholder, so only an activity arrives with words in it.
+ */
+export function droppedLabel(item: PaletteItem): string {
+  return item.type.includes("task") || item.type === "task" ? item.label : "";
 }

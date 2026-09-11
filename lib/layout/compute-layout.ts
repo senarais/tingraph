@@ -1,6 +1,7 @@
 import dagre from "@dagrejs/dagre";
 import {
   AST,
+  DiagramCategory,
   DSLEdge,
   DSLEntry,
   DSLNode,
@@ -127,6 +128,35 @@ export function bpmnHasExternalLabel(type: NodeType): boolean {
     type === "gw-inc" ||
     type === "data"
   );
+}
+
+/**
+ * The outline a notation draws a node with. The mapper builds the real shape
+ * from this, and the shape preview that follows the pointer during a drag
+ * traces the same silhouette, so what the reader is shown is what lands.
+ */
+export type ShapeFamily = "ellipse" | "diamond" | "task" | "box" | "document";
+
+export function shapeFamily(
+  type: NodeType | string,
+  category: DiagramCategory,
+): ShapeFamily {
+  if (category === "org") {
+    return "box";
+  }
+  if (category === "flow") {
+    if (type === "start" || type === "end") {
+      return "ellipse";
+    }
+    return type === "decision" ? "diamond" : "box";
+  }
+  if (type === "data") {
+    return "document";
+  }
+  if (String(type).startsWith("gw-")) {
+    return "diamond";
+  }
+  return bpmnHasExternalLabel(type as NodeType) ? "ellipse" : "task";
 }
 
 export function bpmnShapeSize(

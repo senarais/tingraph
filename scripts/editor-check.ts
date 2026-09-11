@@ -2,7 +2,8 @@ import assert from "node:assert";
 import { parseDSL } from "../lib/parser/parse-dsl";
 import { computeLayout } from "../lib/layout/compute-layout";
 import { buildSkeletons } from "../lib/excalidraw-mapper/build-skeletons";
-import { controlsFor } from "../lib/canvas/inspect";
+import { shapeFamily } from "../lib/layout/compute-layout";
+import { controlsFor, held } from "../lib/canvas/inspect";
 import { jpegToPdf } from "../lib/export/pdf";
 import { promptFor, GUIDE_SECTIONS } from "../lib/guide";
 import { customInk, inkFor, washFor } from "../lib/ink";
@@ -138,6 +139,50 @@ const pool = controlsFor([fake("rectangle", { unit: "pool-P1", kind: "pool", cor
 assert.equal(pool.name, "Pool");
 assert.equal(pool.fill, false, "a participant band is unfilled in BPMN 2.0");
 
+// -------------------------------------------- what is under the reader's hand
+
+// a connector is repaired between interactions, never during one
+assert.deepEqual(
+  [...held({ selectedElementIds: {} })],
+  [],
+  "nothing held while the pointer is idle",
+);
+assert.deepEqual(
+  [...held({ newElement: { id: "a1" }, selectedElementIds: {} })],
+  ["a1"],
+  "an arrow still being drawn is left alone",
+);
+assert.deepEqual(
+  [...held({
+    selectedLinearElement: { elementId: "e2", isDragging: true },
+    selectedElementIds: {},
+  })],
+  ["e2"],
+  "and so is one being edited point by point",
+);
+assert.deepEqual(
+  [...held({
+    selectedLinearElement: { elementId: "e2", isDragging: false },
+    selectedElementIds: {},
+  })],
+  [],
+  "a connector merely selected is still repaired",
+);
+assert.deepEqual(
+  [...held({
+    selectedElementsAreBeingDragged: true,
+    selectedElementIds: { e2: true, e3: false },
+  })],
+  ["e2"],
+  "a whole connector being moved is left alone",
+);
+assert.deepEqual(
+  [...held({ selectedElementIds: { e2: true } })],
+  [],
+  // this is the case that keeps a bound connector following a box that moves
+  "a selection that is not being dragged holds nothing",
+);
+
 // --------------------------------------------------------- the AI tutorial
 
 for (const category of ["flow", "bpmn", "org"] as DiagramCategory[]) {
@@ -158,6 +203,29 @@ for (const category of ["flow", "bpmn", "org"] as DiagramCategory[]) {
   assert.equal(ast.category, category, `${category} prompt example parses`);
   assert.ok(ast.nodes.length > 1, `${category} prompt example draws something`);
 }
+
+// ------------------------------------------------ one description of a shape
+
+// the mapper and the drag preview read the same silhouette, so what the
+// pointer shows is what lands on the sheet
+assert.equal(shapeFamily("start", "bpmn"), "ellipse");
+assert.equal(shapeFamily("end", "bpmn"), "ellipse");
+assert.equal(shapeFamily("gw-ex", "bpmn"), "diamond");
+assert.equal(shapeFamily("task", "bpmn"), "task");
+assert.equal(shapeFamily("send-task", "bpmn"), "task");
+assert.equal(shapeFamily("data", "bpmn"), "document");
+assert.equal(shapeFamily("start", "flow"), "ellipse");
+assert.equal(shapeFamily("decision", "flow"), "diamond");
+assert.equal(shapeFamily("process", "flow"), "box");
+assert.equal(shapeFamily("io", "flow"), "box");
+assert.equal(shapeFamily("role", "org"), "box");
+
+// and the mapper draws what the description says
+const bpmnShapes = byId(buildSkeletons(computeLayout(parseDSL(BPMN_TEMPLATE))));
+assert.equal(bpmnShapes.get("S1")?.type, "ellipse");
+assert.equal(bpmnShapes.get("G1")?.type, "diamond");
+assert.equal(bpmnShapes.get("A1")?.type, "rectangle");
+assert.equal(formal.get("D1")?.type, "diamond", "a flow decision is a diamond");
 
 // ------------------------------------------------------------------- inks
 

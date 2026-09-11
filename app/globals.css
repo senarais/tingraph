@@ -109,11 +109,17 @@ body {
  * chrome lives inside `.layer-ui__wrapper` — the toolbar, the shape island,
  * the zoom footer, the menus, the welcome screen — and all of it is gone: the
  * rail, the drawers, the properties panel and the zoom cluster are Tingraph's
- * own. What sits outside that wrapper is kept, because the editor needs it:
- * the caption editor, the context menu and the colour picker.
+ * own. On a short or narrow sheet Excalidraw lays its chrome out for a phone
+ * instead, in two bars of its own outside that wrapper, so those go too —
+ * otherwise a sheet in a small window grows a second set of tools, one of
+ * them the arrow Tingraph routes itself. What is left outside is kept,
+ * because the editor needs it: the caption editor, the context menu and the
+ * colour picker.
  */
 
-.excalidraw .layer-ui__wrapper {
+.excalidraw .layer-ui__wrapper,
+.excalidraw .App-top-bar,
+.excalidraw .App-bottom-bar {
   display: none !important;
 }
 

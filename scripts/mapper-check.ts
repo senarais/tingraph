@@ -6,6 +6,7 @@ import {
   buildPoolSkeletons,
   buildSkeletons,
 } from "../lib/excalidraw-mapper/build-skeletons";
+import { nodeUnit } from "../lib/excalidraw-mapper/build-skeletons";
 import { unitOf } from "../lib/canvas/units";
 import { inkFor } from "../lib/ink";
 import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE } from "../lib/templates";
@@ -42,21 +43,16 @@ for (const tpl of [FLOWCHART_TEMPLATE, BPMN_TEMPLATE]) {
     assert.equal(el.fillStyle, "solid", "solid fill");
     assert.equal(el.opacity, 100, "opaque");
   }
-  const typeOf = new Map(positioned.nodes.map((n) => [n.id, n.type]));
   positioned.edges.forEach((edge, i) => {
     const arrow = skeletons.get(`edge-${i}`);
     assert.ok(arrow && arrow.type === "arrow", `edge-${i} is arrow`);
-    // outlines (data objects) carry no bindable container, so they stay free
-    assert.equal(
-      !!arrow.start,
-      typeOf.get(edge.from) !== "data",
-      `edge-${i} start binding`,
-    );
-    assert.equal(
-      !!arrow.end,
-      typeOf.get(edge.to) !== "data",
-      `edge-${i} end binding`,
-    );
+    // a connector names the two elements it joins; nothing is bound
+    const link = (arrow.customData as { tingraph?: { link?: Record<string, { unit: string }> } })
+      ?.tingraph?.link;
+    assert.ok(link, `edge-${i} carries a link`);
+    assert.equal(link!.from.unit, nodeUnit(positioned.category, edge.from), `edge-${i} from`);
+    assert.equal(link!.to.unit, nodeUnit(positioned.category, edge.to), `edge-${i} to`);
+    assert.ok(!arrow.start && !arrow.end, `edge-${i} is not bound`);
     const points = arrow.points as unknown[];
     assert.ok(Array.isArray(points) && points.length >= 2, "polyline points");
     if (positioned.category === "bpmn") {
@@ -330,21 +326,34 @@ for (const piece of [...pills, ...subNames]) {
   );
 }
 
-// reporting lines are bound at both ends so they follow a box that is dragged
-const orgArrows = orgAll.filter((s) => s.type === "arrow");
+// a reporting line names the two boxes it joins, so it is re-cut when either
+// of them is dragged
+type Linked = Skel & {
+  customData?: { tingraph?: { link?: { line: string; from: { unit: string }; to: { unit: string } } } };
+  endArrowhead?: unknown;
+  strokeStyle?: string;
+};
+const orgArrows = orgAll.filter((s) => s.type === "arrow") as Linked[];
 assert.equal(orgArrows.length, 11);
 const toVd1 = orgArrows.find(
-  (s) => (s as Skel & { end?: { id: string } }).end?.id === "VD1",
-) as Skel & { start?: { id: string }; endArrowhead?: string };
-assert.equal(toVd1.start?.id, "DEAN-body", "bound to the box bottom");
+  (s) => s.customData?.tingraph?.link?.to.unit === "org-VD1",
+)!;
+assert.equal(
+  toVd1.customData?.tingraph?.link?.from.unit,
+  "org-DEAN",
+  "the line names the box it reports to",
+);
+assert.equal(toVd1.customData?.tingraph?.link?.line, "report", "drawn as a reporting line");
 assert.equal(toVd1.endArrowhead, "triangle");
 assert.equal(toVd1.strokeStyle, "solid");
-const tie = orgArrows.find(
-  (s) => (s as Skel & { strokeStyle?: string }).strokeStyle === "dashed",
-) as Skel & { endArrowhead?: unknown; start?: unknown };
+const tie = orgArrows.find((s) => s.strokeStyle === "dashed")!;
 assert.ok(tie, "the advisory tie is dashed");
 assert.equal(tie.endArrowhead, null, "an advisory tie carries no arrowhead");
-assert.equal(tie.start, undefined, "an advisory tie is left unbound");
+assert.equal(
+  tie.customData?.tingraph?.link?.line,
+  "advisory",
+  "and it says which line it is",
+);
 
 // the ink only moves the wash, and one preset washes the band plain white
 const monochrome = byId(buildSkeletons(orgPositioned, inkFor("mono")));

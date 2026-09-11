@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Editor, { loader, type Monaco, type OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import { ArrowDown, ArrowRight, Check, Copy, TriangleAlert, Wand2 } from "lucide-react";
@@ -99,6 +99,30 @@ interface SourceDrawerProps {
   onEditorMount: OnMount;
 }
 
+/**
+ * Keeps the keyboard inside the code editor.
+ *
+ * The sheet's shortcuts run on the document, and Excalidraw steps aside for a
+ * key pressed in an input, a textarea or a caption editor — but Monaco writes
+ * into an edit context on a plain div, which none of those cover, so `h` would
+ * reach for the hand tool instead of the letter. The listener is attached to
+ * the element rather than through React, because React delivers its events at
+ * the document, where stopping them would be too late.
+ */
+function useCodeKeys() {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const node = ref.current;
+    if (!node) {
+      return;
+    }
+    const swallow = (event: KeyboardEvent) => event.stopPropagation();
+    node.addEventListener("keydown", swallow);
+    return () => node.removeEventListener("keydown", swallow);
+  }, []);
+  return ref;
+}
+
 export default function SourceDrawer({
   category,
   nodeCount,
@@ -113,6 +137,7 @@ export default function SourceDrawer({
   const setDirection = useTingraphStore((s) => s.setDirection);
   const tab = useTingraphStore((s) => s.sourceTab);
   const setTab = useTingraphStore((s) => s.setSourceTab);
+  const codeKeys = useCodeKeys();
 
   return (
     <>
@@ -129,7 +154,7 @@ export default function SourceDrawer({
 
       {tab === "code" ? (
         <>
-          <div className="min-h-0 flex-1 border-b-2 border-edge bg-white">
+          <div ref={codeKeys} className="min-h-0 flex-1 border-b-2 border-edge bg-white">
             <Editor
               height="100%"
               language={DSL_LANGUAGE_ID}

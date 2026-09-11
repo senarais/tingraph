@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   exportToBlob,
   exportToCanvas,
@@ -209,15 +209,12 @@ export default function ExportDialog({
     }
   }, [api, appState, base, busy, elements.length, format, name, padding, scale]);
 
+  // the sheet's shortcuts run on the document, so while this is open the
+  // dialog keeps the keyboard: Delete must not reach the drawing behind it
+  const frame = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    frame.current?.focus();
+  }, []);
 
   const note = FORMATS.find((entry) => entry.value === format)?.note ?? "";
 
@@ -233,7 +230,17 @@ export default function ExportDialog({
         }
       }}
     >
-      <div className="slab flex max-h-full w-[min(940px,96vw)] flex-col bg-bone">
+      <div
+        ref={frame}
+        tabIndex={-1}
+        onKeyDown={(event) => {
+          event.stopPropagation();
+          if (event.key === "Escape") {
+            onClose();
+          }
+        }}
+        className="slab flex max-h-full w-[min(940px,96vw)] flex-col bg-bone outline-none"
+      >
         <header className="flex items-center gap-3 border-b-2 border-edge px-4 py-2.5">
           <h2 className="text-[13px] font-semibold text-ink">Export</h2>
           <span className="text-[11.5px] text-ink-soft">{title || "Untitled"}</span>

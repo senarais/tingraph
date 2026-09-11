@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import BpmnGlyph from "@/components/bpmn-glyph";
 import { PALETTE_GROUPS, PaletteItem, SHAPE_DRAG_TYPE } from "@/lib/palette";
@@ -12,6 +13,28 @@ interface ShapeDrawerProps {
   onPlace: (item: PaletteItem) => void;
   /** a block that only makes sense written down, such as a pool or a lane */
   onWrite: (item: PaletteItem) => void;
+  /** a shape picked up, and let go of again: the sheet draws the preview */
+  onDrag: (item: PaletteItem | null) => void;
+}
+
+/**
+ * A blank drag image. The browser would otherwise drag a screenshot of the
+ * card, which is the wrong thing entirely: what is being placed is a shape,
+ * and the sheet draws that under the pointer instead.
+ */
+function useBlankDragImage(): HTMLImageElement | undefined {
+  // made when the drawer opens, so the browser has decoded it long before a
+  // shape is picked up
+  const [image] = useState(() => {
+    if (typeof Image === "undefined") {
+      return undefined;
+    }
+    const blank = new Image(1, 1);
+    blank.src =
+      "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+    return blank;
+  });
+  return image;
 }
 
 /**
@@ -23,7 +46,9 @@ export default function ShapeDrawer({
   category,
   onPlace,
   onWrite,
+  onDrag,
 }: ShapeDrawerProps) {
+  const blank = useBlankDragImage();
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
       <p className="border-b-2 border-edge px-3 py-2.5 text-[12px] leading-relaxed text-ink-soft">
@@ -42,7 +67,12 @@ export default function ShapeDrawer({
                     onDragStart={(event) => {
                       event.dataTransfer.setData(SHAPE_DRAG_TYPE, item.type);
                       event.dataTransfer.effectAllowed = "copy";
+                      if (blank) {
+                        event.dataTransfer.setDragImage(blank, 0, 0);
+                      }
+                      onDrag(item);
                     }}
+                    onDragEnd={() => onDrag(null)}
                     onClick={() => onPlace(item)}
                     title={`Place ${item.label} on the sheet`}
                     className="slab-tight press flex w-full cursor-grab flex-col items-start gap-2 bg-white px-2.5 pb-2 pt-2.5 text-left active:cursor-grabbing"
