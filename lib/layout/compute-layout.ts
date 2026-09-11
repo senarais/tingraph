@@ -1395,6 +1395,17 @@ export function computeLayout(
   ast: AST,
   direction: LayoutDirection = "down",
 ): PositionedAST {
+  if (ast.chart) {
+    // a chart is laid out where it is drawn, against the box it sits in, so
+    // there is nothing to place here
+    return {
+      category: ast.category,
+      title: ast.title,
+      nodes: [],
+      edges: [],
+      chart: ast.chart,
+    };
+  }
   switch (ast.category) {
     case "bpmn":
       // a BPMN diagram already reads along its lanes; it has one direction

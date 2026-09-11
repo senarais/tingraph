@@ -73,14 +73,69 @@ export const ORG_TEMPLATE = `org "FACULTY OF PSYCHOLOGY ORGANISATIONAL CHART" {
 }
 `;
 
+export const BAR_TEMPLATE = `bar "Favourite Fruit" {
+  x "Favourite fruit"
+  y "Number of students"
+
+  Apples 9
+  Bananas 16
+  Oranges 10
+  Grapes 7
+}
+`;
+
+export const LINE_TEMPLATE = `line "Wildlife Population" {
+  y "Animals counted"
+  legend bottom
+
+  categories 2017 2018 2019 2020 2021 2022
+  series "Bears" 8 55 92 116 137 184
+  series "Dolphins" 150 77 34 12 5 2
+  series "Whales" 80 54 100 76 93 72
+}
+`;
+
+export const PIE_TEMPLATE = `pie "Cookie Market Share, 2023" {
+  percent on
+
+  "Mocha Marvels" 32.9
+  "Caramel Swirls" 24.4
+  "PB Bliss" 19.0
+  "Choco Chippers" 9.0
+  "Mint Melts" 7.4
+  "Berry Bursts" 7.2
+}
+`;
+
+export const SCATTER_TEMPLATE = `scatter "Local Index by Year" {
+  x "Year"
+  y "Local index"
+  trend on
+
+  series "Local index"
+    (1900, 10) (1901, 9) (1902, 12) (1903, 15) (1904, 9) (1905, 40)
+    (1906, 4) (1907, 19) (1908, 25) (1909, 14) (1910, 20) (1911, 38)
+    (1912, 30) (1913, 60) (1914, 75) (1915, 55) (1916, 89) (1917, 95)
+    (1918, 69) (1919, 100) (1920, 92)
+}
+`;
+
 export const TEMPLATES: Record<DiagramCategory, string> = {
   flow: FLOWCHART_TEMPLATE,
   bpmn: BPMN_TEMPLATE,
   org: ORG_TEMPLATE,
+  bar: BAR_TEMPLATE,
+  line: LINE_TEMPLATE,
+  pie: PIE_TEMPLATE,
+  scatter: SCATTER_TEMPLATE,
 };
 
 export const TEMPLATE_LABELS: Record<DiagramCategory, string> = {
   flow: "Flowchart",
   bpmn: "BPMN 2.0",
   org: "Org chart",
+  bar: "Bar chart",
+  line: "Line chart",
+  pie: "Pie chart",
+  scatter: "Scatter plot",
 };

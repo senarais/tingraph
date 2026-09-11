@@ -142,9 +142,11 @@ export default function ConnectLayer({
     });
     api.updateScene({
       elements,
+      // a leg still under the hand waits for the hand to come off before it
+      // reaches the history, so one drag is one step back
       captureUpdate: settled
         ? CaptureUpdateAction.IMMEDIATELY
-        : CaptureUpdateAction.NEVER,
+        : CaptureUpdateAction.EVENTUALLY,
     });
   };
 

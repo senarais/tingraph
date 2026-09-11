@@ -512,6 +512,130 @@ export function PlannedArt({ id, className }: { id: string; className?: string }
 }
 
 /** Picks the preview for a catalogue entry. */
+
+/* ------------------------------------------------------------------ charts */
+
+/** The eight hues the charts hand out, in the order they hand them out. */
+const HUES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"];
+
+function Plot({
+  children,
+  ink,
+  className,
+  rules = [40, 80, 120],
+}: {
+  children: React.ReactNode;
+  ink: string;
+  className?: string;
+  rules?: number[];
+}) {
+  return (
+    <svg
+      viewBox="0 0 320 180"
+      className={className}
+      aria-hidden="true"
+      fill="none"
+      stroke={ink}
+      strokeWidth={RULE}
+    >
+      {rules.map((y) => (
+        <path key={y} d={`M44 ${y}h248`} stroke={SHADE} strokeWidth={1} />
+      ))}
+      <path d="M44 16v144h248" pathLength={1} className="ink-path" strokeLinecap="butt" />
+      {children}
+    </svg>
+  );
+}
+
+export function BarArt({ accent = "navy", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const heights = [58, 108, 84, 126, 70];
+  return (
+    <Plot ink={ink} className={className}>
+      {heights.map((height, index) => (
+        <rect
+          key={index}
+          x={62 + index * 48}
+          y={160 - height}
+          width={30}
+          height={height}
+          fill={ACCENTS[accent].stroke}
+          stroke="none"
+        />
+      ))}
+    </Plot>
+  );
+}
+
+export function LineArt({ accent = "forest", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const runs = [
+    { d: "M62 140L110 104L158 78L206 56L254 30", hue: HUES[0] },
+    { d: "M62 46L110 88L158 112L206 132L254 146", hue: HUES[1] },
+  ];
+  return (
+    <Plot ink={ink} className={className}>
+      {runs.map((run) => (
+        <path
+          key={run.d}
+          d={run.d}
+          stroke={run.hue}
+          strokeWidth={2.5}
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          pathLength={1}
+          className="ink-path"
+        />
+      ))}
+      {runs.map((run) =>
+        run.d
+          .slice(1)
+          .split("L")
+          .map((pair) => pair.split(" ").map(Number))
+          .map(([x, y]) => (
+            <circle key={`${run.hue}-${x}`} cx={x} cy={y} r={4} fill={run.hue} stroke="none" />
+          )),
+      )}
+    </Plot>
+  );
+}
+
+export function PieArt({ accent = "oxblood", className }: ArtProps) {
+  const shares = [0.34, 0.24, 0.19, 0.13, 0.1];
+  let angle = -Math.PI / 2;
+  const slices = shares.map((share, index) => {
+    const to = angle + share * Math.PI * 2;
+    const big = share > 0.5 ? 1 : 0;
+    const d = `M160 90L${160 + Math.cos(angle) * 68} ${90 + Math.sin(angle) * 68}A68 68 0 ${big} 1 ${
+      160 + Math.cos(to) * 68
+    } ${90 + Math.sin(to) * 68}Z`;
+    angle = to;
+    return <path key={index} d={d} fill={HUES[index]} stroke="#ffffff" strokeWidth={2} />;
+  });
+  void accent;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true">
+      {slices}
+    </svg>
+  );
+}
+
+export function ScatterArt({ accent = "slate", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const dots = [
+    [70, 142], [92, 128], [112, 136], [134, 108], [152, 118], [172, 88],
+    [192, 96], [210, 66], [232, 74], [252, 44], [270, 56],
+  ];
+  return (
+    <Plot ink={ink} className={className}>
+      <path d="M62 146L268 46" stroke={ink} strokeWidth={1.5} strokeDasharray="4 4" />
+      {dots.map(([x, y]) => (
+        <circle key={`${x}-${y}`} cx={x} cy={y} r={5} fill={HUES[0]} stroke="none" />
+      ))}
+    </Plot>
+  );
+}
+
 export function DiagramArt({
   id,
   accent,
@@ -524,6 +648,10 @@ export function DiagramArt({
   if (id === "flow") return <FlowArt accent={accent} className={className} />;
   if (id === "bpmn") return <BpmnArt accent={accent} className={className} />;
   if (id === "org") return <OrgArt accent={accent} className={className} />;
+  if (id === "bar") return <BarArt accent={accent} className={className} />;
+  if (id === "line") return <LineArt accent={accent} className={className} />;
+  if (id === "pie") return <PieArt accent={accent} className={className} />;
+  if (id === "scatter") return <ScatterArt accent={accent} className={className} />;
   return <PlannedArt id={id} className={className} />;
 }
 

@@ -12,6 +12,8 @@ import {
 } from "@/lib/types";
 import { marked, type UnitMark } from "@/lib/canvas/units";
 import { connectorInk, connectorKind, defaultConnector } from "@/lib/connectors";
+import { buildChartSkeletons } from "@/lib/chart/build-chart";
+import { chartBox } from "@/lib/chart/layout-chart";
 import {
   BPMN_EXTERNAL_LABEL_DISTANCE,
   BPMN_LABEL_FONT_SIZE,
@@ -440,7 +442,7 @@ export function nodeUnit(category: DiagramCategory, id: string): string {
 /** Which of the notation's lines an edge in the source is drawn as. */
 function lineFor(category: DiagramCategory, kind: EdgeKind | undefined): string {
   if (kind !== "association") {
-    return defaultConnector(category);
+    return defaultConnector(category) ?? "sequence";
   }
   return category === "bpmn" ? "association" : category === "org" ? "advisory" : "annotation";
 }
@@ -868,6 +870,15 @@ export function buildSkeletons(
   ink: Ink = MONOCHROME,
   style: SheetStyle = FORMAL,
 ): ExcalidrawElementSkeleton[] {
+  if (positioned.chart) {
+    return buildChartSkeletons(
+      positioned.chart,
+      chartBox(positioned.chart),
+      ink,
+      style,
+      `chart-${positioned.chart.kind}`,
+    );
+  }
   const theme = themeFor(ink, positioned.category, style);
   const skeletons: ExcalidrawElementSkeleton[] = [];
   const isBpmn = positioned.category === "bpmn";

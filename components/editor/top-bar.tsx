@@ -38,8 +38,8 @@ function Cell({
 interface TopBarProps {
   title: string;
   category: DiagramCategory;
-  nodeCount: number;
-  edgeCount: number;
+  /** what the drawing is made of, in the notation's own words */
+  summary: string;
   errorMessage: string | null;
   empty: boolean;
 }
@@ -47,8 +47,7 @@ interface TopBarProps {
 export default function TopBar({
   title,
   category,
-  nodeCount,
-  edgeCount,
+  summary,
   errorMessage,
   empty,
 }: TopBarProps) {
@@ -89,9 +88,7 @@ export default function TopBar({
           </Link>
         </span>
       </Cell>
-      <Cell label="Elements">
-        {nodeCount} nodes · {edgeCount} flows
-      </Cell>
+      <Cell label="Elements">{summary}</Cell>
       <Cell label="Status" tone={errorMessage ? "alert" : "ink"}>
         {errorMessage ? "Syntax error" : "Parsed"}
       </Cell>

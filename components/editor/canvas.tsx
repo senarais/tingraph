@@ -10,14 +10,18 @@ import type {
 } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { useTingraphStore, type CanvasTool } from "@/lib/store";
+import { styleFor } from "@/lib/sheet";
 import {
   addLane,
   addPoolBelow,
+  chartsOn,
   normalizeUnits,
   poolBoxes,
   removePool,
   reunit,
+  syncCharts,
   syncConnectors,
+  type ChartOnSheet,
   type PoolBox,
 } from "@/lib/canvas/scene";
 import { held, selection } from "@/lib/canvas/inspect";
@@ -26,7 +30,9 @@ import type { Rules } from "@/lib/canvas/connect";
 import type { ConnectorStyle } from "@/lib/excalidraw-mapper/build-skeletons";
 import { SHAPE_DRAG_TYPE, paletteShapeSize, type PaletteItem } from "@/lib/palette";
 import { DiagramCategory } from "@/lib/types";
+import ChartControls from "@/components/editor/chart-controls";
 import ConnectLayer from "@/components/editor/connect-layer";
+import type { ChartSpec } from "@/lib/chart/spec";
 import ShapeGhost from "@/components/editor/shape-ghost";
 import PoolControls, { type CanvasView } from "@/components/editor/pool-controls";
 import CanvasTools from "@/components/editor/canvas-tools";
@@ -50,6 +56,11 @@ interface CanvasProps {
   ) => void;
   /** whether there is anything left to fit or to export */
   onEmptyChange: (empty: boolean) => void;
+  /** the chart the settings panel is looking at, or null when there is none */
+  onChart: (chart: ChartOnSheet | null) => void;
+  /** the chart on the sheet right now, and the way to write it back */
+  chart: ChartOnSheet | null;
+  onChartChange: (spec: ChartSpec, settled: boolean) => void;
 }
 
 const NO_VIEW: CanvasView = {
@@ -81,11 +92,15 @@ export default function Canvas({
   onDropShape,
   onPoolEdit,
   onEmptyChange,
+  onChart,
+  chart,
+  onChartChange,
 }: CanvasProps) {
   const ink = useTingraphStore((s) => s.ink);
   const tool = useTingraphStore((s) => s.tool);
   const setTool = useTingraphStore((s) => s.setTool);
   const holding = useTingraphStore((s) => s.connector);
+  const sheet = styleFor(useTingraphStore((s) => s.style));
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [seeded] = useState(() => initialElements);
@@ -93,12 +108,15 @@ export default function Canvas({
   const [empty, setEmpty] = useState(false);
   const [view, setView] = useState<CanvasView>(NO_VIEW);
   const [line, setLine] = useState<ExcalidrawElement | null>(null);
+  /** whether the chart on the sheet is the thing currently picked */
+  const [chartHeld, setChartHeld] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
   const overlayRef = useRef("");
   const pickedRef = useRef("");
   const toolRef = useRef<CanvasTool>(tool);
   const lineRef = useRef("");
+  const chartRef = useRef("");
   const rulesRef = useRef(rules);
   useEffect(() => {
     rulesRef.current = rules;
@@ -195,7 +213,10 @@ export default function Canvas({
       // up: one being dragged by its box, one being resized with its shapes
       const busy = held(state);
       const cut = syncConnectors(fix?.elements ?? elements, rulesRef.current, busy);
-      const next = cut ?? fix?.elements;
+      // a chart the reader has stretched is drawn again at the size they
+      // dragged it to, rather than left as scaled shapes
+      const drawn = syncCharts(cut ?? fix?.elements ?? elements, ink, sheet, busy);
+      const next = drawn ?? cut ?? fix?.elements;
       // Excalidraw offers its own point editor for any line it is shown, and
       // its handles fight the routing; a Tingraph connector carries its own
       // handles instead, so the editor is put away the moment it opens
@@ -248,6 +269,25 @@ export default function Canvas({
         setLine(alone);
       }
 
+      // --- the chart the settings panel works on: the one picked, or the one
+      // on the sheet when there is only one
+      const sheetCharts = chartsOn(scene);
+      const chosen = new Set(
+        picked.map((element) => unitOf(element)?.unit).filter(Boolean),
+      );
+      const current =
+        sheetCharts.find((entry) => chosen.has(entry.unit)) ??
+        (sheetCharts.length === 1 ? sheetCharts[0] : null);
+      const mine = current !== null && chosen.has(current.unit);
+      const stamp = current
+        ? `${mine}|${current.unit}|${Math.round(current.box.x)},${Math.round(current.box.y)},${Math.round(current.box.width)},${Math.round(current.box.height)}|${JSON.stringify(current.spec)}`
+        : "";
+      if (stamp !== chartRef.current) {
+        chartRef.current = stamp;
+        setChartHeld(mine);
+        onChart(current);
+      }
+
       // --- the canvas can put a tool back itself, so the rail follows it
       const active = state.activeTool.type;
       if (!RAIL_TOOLS.has(active)) {
@@ -280,7 +320,7 @@ export default function Canvas({
         height: state.height,
       });
     },
-    [onEmptyChange, onSelection, setTool],
+    [ink, sheet, onChart, onEmptyChange, onSelection, setTool],
   );
 
   return (
@@ -365,6 +405,12 @@ export default function Canvas({
             currentItemOpacity: 100,
           },
         }}
+      />
+      <ChartControls
+        api={api}
+        chart={chartHeld ? chart : null}
+        view={view}
+        onChange={onChartChange}
       />
       <ConnectLayer
         api={api}

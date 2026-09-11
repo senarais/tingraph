@@ -84,6 +84,16 @@ export default function Inspector({ picked, category, onPatch }: InspectorProps)
     return null;
   }
   const value = readValues(picked);
+  // a chart offers nothing here, so the panel is a name and a note rather than
+  // an empty box under one
+  const offered =
+    controls.stroke ||
+    controls.fill ||
+    controls.weight ||
+    controls.dash ||
+    controls.corners ||
+    controls.opacity ||
+    controls.text;
 
   return (
     <aside
@@ -99,7 +109,7 @@ export default function Inspector({ picked, category, onPatch }: InspectorProps)
         )}
       </header>
 
-      <div className="space-y-3 p-3">
+      <div className={`space-y-3 ${offered ? "p-3" : ""}`}>
         {controls.stroke && (
           <div>
             <Tick className="mb-1.5 block">Stroke</Tick>

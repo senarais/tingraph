@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  ChartColumn,
   Eraser,
   Hand,
   Image as ImageIcon,
@@ -16,7 +17,7 @@ import {
 } from "lucide-react";
 import { useTingraphStore, type CanvasTool, type Drawer } from "@/lib/store";
 import { CONNECTORS, defaultConnector, type ConnectorKind } from "@/lib/connectors";
-import type { DiagramCategory } from "@/lib/types";
+import { isChart, type DiagramCategory } from "@/lib/types";
 
 /**
  * Every instrument the editor has, in one column. A tool takes the pointer; a
@@ -38,6 +39,8 @@ interface Entry {
   drawer?: Drawer;
   /** the connector instrument, which opens its own list */
   lines?: true;
+  /** left out of the column when the notation has no use for it */
+  only?: "graph" | "chart";
 }
 
 const INSTRUMENTS: Entry[] = [
@@ -55,6 +58,15 @@ const INSTRUMENTS: Entry[] = [
     hint: "Drop a shape on the sheet",
     key: "2",
     drawer: "shapes",
+    only: "graph",
+  },
+  {
+    icon: ChartColumn,
+    label: "Chart",
+    hint: "Readings, colours and everything else",
+    key: "2",
+    drawer: "chart",
+    only: "chart",
   },
   { icon: Type, label: "Text", hint: "Write on the sheet", key: "3", tool: "text" },
   { icon: ImageIcon, label: "Image", hint: "Place a picture", key: "4", tool: "image" },
@@ -64,6 +76,7 @@ const INSTRUMENTS: Entry[] = [
     hint: "Join two elements",
     key: "5",
     lines: true,
+    only: "graph",
   },
   { icon: Pencil, label: "Draw", hint: "Freehand stroke", key: "6", tool: "freedraw" },
   { icon: Eraser, label: "Erase", hint: "Rub something out", key: "7", tool: "eraser" },
@@ -80,7 +93,16 @@ const PANELS: Entry[] = [
   { icon: Palette, label: "Style", hint: "Ink and drawing style", key: "9", drawer: "style" },
 ];
 
-const ALL = [...INSTRUMENTS, ...PANELS];
+/**
+ * What the column carries for one notation. A chart has no shapes to drop and
+ * nothing to join, and a graph has no readings to set, so each is offered only
+ * what it can use — and the key stays on the same number either way, so `2` is
+ * always "this notation's own panel".
+ */
+function instrumentsFor(category: DiagramCategory): Entry[] {
+  const wants = isChart(category) ? "chart" : "graph";
+  return INSTRUMENTS.filter((entry) => !entry.only || entry.only === wants);
+}
 
 /** Whether a key press belongs to whatever the reader is typing into. */
 function typing(target: EventTarget | null): boolean {
@@ -263,7 +285,9 @@ export default function Rail({ category }: { category: DiagramCategory }) {
         setLines(false);
         return;
       }
-      const entry = ALL.find((instrument) => instrument.key === event.key);
+      const entry = [...instrumentsFor(category), ...PANELS].find(
+        (instrument) => instrument.key === event.key,
+      );
       if (entry) {
         event.preventDefault();
         event.stopPropagation();
@@ -273,12 +297,14 @@ export default function Rail({ category }: { category: DiagramCategory }) {
       // Excalidraw's own tool letters reach for instruments this editor does
       // not carry, so they are swallowed rather than left to bounce
       if (/^[a-z]$/.test(event.key)) {
+        const column = instrumentsFor(category);
+        const by = (label: string) => column.find((entry) => entry.label === label);
         const named: Record<string, Entry | undefined> = {
-          v: INSTRUMENTS[1],
-          h: INSTRUMENTS[0],
-          t: INSTRUMENTS[3],
-          a: INSTRUMENTS[5],
-          e: INSTRUMENTS[7],
+          v: by("Select"),
+          h: by("Hand"),
+          t: by("Text"),
+          a: by("Connector"),
+          e: by("Erase"),
         };
         const reached = named[event.key];
         if (reached || "rdolfpkx".includes(event.key)) {
@@ -321,7 +347,7 @@ export default function Rail({ category }: { category: DiagramCategory }) {
       aria-label="Editor tools"
       className="flex w-14 shrink-0 flex-col items-center gap-1 border-r-2 border-edge bg-bone py-3"
     >
-      {INSTRUMENTS.map((entry) => (
+      {instrumentsFor(category).map((entry) => (
         <RailButton
           key={entry.label}
           entry={entry}

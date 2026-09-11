@@ -4,16 +4,22 @@
 
 A diagram editor. The reader writes a small DSL, Tingraph parses it, lays it
 out, and draws it onto an Excalidraw canvas; from that moment the sheet is
-theirs to edit by hand. Three notations ship today — `flow` (flowchart),
-`bpmn` (BPMN 2.0 with pools and lanes) and `org` (org chart) — and the
-architecture is built so a fourth (ERD is next) is a list of rows rather than
-a new subsystem.
+theirs to edit by hand. Seven notations ship today, in two families:
+
+- **graphs** — `flow` (flowchart), `bpmn` (BPMN 2.0 with pools and lanes) and
+  `org` (org chart): elements joined by connectors.
+- **charts** — `bar`, `line`, `pie` and `scatter`: readings, drawn.
+
+`isChart()` in `lib/types.ts` is what tells them apart, and almost everything
+in the editor asks it. The architecture is built so the next one (ERD) is a
+list of rows rather than a new subsystem.
 
 **Keep this file current.** Anything that changes the rules below — a new
-notation, a change to how connectors are routed or held, another Excalidraw
-feature taken over or switched off, a new concept a reader would not guess
-from the code — belongs here in the same commit. This file is the only place
-that explains *why*; the code explains *how*.
+notation, a new chart kind or chart setting, a change to how connectors are
+routed or held, another Excalidraw feature taken over or switched off, a new
+concept a reader would not guess from the code — belongs here in the same
+commit. This file is the only place that explains *why*; the code explains
+*how*.
 
 ## The pipeline
 
@@ -225,10 +231,93 @@ list; pressing it again with the list open puts the connector back.
 give `connect.ts` the rule for where a relation meets a table. The rest — the
 rail, the gestures, the re-cutting, copies, export — needs no change.
 
+## A chart is a notation too, but not a graph
+
+A chart has no nodes, no edges and nothing to route, so it does not travel
+through the shared layout at all. `lib/types.ts` gives the AST an optional
+`chart: ChartSpec`; when it is there, `computeLayout` passes it straight
+through and `buildSkeletons` hands the whole job to `lib/chart/`.
+
+```
+DSL text → parseChart → ChartSpec → layoutChart → ChartDrawing
+                                  → buildChartSkeletons → the sheet
+```
+
+Four files, and they are worth knowing apart:
+
+| File | What only it does |
+|---|---|
+| `lib/chart/spec.ts` | what a chart *is* — kinds, options, palettes, styles. No geometry. |
+| `lib/chart/layout-chart.ts` | where every mark goes, in sheet units. No Excalidraw. |
+| `lib/chart/build-chart.ts` | the only file that turns that into shapes. |
+| `lib/parser/parse-chart.ts` | the language half, over the shared tokeniser. |
+
+### The one rule that holds it together
+
+**The panel, the handles on the sheet and the source are three hands on one
+`ChartSpec`.** A chart on the sheet is a group of ordinary shapes plus one
+invisible rectangle — the frame — whose mark carries the whole spec. Nothing
+edits a mark: every edit rewrites the spec and the chart is drawn again from
+it (`redrawChart` in `lib/canvas/scene.ts`). That is why the settings panel
+and a dragged bar are the same code path, and why every setting in the panel
+has a word in the language and the other way round. Breaking that symmetry —
+a control with no keyword, a keyword with no control — is the thing to avoid.
+
+Consequences to keep in mind:
+
+- Redrawing replaces every element of the chart, so the selection is restored
+  by unit name afterwards (`changeChart` in `editor-root.tsx`). Forget that and
+  the handles vanish mid-drag.
+- A live drag writes with `CaptureUpdateAction.EVENTUALLY`, never `NEVER`:
+  `NEVER` makes the dragged state the history baseline and the whole gesture
+  becomes unundoable. The settled write is `IMMEDIATELY`, so one drag is one
+  step back.
+- The axis is read from the drawing as it stood when the grip was taken hold
+  of. Reading it live would make the value chase the pointer as the scale
+  grew under it.
+- Excalidraw fills a `line` whose first and last points meet, which is how a
+  pie slice is drawn. Keep slices closed.
+- Resizing a chart on the sheet stretches its shapes like any group;
+  `syncCharts` notices the frame is no longer the size the spec claims and
+  draws the chart again properly once the pointer is up.
+
+### Colour
+
+The categorical order in `spec.ts` is fixed and validated as a set — worst
+adjacent pair ΔE 9.1 under protanopia, 19.6 in normal vision, against white
+paper. Do not reorder it, do not add a ninth hue: a ninth series comes round
+to the first, and the reader can pin a colour on any series. `auto` is the
+default and means "one colour when one thing is being measured, the
+categorical order when several are", which is what makes a single-series bar
+chart one colour and a pie six.
+
+### Adding a chart kind
+
+The canvas follows the notation, not the other way round. A new kind is:
+
+1. `ChartKind` and `CHART_KINDS` in `lib/chart/spec.ts`, plus any option only
+   it needs, and its defaults in `defaultOptions`.
+2. Its geometry in `layout-chart.ts` — a `fill…` function that pushes marks
+   into the drawing — and its shapes in `build-chart.ts` if it needs a mark
+   shape the others do not.
+3. Its rows in `lib/parser/parse-chart.ts` if it reads its data differently
+   (a scatter reads points, not readings), and its guide section in
+   `lib/guide.ts`.
+4. A template in `lib/templates.ts`, a catalogue entry in `lib/diagrams.ts`,
+   and art in `components/site/diagram-art.tsx`.
+5. Its controls in `components/editor/chart-drawer.tsx` and its grips in
+   `components/editor/chart-controls.tsx` — both are already switched on
+   `spec.kind`, so this is a branch, not a new panel.
+
+Everything else — the rail, the inspector, redrawing, copies, resizing,
+export — already asks `isChart()` and needs no change. If you find yourself
+editing the rail or the canvas to add a chart kind, the abstraction has
+slipped and that is the thing to fix.
+
 ## Checks
 
 `npm run self-check` runs three assert-based scripts under `tsx`:
-`scripts/self-check.ts` (parser, layout, connector geometry, copies),
+`scripts/self-check.ts` (parser, layout, connector geometry, copies, charts),
 `scripts/mapper-check.ts` (skeletons) and `scripts/editor-check.ts` (styles,
 inspector, export). No test framework. Anything that can be answered without a
 browser should be asserted there rather than clicked through.

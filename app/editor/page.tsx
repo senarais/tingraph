@@ -9,7 +9,15 @@ export const metadata: Metadata = {
     "Pick a notation, write the source, watch the drawing follow, then edit it on the sheet and export a PNG, JPG, SVG or PDF.",
 };
 
-const CATEGORIES: DiagramCategory[] = ["flow", "bpmn", "org"];
+const CATEGORIES: DiagramCategory[] = [
+  "flow",
+  "bpmn",
+  "org",
+  "bar",
+  "line",
+  "pie",
+  "scatter",
+];
 
 function requested(value: string | string[] | undefined): DiagramCategory | undefined {
   return CATEGORIES.find((category) => category === value);

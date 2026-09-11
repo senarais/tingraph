@@ -9,7 +9,15 @@ import {
 import { nodeUnit } from "../lib/excalidraw-mapper/build-skeletons";
 import { unitOf } from "../lib/canvas/units";
 import { inkFor } from "../lib/ink";
-import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE } from "../lib/templates";
+import {
+  FLOWCHART_TEMPLATE,
+  BPMN_TEMPLATE,
+  ORG_TEMPLATE,
+  BAR_TEMPLATE,
+  LINE_TEMPLATE,
+  PIE_TEMPLATE,
+  SCATTER_TEMPLATE,
+} from "../lib/templates";
 
 type Skel = Record<string, unknown> & {
   id?: string;
@@ -370,5 +378,59 @@ assert.ok(
   !unitOf(plain.get("DEAN-body") as never)?.wash,
   "the white body is not a washed piece",
 );
+
+
+
+// ---------------------------------------------------------------------- charts
+
+/**
+ * A chart is drawn as ordinary shapes, and one of them carries the whole of it:
+ * the frame holds the spec, which is what lets the settings panel, the handles
+ * on the sheet and the source all be the same edit.
+ */
+for (const source of [BAR_TEMPLATE, LINE_TEMPLATE, PIE_TEMPLATE, SCATTER_TEMPLATE]) {
+  const ast = parseDSL(source);
+  const skeletons = buildSkeletons(computeLayout(ast)) as unknown as Array<
+    Record<string, unknown>
+  >;
+  const frame = skeletons[0];
+  assert.equal(frame.type, "rectangle", `${ast.category}: the frame comes first`);
+  assert.equal(frame.strokeColor, "transparent", "and is not drawn");
+  const mark = (frame.customData as { tingraph?: { kind?: string; chart?: unknown } })
+    ?.tingraph;
+  assert.equal(mark?.kind, "chart");
+  assert.ok(mark?.chart, `${ast.category}: the frame carries the whole chart`);
+  assert.ok(skeletons.length > 8, `${ast.category}: it has marks on it`);
+  for (const piece of skeletons) {
+    const own = (piece.customData as { tingraph?: { unit?: string } })?.tingraph;
+    assert.equal(own?.unit, `chart-${ast.category}`, "every piece belongs to the chart");
+    assert.ok(
+      Array.isArray(piece.groupIds) && (piece.groupIds as string[]).length === 1,
+      "and moves with it",
+    );
+  }
+  assert.ok(
+    skeletons.every((piece) => piece.type !== "arrow"),
+    `${ast.category}: a chart draws no connectors`,
+  );
+}
+
+// a pie is drawn as closed lines, which is what Excalidraw fills
+const pieParts = buildSkeletons(
+  computeLayout(parseDSL(PIE_TEMPLATE)),
+) as unknown as Array<Record<string, unknown>>;
+const wedges = pieParts.filter(
+  (piece) => piece.type === "line" && piece.backgroundColor !== "transparent",
+);
+assert.equal(wedges.length, 6, "one filled shape per slice");
+for (const wedge of wedges) {
+  const points = wedge.points as Array<[number, number]>;
+  const [first] = points;
+  const last = points[points.length - 1];
+  assert.ok(
+    Math.abs(first[0] - last[0]) < 1 && Math.abs(first[1] - last[1]) < 1,
+    "a slice closes on itself, or Excalidraw will not fill it",
+  );
+}
 
 console.log("mapper self-check: all assertions passed");

@@ -1,3 +1,4 @@
+import { tokenize, type Token, type TokenKind } from "@/lib/parser/tokens";
 import {
   AST,
   DSLEdge,
@@ -9,7 +10,9 @@ import {
   DiagramCategory,
   EdgeKind,
   NodeType,
+  isChart,
 } from "@/lib/types";
+import { parseChart } from "@/lib/parser/parse-chart";
 
 const FLOW_NODE_TYPES = new Map<string, NodeType>([
   ["start", "start"],
@@ -42,70 +45,6 @@ const ORG_NODE_TYPES = new Map<string, NodeType>([
   ["role", "role"],
   ["unit", "role"],
 ]);
-
-type TokenKind =
-  | "keyword"
-  | "id"
-  | "string"
-  | "arrow"
-  | "dashed-arrow"
-  | "lbrace"
-  | "rbrace"
-  | "lbracket"
-  | "rbracket";
-
-interface Token {
-  kind: TokenKind;
-  value: string;
-  line: number;
-}
-
-const TOKEN_RE =
-  /(\s+)|((?:#|\/\/)[^\n]*)|("(?:[^"\\\n]|\\.)*")|(-\.->|-\.{2,}->|->|→)|([A-Za-z_$][\w$]*(?:[-.](?![.>])[\w$]+)*)|([{}[\]])/y;
-
-function tokenize(code: string): Token[] {
-  const tokens: Token[] = [];
-  let pos = 0;
-  let line = 1;
-  while (pos < code.length) {
-    TOKEN_RE.lastIndex = pos;
-    const m = TOKEN_RE.exec(code);
-    if (!m || m.index !== pos) {
-      throw new DSLError(`Unexpected character "${code[pos]}"`, line);
-    }
-    const [, ws, comment, str, arrow, id, brace] = m;
-    pos = TOKEN_RE.lastIndex;
-    if (ws) {
-      line += (ws.match(/\n/g) ?? []).length;
-      continue;
-    }
-    if (comment) {
-      continue;
-    }
-    if (str) {
-      tokens.push({ kind: "string", value: JSON.parse(str), line });
-    } else if (arrow) {
-      tokens.push({
-        kind: arrow.startsWith("-.") ? "dashed-arrow" : "arrow",
-        value: arrow.startsWith("-.") ? "-.->" : "->",
-        line,
-      });
-    } else if (id) {
-      tokens.push({ kind: "id", value: id, line });
-    } else if (brace) {
-      const kind: TokenKind =
-        brace === "{"
-          ? "lbrace"
-          : brace === "}"
-            ? "rbrace"
-            : brace === "["
-              ? "lbracket"
-              : "rbracket";
-      tokens.push({ kind, value: brace, line });
-    }
-  }
-  return tokens;
-}
 
 interface EdgeEndpoint {
   id: string;
@@ -468,7 +407,7 @@ export function detectCategory(code: string): DiagramCategory | null {
     .replace(/(?:#|\/\/)[^\n]*/g, "")
     .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
     .trimStart();
-  const head = stripped.match(/^(flow|bpmn|org)\b/);
+  const head = stripped.match(/^(flow|bpmn|org|bar|line|pie|scatter)\b/);
   return head ? (head[1] as DiagramCategory) : null;
 }
 
@@ -476,9 +415,13 @@ export function parseDSL(code: string): AST {
   const category = detectCategory(code);
   if (!category) {
     throw new DSLError(
-      'Diagram must start with "flow", "bpmn" or "org" followed by a title, e.g. flow "My Chart" {',
+      'A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are flow, bpmn, org, bar, line, pie and scatter',
       1,
     );
+  }
+  if (isChart(category)) {
+    const chart = parseChart(code, category);
+    return { category, title: chart.title, nodes: [], edges: [], chart };
   }
   const nodeTypes =
     category === "flow"

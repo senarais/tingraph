@@ -1,10 +1,24 @@
 import assert from "node:assert";
 import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
 import { computeLayout } from "@/lib/layout/compute-layout";
-import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE } from "@/lib/templates";
+import {
+  FLOWCHART_TEMPLATE,
+  BPMN_TEMPLATE,
+  ORG_TEMPLATE,
+  BAR_TEMPLATE,
+  LINE_TEMPLATE,
+  PIE_TEMPLATE,
+  SCATTER_TEMPLATE,
+} from "@/lib/templates";
 import { READY_DIAGRAMS } from "@/lib/diagrams";
 import { DSLError } from "@/lib/types";
 import { renameCopies } from "@/lib/canvas/copies";
+import {
+  CATEGORICAL,
+  effectivePalette,
+  markColor,
+} from "@/lib/chart/spec";
+import { layoutChart, niceScale, readValue, tickLabel } from "@/lib/chart/layout-chart";
 import {
   asElement,
   gripSide,
@@ -317,7 +331,7 @@ function expectDSLError(code: string, msgPart: string, line?: number): void {
   }
 }
 
-expectDSLError('x "Title" {}', 'must start with "flow", "bpmn" or "org"');
+expectDSLError('x "Title" {}', "must open with its notation");
 expectDSLError('flow Missing { }', "diagram title", 1);
 expectDSLError('flow "T" { process P1 "P"\n', 'Missing closing "}"', 1);
 expectDSLError('flow "T" { process P1 "P"\n  P1 -> Q1 }', 'undeclared node "Q1"');
@@ -791,6 +805,170 @@ assert.notEqual(
   linkSignature(parentBox, leftChild, { from: {}, to: {} }, { x: 0, y: 0 }),
   "and so does a connector dragged off its route",
 );
+
+// -------------------------------------------------------------------- charts
+
+const columns = parseDSL(BAR_TEMPLATE).chart!;
+assert.equal(columns.kind, "bar");
+assert.deepEqual(columns.categories, ["Apples", "Bananas", "Oranges", "Grapes"]);
+assert.equal(columns.series.length, 1, "readings written plainly make one series");
+assert.deepEqual(columns.series[0].values, [9, 16, 10, 7]);
+assert.equal(columns.series[0].label, "Number of students", "named after the value axis");
+assert.equal(columns.options.xTitle, "Favourite fruit");
+
+const grouped = parseDSL(
+  `bar "T" {\n layout stacked\n categories A B C\n series "One" 1 2 3\n series "Two" 4 5 6\n}`,
+).chart!;
+assert.equal(grouped.series.length, 2);
+assert.deepEqual(grouped.series[1].values, [4, 5, 6]);
+assert.equal(grouped.options.layout, "stacked");
+
+// a series shorter than the categories is padded rather than refused
+const halfTyped = parseDSL(`bar "T" {\n categories A B C\n series "One" 1\n}`).chart!;
+assert.deepEqual(halfTyped.series[0].values, [1, 0, 0], "a half-typed chart still draws");
+
+// `categories` takes its own line, because a category may be a bare number
+const years = parseDSL(
+  `line "T" {\n categories 2017 2018\n series "A" 1 2\n}`,
+).chart!;
+assert.deepEqual(years.categories, ["2017", "2018"]);
+assert.equal(years.series.length, 1, "the series after it is not swallowed");
+
+const cloud = parseDSL(
+  `scatter "T" {\n trend on\n series "A" (1, 2) (3, 4) "tip"\n}`,
+).chart!;
+assert.equal(cloud.series[0].points!.length, 2);
+assert.deepEqual(cloud.series[0].points![0], { x: 1, y: 2 });
+assert.equal(cloud.series[0].points![1].label, "tip", "a point may be named");
+assert.equal(cloud.options.trend, true);
+
+const slices = parseDSL(PIE_TEMPLATE).chart!;
+assert.equal(slices.categories.length, 6);
+assert.equal(slices.options.percent, true);
+
+expectDSLError('bar "T" { legend sideways }', '"legend" takes one of');
+expectDSLError('bar "T" { Apples }', 'Expected a number after "Apples"');
+expectDSLError('bar "T" { style grid }', '"style" takes one of');
+expectDSLError('scatter "T" { Apples 4 }', "written as points");
+
+// one colour when one thing is being measured, one each when several
+assert.equal(effectivePalette(columns), "single", "one series is one colour");
+assert.equal(effectivePalette(grouped), "colorful", "several are told apart by hue");
+assert.equal(effectivePalette(slices), "colorful", "and so are the slices of a pie");
+assert.equal(
+  markColor("colorful", columns.options, 1),
+  CATEGORICAL[1],
+  "the categorical order is fixed",
+);
+assert.equal(
+  markColor("colorful", columns.options, CATEGORICAL.length),
+  CATEGORICAL[0],
+  "and comes round rather than inventing a hue",
+);
+assert.equal(
+  markColor("colorful", columns.options, 3, "#123456"),
+  "#123456",
+  "a colour pinned on a series beats the palette",
+);
+
+// a scale a reader can read: 1, 2, 2.5 or 5 times a power of ten
+assert.deepEqual(niceScale(0, 85, true), { min: 0, max: 100, step: 25 });
+assert.deepEqual(niceScale(0, 16, true), { min: 0, max: 20, step: 5 });
+assert.deepEqual(niceScale(3, 9, false), { min: 2, max: 10, step: 2 });
+assert.equal(niceScale(-4, 7, true).min <= -4, true, "a negative reading fits");
+assert.equal(tickLabel(0.25, 0.25), "0.25", "and the caption keeps its places");
+assert.equal(tickLabel(-0, 1), "0", "with no minus nought");
+
+// every mark lands inside the chart, whatever is asked of it
+const VARIANTS = [
+  BAR_TEMPLATE,
+  LINE_TEMPLATE,
+  PIE_TEMPLATE,
+  SCATTER_TEMPLATE,
+  `bar "T" { style bold\n colors colorful\n values on\n bars horizontal\n A 3\n B 7 }`,
+  `bar "T" { layout stacked\n legend right\n categories A B\n series "One" 3 7\n series "Two" 2 1 }`,
+  `bar "T" { "A very long category name indeed" 3\n "Another long one" 7 }`,
+  `bar "T" { A -4\n B 7 }`,
+  `line "T" { curve on\n area on\n 1 3\n 2 7\n 3 5 }`,
+  `pie "T" { donut 0.6\n legend right\n A 3\n B 7 }`,
+  `pie "T" { A 0\n B 0 }`,
+  `scatter "T" { legend bottom\n series "A" (1,2) (3,4)\n series "B" (2,8) (4,1) }`,
+  `bar "T" { size 200 140\n A 3\n B 7\n C 5 }`,
+];
+for (const source of VARIANTS) {
+  const spec = parseDSL(source).chart!;
+  const box = { x: 40, y: 30, width: spec.options.width, height: spec.options.height };
+  const drawn = layoutChart(spec, box);
+  const inside = (point: { x: number; y: number }) =>
+    point.x >= box.x - 2 &&
+    point.y >= box.y - 2 &&
+    point.x <= box.x + box.width + 2 &&
+    point.y <= box.y + box.height + 2;
+  assert.ok(inside({ x: drawn.plot.x, y: drawn.plot.y }), `${spec.kind}: plot starts inside`);
+  assert.ok(
+    inside({ x: drawn.plot.x + drawn.plot.width, y: drawn.plot.y + drawn.plot.height }),
+    `${spec.kind}: plot ends inside`,
+  );
+  for (const mark of drawn.bars) {
+    assert.ok(inside({ x: mark.rect.x, y: mark.rect.y }), "a bar starts inside the plot");
+    assert.ok(
+      inside({ x: mark.rect.x + mark.rect.width, y: mark.rect.y + mark.rect.height }),
+      "and ends inside it",
+    );
+  }
+  for (const dot of drawn.dots) {
+    assert.ok(inside(dot.at), "a dot lands inside the chart");
+  }
+  for (const slice of drawn.slices) {
+    for (const point of slice.path) {
+      assert.ok(inside(point), "a slice stays inside the chart");
+    }
+  }
+}
+
+// a wash under a line is a closed shape too, or Excalidraw leaves it unfilled
+const washed = layoutChart(
+  parseDSL(`line "T" { area on\n 1 3\n 2 7\n 3 5 }`).chart!,
+  { x: 0, y: 0, width: 520, height: 340 },
+);
+const wash = washed.runs[0].area!;
+assert.ok(wash, "the wash is there when it is asked for");
+assert.deepEqual(wash[0], wash[wash.length - 1], "and it closes on itself");
+
+// the shares of a pie add up to the whole, and each slice closes on itself
+const pieDrawn = layoutChart(parseDSL(PIE_TEMPLATE).chart!, {
+  x: 0,
+  y: 0,
+  width: 520,
+  height: 340,
+});
+assert.equal(
+  Math.round(pieDrawn.slices.reduce((sum, slice) => sum + slice.share, 0) * 1000),
+  1000,
+  "the slices are the whole",
+);
+for (const slice of pieDrawn.slices) {
+  const first = slice.path[0];
+  const last = slice.path[slice.path.length - 1];
+  assert.ok(
+    Math.abs(first.x - last.x) < 0.5 && Math.abs(first.y - last.y) < 0.5,
+    "a slice is a closed shape, which is what lets it be filled",
+  );
+}
+
+// a reading dragged to a place on the sheet reads as the number drawn there
+const barDrawn = layoutChart(parseDSL(BAR_TEMPLATE).chart!, {
+  x: 0,
+  y: 0,
+  width: 520,
+  height: 340,
+});
+for (const mark of barDrawn.bars) {
+  assert.ok(
+    Math.abs(readValue(barDrawn, mark.grip) - mark.value) < 0.1,
+    `the grip on a bar of ${mark.value} reads back as ${mark.value}`,
+  );
+}
 
 // the samples the public pages type out are real source, not prose that looks
 // like it: every one of them parses and lays out

@@ -92,8 +92,8 @@ const DIRECTIONS = [
 
 interface SourceDrawerProps {
   category: DiagramCategory;
-  nodeCount: number;
-  edgeCount: number;
+  /** what the source is made of, said the way its own notation says it */
+  summary: string;
   error: { message: string; line: number } | null;
   onGenerate: () => void;
   onEditorMount: OnMount;
@@ -125,8 +125,7 @@ function useCodeKeys() {
 
 export default function SourceDrawer({
   category,
-  nodeCount,
-  edgeCount,
+  summary,
   error,
   onGenerate,
   onEditorMount,
@@ -195,7 +194,7 @@ export default function SourceDrawer({
             <span className="min-w-0 flex-1 truncate text-[11px] text-ink-soft">
               {error
                 ? "Source has a syntax error"
-                : `${nodeCount} nodes · ${edgeCount} flows`}
+                : summary}
             </span>
             {category !== "bpmn" && (
               <div className="w-[86px] shrink-0">

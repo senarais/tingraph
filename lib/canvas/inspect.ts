@@ -129,6 +129,14 @@ export function controlsFor(
   const mark = unitOf(head);
   const hasText = picked.some((element) => element.type === "text");
 
+  if (mark?.kind === "chart") {
+    return {
+      ...NOTHING,
+      name: "Chart",
+      fixed: "A chart is set from the Chart panel, and adjusted by its handles on the sheet.",
+    };
+  }
+
   if (mark?.kind === "edge") {
     return {
       ...NOTHING,

@@ -8,7 +8,7 @@ import { DiagramCategory } from "@/lib/types";
  * Every `sample` is real source: `npm run self-check` parses each of them.
  */
 
-export type DiagramFamily = "Process" | "Structure";
+export type DiagramFamily = "Process" | "Structure" | "Data";
 
 /** Which formal ink the preview is drawn in. Named in `lib/ink.ts`. */
 export type Accent = "mono" | "navy" | "oxblood" | "forest" | "slate";
@@ -69,6 +69,45 @@ export const ORG_SAMPLE = `org "Faculty of Psychology" {
 }
 `;
 
+export const BAR_SAMPLE = `bar "Favourite Fruit" {
+  x "Favourite fruit"
+  y "Number of students"
+
+  Apples 9
+  Bananas 16
+  Oranges 10
+  Grapes 7
+}
+`;
+
+export const LINE_SAMPLE = `line "Wildlife Population" {
+  legend bottom
+  categories 2017 2018 2019 2020
+  series "Bears" 8 55 92 116
+  series "Dolphins" 150 77 34 12
+}
+`;
+
+export const PIE_SAMPLE = `pie "Cookie Market Share" {
+  percent on
+
+  "Mocha Marvels" 32.9
+  "Caramel Swirls" 24.4
+  "PB Bliss" 19.0
+  "Choco Chippers" 23.7
+}
+`;
+
+export const SCATTER_SAMPLE = `scatter "Local Index by Year" {
+  x "Year"
+  y "Local index"
+  trend on
+
+  (1900, 10) (1903, 15) (1906, 4) (1909, 14)
+  (1912, 30) (1915, 55) (1918, 69) (1920, 92)
+}
+`;
+
 export const READY_DIAGRAMS: DiagramKind[] = [
   {
     id: "flow",
@@ -102,6 +141,50 @@ export const READY_DIAGRAMS: DiagramKind[] = [
     parts: ["Role band", "Name line", "Sub-role units", "Advisory tie"],
     accent: "oxblood",
     sample: ORG_SAMPLE,
+  },
+  {
+    id: "bar",
+    name: "Bar chart",
+    family: "Data",
+    keyword: "bar",
+    summary:
+      "Readings as bars, upright or on their side, grouped or stacked, with the whole look set from the sheet or from the source.",
+    parts: ["Readings", "Series", "Axes and key", "Grouped or stacked"],
+    accent: "navy",
+    sample: BAR_SAMPLE,
+  },
+  {
+    id: "line",
+    name: "Line chart",
+    family: "Data",
+    keyword: "line",
+    summary:
+      "One run per series over a shared axis, straight or curved, with dots at the readings and a wash underneath.",
+    parts: ["Readings", "Series", "Markers", "Wash under the line"],
+    accent: "forest",
+    sample: LINE_SAMPLE,
+  },
+  {
+    id: "pie",
+    name: "Pie chart",
+    family: "Data",
+    keyword: "pie",
+    summary:
+      "Shares of one whole, named on the sheet or in a key, with a hole in the middle when a ring reads better.",
+    parts: ["Slices", "Shares or values", "Donut hole", "Key"],
+    accent: "oxblood",
+    sample: PIE_SAMPLE,
+  },
+  {
+    id: "scatter",
+    name: "Scatter plot",
+    family: "Data",
+    keyword: "scatter",
+    summary:
+      "Points against two measured axes, grouped into series, with a line of best fit through the cloud.",
+    parts: ["Points", "Series", "Trend line", "Named points"],
+    accent: "slate",
+    sample: SCATTER_SAMPLE,
   },
 ];
 

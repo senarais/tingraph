@@ -1,3 +1,5 @@
+import { isChartKind, type ChartKind, type ChartSpec } from "@/lib/chart/spec";
+
 export type FlowNodeType =
   | "start"
   | "process"
@@ -64,7 +66,21 @@ export interface DSLEdge {
   kind?: EdgeKind;
 }
 
-export type DiagramCategory = "flow" | "bpmn" | "org";
+/**
+ * Every notation the editor carries. The graph notations draw nodes joined by
+ * connectors; the charts draw readings. The editor keeps them apart because
+ * almost nothing they need is the same — a chart has no shapes to drop and no
+ * arrows to route, and it has a settings panel neither graph wants.
+ */
+export type DiagramCategory = "flow" | "bpmn" | "org" | ChartKind;
+
+export const GRAPH_CATEGORIES = ["flow", "bpmn", "org"] as const;
+
+export type GraphCategory = (typeof GRAPH_CATEGORIES)[number];
+
+export function isChart(category: DiagramCategory): category is ChartKind {
+  return isChartKind(category);
+}
 
 /**
  * Which way a drawing grows: down the page, or across it. A BPMN diagram
@@ -78,6 +94,8 @@ export interface AST {
   nodes: DSLNode[];
   edges: DSLEdge[];
   pools?: DSLPool[];
+  /** set instead of nodes and edges when the notation is a chart */
+  chart?: ChartSpec;
 }
 
 export class DSLError extends Error {
@@ -138,4 +156,6 @@ export interface PositionedAST {
   nodes: PositionedNode[];
   edges: PositionedEdge[];
   pools?: PositionedPool[];
+  /** a chart is laid out where it is drawn, so it travels through unchanged */
+  chart?: ChartSpec;
 }

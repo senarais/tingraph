@@ -90,17 +90,25 @@ const ORG: ConnectorKind[] = [
   },
 ];
 
+/**
+ * A chart joins nothing: its marks are readings, not elements, so it carries
+ * no connectors and the rail does not offer the instrument at all.
+ */
 export const CONNECTORS: Record<DiagramCategory, ConnectorKind[]> = {
   bpmn: BPMN,
   flow: FLOW,
   org: ORG,
+  bar: [],
+  line: [],
+  pie: [],
+  scatter: [],
 };
 
 const ALL = [...BPMN, ...FLOW, ...ORG];
 
-/** The line a notation draws unless the reader picks another. */
-export function defaultConnector(category: DiagramCategory): string {
-  return CONNECTORS[category][0].id;
+/** The line a notation draws unless the reader picks another, if it draws any. */
+export function defaultConnector(category: DiagramCategory): string | null {
+  return CONNECTORS[category][0]?.id ?? null;
 }
 
 /** A connector kind by name, falling back to the notation's own first line. */
@@ -108,7 +116,8 @@ export function connectorKind(id: string, category: DiagramCategory): ConnectorK
   return (
     CONNECTORS[category].find((kind) => kind.id === id) ??
     ALL.find((kind) => kind.id === id) ??
-    CONNECTORS[category][0]
+    CONNECTORS[category][0] ??
+    BPMN[0]
   );
 }
 

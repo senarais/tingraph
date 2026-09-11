@@ -14,6 +14,9 @@ import {
   type Box,
   type Rules,
 } from "@/lib/canvas/connect";
+import { buildChartSkeletons } from "@/lib/chart/build-chart";
+import type { ChartSpec } from "@/lib/chart/spec";
+import type { Rect } from "@/lib/chart/layout-chart";
 import {
   buildLaneSkeletons,
   buildPoolSkeletons,
@@ -213,6 +216,132 @@ export function reunit(next: Elements, prev: Elements): ExcalidrawElement[] | vo
       customData: { ...element.customData, tingraph },
     });
   });
+}
+
+// --------------------------------------------------------------------- charts
+
+export interface ChartOnSheet {
+  unit: string;
+  spec: ChartSpec;
+  /** where the chart sits, taken from its frame rather than from the spec */
+  box: Rect;
+}
+
+/** The frame of one chart: the piece that carries the whole of it. */
+function chartFrames(elements: Elements): Array<{ element: ExcalidrawElement; mark: UnitMark }> {
+  const out: Array<{ element: ExcalidrawElement; mark: UnitMark }> = [];
+  for (const element of elements) {
+    const mark = element.isDeleted ? null : unitOf(element);
+    if (mark?.kind === "chart" && mark.chart && element.type === "rectangle") {
+      out.push({ element, mark });
+    }
+  }
+  return out;
+}
+
+/** Every chart on the sheet, in the order the sheet stacks them. */
+export function chartsOn(elements: Elements): ChartOnSheet[] {
+  return chartFrames(elements).map(({ element, mark }) => ({
+    unit: mark.unit,
+    spec: mark.chart as ChartSpec,
+    box: {
+      x: element.x,
+      y: element.y,
+      width: element.width,
+      height: element.height,
+    },
+  }));
+}
+
+/**
+ * Draws one chart again.
+ *
+ * A chart is not edited piece by piece: a reading changes, or a setting does,
+ * and every mark is cut again from the spec. That is what lets the settings
+ * panel, the handles on the sheet and the source all be the same edit — none
+ * of them has to know which rectangle moved.
+ */
+export function redrawChart(
+  elements: Elements,
+  unit: string,
+  spec: ChartSpec,
+  box: Rect,
+  ink: Ink,
+  style: SheetStyle = FORMAL,
+): ExcalidrawElement[] {
+  const at = Math.max(
+    0,
+    elements.findIndex((element) => unitOf(element)?.unit === unit),
+  );
+  const kept = elements.filter((element) => unitOf(element)?.unit !== unit);
+  const drawn = convertToExcalidrawElements(
+    buildChartSkeletons(
+      { ...spec, options: { ...spec.options, width: box.width, height: box.height } },
+      box,
+      ink,
+      style,
+      unit,
+    ),
+    { regenerateIds: true },
+  );
+  return [...kept.slice(0, at), ...drawn, ...kept.slice(at)];
+}
+
+/**
+ * Keeps a chart the size the reader dragged it to. Excalidraw scales a group
+ * by stretching every shape in it, captions included, so a chart that has been
+ * resized is drawn again at its new size the moment the pointer comes up.
+ */
+export function syncCharts(
+  elements: Elements,
+  ink: Ink,
+  style: SheetStyle = FORMAL,
+  busy: ReadonlySet<string> = new Set(),
+): ExcalidrawElement[] | null {
+  for (const { element, mark } of chartFrames(elements)) {
+    const spec = mark.chart as ChartSpec;
+    if (busy.has(element.id)) {
+      continue;
+    }
+    const width = Math.round(element.width);
+    const height = Math.round(element.height);
+    if (width === Math.round(spec.options.width) && height === Math.round(spec.options.height)) {
+      continue;
+    }
+    return redrawChart(
+      elements,
+      mark.unit,
+      spec,
+      { x: element.x, y: element.y, width, height },
+      ink,
+      style,
+    );
+  }
+  return null;
+}
+
+/** One fresh chart, dropped on the sheet. */
+export function newChart(
+  elements: Elements,
+  spec: ChartSpec,
+  at: { x: number; y: number },
+  ink: Ink,
+  style: SheetStyle = FORMAL,
+): ExcalidrawElement[] {
+  const unit = `chart-${freshId()}`;
+  const box = {
+    x: Math.round(at.x - spec.options.width / 2),
+    y: Math.round(at.y - spec.options.height / 2),
+    width: spec.options.width,
+    height: spec.options.height,
+  };
+  return [
+    ...elements,
+    ...convertToExcalidrawElements(
+      buildChartSkeletons(spec, box, ink, style, unit),
+      { regenerateIds: true },
+    ),
+  ];
 }
 
 // ---------------------------------------------------------------- connectors

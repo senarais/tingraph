@@ -86,10 +86,19 @@ const ORG_GROUPS: PaletteGroup[] = [
   },
 ];
 
+/**
+ * A chart has no shapes to drop: what a reader adds to one is a reading, and
+ * that is the Chart panel's job rather than the shape drawer's. The rail hides
+ * the drawer entirely when this list is empty.
+ */
 export const PALETTE_GROUPS: Record<DiagramCategory, PaletteGroup[]> = {
   bpmn: BPMN_GROUPS,
   flow: FLOW_GROUPS,
   org: ORG_GROUPS,
+  bar: [],
+  line: [],
+  pie: [],
+  scatter: [],
 };
 
 function idPrefix(type: string): string {

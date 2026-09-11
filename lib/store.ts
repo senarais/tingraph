@@ -10,7 +10,7 @@ import { TEMPLATE_LABELS, TEMPLATES } from "@/lib/templates";
 import { DiagramCategory, LayoutDirection } from "@/lib/types";
 
 /** The rail's panels. Only one is ever out, and it can always be shut. */
-export type Drawer = "shapes" | "source" | "style";
+export type Drawer = "shapes" | "chart" | "source" | "style";
 
 /** The canvas tools the rail drives, named the way Excalidraw names them. */
 export type CanvasTool =

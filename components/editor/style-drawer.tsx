@@ -14,10 +14,22 @@ import { Field, Swatch, Tick } from "@/components/editor/ui";
  * bottom says so rather than leaving the reader hunting for it.
  */
 
+/**
+ * A chart takes its colours from the Chart panel rather than from the ink,
+ * because the colours are carrying the readings apart rather than setting the
+ * tone of the sheet. The ink still writes the captions and rules the axes.
+ */
+const CHART_FIXED =
+  "The marks take their colours from the Chart panel. The ink writes the captions and rules the axes.";
+
 const FIXED: Record<DiagramCategory, string> = {
   flow: "Arrowheads, routing and the terminator outline come from the notation.",
   bpmn: "Arrowheads, event ring weights, the task outline and the BPMN markers come from the notation.",
   org: "An org chart is drawn in black whatever the ink is: the ink only moves the wash behind a role band.",
+  bar: CHART_FIXED,
+  line: CHART_FIXED,
+  pie: CHART_FIXED,
+  scatter: CHART_FIXED,
 };
 
 /** A shape and a connector, drawn the way the style would draw them. */
