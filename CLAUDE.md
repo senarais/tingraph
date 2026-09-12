@@ -4,22 +4,37 @@
 
 A diagram editor. The reader writes a small DSL, Tingraph parses it, lays it
 out, and draws it onto an Excalidraw canvas; from that moment the sheet is
-theirs to edit by hand. Seven notations ship today, in two families:
+theirs to edit by hand. Eleven notations ship today, in two families:
 
 - **graphs** — `flow` (flowchart), `bpmn` (BPMN 2.0 with pools and lanes) and
-  `org` (org chart): elements joined by connectors.
-- **charts** — `bar`, `line`, `pie` and `scatter`: readings, drawn.
+  `org` (org chart): elements joined by connectors, edited one at a time.
+- **figures** — `bar`, `line`, `pie`, `scatter`, `mind` (mind map), `matrix`
+  (2×2), `venn` and `fishbone`: one object, drawn.
 
-`isChart()` in `lib/types.ts` is what tells them apart, and almost everything
-in the editor asks it. The architecture is built so the next one (ERD) is a
-list of rows rather than a new subsystem.
+`isGraph()`, `isFigure()` and `isChart()` in `lib/types.ts` are what tell them
+apart, and almost everything in the editor asks one of them. The architecture
+is built so the next notation is a folder and a row, not a new subsystem.
 
 **Keep this file current.** Anything that changes the rules below — a new
-notation, a new chart kind or chart setting, a change to how connectors are
-routed or held, another Excalidraw feature taken over or switched off, a new
-concept a reader would not guess from the code — belongs here in the same
-commit. This file is the only place that explains *why*; the code explains
-*how*.
+notation, a new setting, a change to how connectors are routed or held,
+another Excalidraw feature taken over or switched off, a new concept a reader
+would not guess from the code — belongs here in the same commit. This file is
+the only place that explains *why*; the code explains *how*.
+
+**A new notation is not finished until it is listed.** Three places outside the
+editor have to learn about it in the same commit, or a notation ships that
+nobody can find:
+
+1. `lib/diagrams.ts` — a `READY_DIAGRAMS` entry with a sample that really
+   parses (`npm run self-check` proves it), plus art in
+   `components/site/diagram-art.tsx`. This is what fills the catalogue at
+   `/build`, which is the page the landing page sends readers to.
+2. `app/editor/page.tsx` — the keyword in `CATEGORIES`, or `/editor?type=…`
+   will not open it.
+3. The landing page needs nothing: it shows the first `FEATURED_COUNT` of
+   `READY_DIAGRAMS` on cards and links to `/build` for the rest, and the hero
+   types out `HERO_DIAGRAMS` — three, deliberately. Curate by reordering
+   `READY_DIAGRAMS`, never by adding another card row.
 
 ## The pipeline
 
@@ -50,12 +65,22 @@ Consequences worth knowing before touching the canvas:
 - The rail is the only place a tool is chosen. `RAIL_TOOLS` in
   `components/editor/canvas.tsx` lists the Excalidraw tools it drives;
   anything else the canvas reports back is put straight to `selection`.
-- `components/editor/rail.tsx` owns the keyboard. Its handler runs on
-  `document` in the **capture** phase and stops the event there, so an
-  Excalidraw shortcut for a tool Tingraph does not carry never reaches
-  Excalidraw. Digits pick instruments, `v h t a e` are the letters kept, and
-  the tool letters Excalidraw would otherwise answer (`r d o l f p k x`) are
-  swallowed.
+- `components/editor/rail.tsx` owns the keyboard, and owns it narrowly. **Only
+  the two instruments that say what the pointer is answer to a key** — `1`/`v`
+  for the pointer, `0`/`h` for the hand. Every other key Excalidraw would take
+  a tool from (`STOLEN_KEYS`: the tool letters and the digits `2`–`9`) is
+  stopped in the capture phase and answered by nothing. A letter belongs to
+  what the reader is writing far more often than to a tool, and a panel that
+  needs one can be pressed.
+- **Nothing is swallowed while the reader is writing.** `typing()` covers
+  inputs, textareas and contenteditable — and anything inside `.monaco-editor`,
+  because Monaco writes through an `EditContext` on a plain `div` that none of
+  those tests catch. Miss that and every `f` typed into the source reaches for
+  Excalidraw's frame tool instead of landing in the code. Excalidraw's own
+  guard has the same blind spot, which is why `useCodeKeys` in the source
+  drawer stops keydowns at the panel before they reach the document.
+- The **Generate panel takes the keyboard entirely** while it is out: it is
+  open in order to be typed into, so not even the pointer keys are answered.
 - Holding space still pans, because Excalidraw does that itself. The rail only
   records it (`panning` in `lib/store.ts`) so the Hand button can light up and
   the connector layer can step out of the way.
@@ -74,6 +99,15 @@ and `wash` (a piece filled with the ink's tint, so re-inking can find it).
 `normalizeUnits` in `lib/canvas/scene.ts` enforces it every frame: a group
 taken apart is re-formed, a half-covered element is selected whole, and
 stepping inside one lands on a caption rather than on a marker stroke.
+
+**A figure has no inside at all.** Double-clicking one would otherwise land on
+its invisible frame — the piece carrying the spec — and let the reader drag it
+out of its own drawing. So a unit marked `figure` cannot be stepped into: the
+whole figure is picked instead. For the same reason the canvas closes
+Excalidraw's caption editor on a figure's text (`editingTextElement` in
+`handleChange`): those captions are cut from the spec, so an edit there would
+be thrown away by the next redraw. Renaming happens through the figure's own
+handles, which write the spec.
 
 Two rules follow from this and are easy to break by accident:
 
@@ -150,6 +184,15 @@ Route shapes, chosen by which sides the two ends use:
 - ends on different axes → one turn, or four legs when a single turn would
   have to run backwards
 - ends leaving the same way → three legs past the further of them
+
+### Pools carry their own controls
+
+A BPMN pool has a small rail beside it on the sheet: add a lane, take the
+bottom lane off, add a pool below, delete the pool. A pool never loses its last
+lane — that lane *is* the pool's body. Removing a lane or a pool takes what was
+drawn inside it, and with it every connector that joined something in there
+(`withDanglingLinks` in `scene.ts`), because a line whose end is gone has
+nothing left to be cut against.
 
 ### Per-notation rules
 
@@ -231,42 +274,49 @@ list; pressing it again with the list open puts the connector back.
 give `connect.ts` the rule for where a relation meets a table. The rest — the
 rail, the gestures, the re-cutting, copies, export — needs no change.
 
-## A chart is a notation too, but not a graph
+## Figures: one object, drawn
 
-A chart has no nodes, no edges and nothing to route, so it does not travel
+A figure has no nodes, no edges and nothing to route, so it does not travel
 through the shared layout at all. `lib/types.ts` gives the AST an optional
-`chart: ChartSpec`; when it is there, `computeLayout` passes it straight
-through and `buildSkeletons` hands the whole job to `lib/chart/`.
+`figure: FigureSpec`; when it is there, `computeLayout` passes it straight
+through and `buildSkeletons` hands the whole job to that notation's own folder
+through `lib/figures/registry.ts`.
 
 ```
-DSL text → parseChart → ChartSpec → layoutChart → ChartDrawing
-                                  → buildChartSkeletons → the sheet
+DSL text → parse<Kind> → <Kind>Spec → layout → build<Kind>Skeletons → the sheet
 ```
 
-Four files, and they are worth knowing apart:
+One folder per notation, and they share nothing but the mechanism:
 
-| File | What only it does |
+| Folder | Notation |
 |---|---|
-| `lib/chart/spec.ts` | what a chart *is* — kinds, options, palettes, styles. No geometry. |
-| `lib/chart/layout-chart.ts` | where every mark goes, in sheet units. No Excalidraw. |
-| `lib/chart/build-chart.ts` | the only file that turns that into shapes. |
-| `lib/parser/parse-chart.ts` | the language half, over the shared tokeniser. |
+| `lib/chart/` | `bar`, `line`, `pie`, `scatter` |
+| `lib/mind/` | `mind` |
+| `lib/matrix/` | `matrix` |
+| `lib/venn/` | `venn` |
+| `lib/fishbone/` | `fishbone` |
+
+Inside each, the split is the same and is worth keeping: `spec.ts` is what the
+thing *is* (no geometry), a layout step is where every mark goes in sheet units
+(no Excalidraw), and a build step is the only file that turns that into shapes.
+A small figure keeps the last two in one file; a chart and a mind map do not,
+because their geometry is long enough to be worth reading on its own.
 
 ### The one rule that holds it together
 
 **The panel, the handles on the sheet and the source are three hands on one
-`ChartSpec`.** A chart on the sheet is a group of ordinary shapes plus one
+`FigureSpec`.** A figure on the sheet is a group of ordinary shapes plus one
 invisible rectangle — the frame — whose mark carries the whole spec. Nothing
-edits a mark: every edit rewrites the spec and the chart is drawn again from
-it (`redrawChart` in `lib/canvas/scene.ts`). That is why the settings panel
+edits a mark: every edit rewrites the spec and the figure is drawn again from
+it (`redrawFigure` in `lib/canvas/scene.ts`). That is why the settings panel
 and a dragged bar are the same code path, and why every setting in the panel
 has a word in the language and the other way round. Breaking that symmetry —
 a control with no keyword, a keyword with no control — is the thing to avoid.
 
 Consequences to keep in mind:
 
-- Redrawing replaces every element of the chart, so the selection is restored
-  by unit name afterwards (`changeChart` in `editor-root.tsx`). Forget that and
+- Redrawing replaces every element of the figure, so the selection is restored
+  by unit name afterwards (`changeFigure` in `editor-root.tsx`). Forget that and
   the handles vanish mid-drag.
 - A live drag writes with `CaptureUpdateAction.EVENTUALLY`, never `NEVER`:
   `NEVER` makes the dragged state the history baseline and the whole gesture
@@ -277,9 +327,9 @@ Consequences to keep in mind:
   grew under it.
 - Excalidraw fills a `line` whose first and last points meet, which is how a
   pie slice is drawn. Keep slices closed.
-- Resizing a chart on the sheet stretches its shapes like any group;
-  `syncCharts` notices the frame is no longer the size the spec claims and
-  draws the chart again properly once the pointer is up.
+- Resizing a figure on the sheet stretches its shapes like any group;
+  `syncFigures` notices the frame is no longer the size the spec claims and
+  draws it again properly once the pointer is up.
 
 ### Colour
 
@@ -291,33 +341,80 @@ default and means "one colour when one thing is being measured, the
 categorical order when several are", which is what makes a single-series bar
 chart one colour and a pie six.
 
-### Adding a chart kind
+### What each figure does on the sheet
 
-The canvas follows the notation, not the other way round. A new kind is:
+The canvas follows the notation. These are not variations on one interaction
+model; each is the gesture that notation actually wants, and they are meant to
+stay different:
 
-1. `ChartKind` and `CHART_KINDS` in `lib/chart/spec.ts`, plus any option only
-   it needs, and its defaults in `defaultOptions`.
-2. Its geometry in `layout-chart.ts` — a `fill…` function that pushes marks
-   into the drawing — and its shapes in `build-chart.ts` if it needs a mark
-   shape the others do not.
-3. Its rows in `lib/parser/parse-chart.ts` if it reads its data differently
-   (a scatter reads points, not readings), and its guide section in
-   `lib/guide.ts`.
-4. A template in `lib/templates.ts`, a catalogue entry in `lib/diagrams.ts`,
-   and art in `components/site/diagram-art.tsx`.
-5. Its controls in `components/editor/chart-drawer.tsx` and its grips in
-   `components/editor/chart-controls.tsx` — both are already switched on
-   `spec.kind`, so this is a branch, not a new panel.
+| Notation | What the sheet is for |
+|---|---|
+| charts | drag a bar's end, a line's dot, a scatter point, a pie's boundary |
+| `mind` | **this is where a mind map is built** — press a branch for its four actions, drag to pin it (its whole subtree follows), press the outward ring to grow a new one, double-click to rename, and swap the shape for a picture |
+| `matrix` | drag an item about the field; where it lands is what it means |
+| `venn` | drag a ring to set the overlap |
+| `fishbone` | press a bone to put a cause on it, a cause to put what is behind it |
+
+Three things every figure has on the sheet, built from
+`components/editor/figure-handles.tsx` so they behave alike:
+
+- **A pair, `+` and `−`, where the next one would go.** Readings past the last
+  bar, bones on the spine, items under the field, the third Venn ring. Anything
+  that can be added can be taken away from the same place.
+- **Parts that can be pointed at.** A `HitBox` sits over each caption the spec
+  owns, at exactly the box the renderer drew it in — which is why the plans
+  (`planFishbone`, `planVenn`, `matrixTitle`) hand out those boxes rather than
+  letting the handles guess. Pressing one picks it and raises a small bar of
+  what that part can do; double-clicking goes straight to renaming.
+- **Renaming in place.** `Rename` writes the spec and the figure is drawn
+  again, so the sheet and the panel never disagree.
+
+Two rules worth keeping when adding more:
+
+- **Formal is the default, everywhere.** Black outlines on white, colour
+  carried by the lines rather than by fills. The washed fills a mind map is
+  usually drawn with, the solid quadrants a matrix is usually drawn with, the
+  tinted rings a Venn is usually drawn with: all of those are styles the reader
+  picks, never what they get. This is a tool for papers first.
+- **A pin never moves anything else.** A mind map works out its frame from the
+  arrangement *before* any pin is applied, so dragging one branch does not
+  shift the map under the reader's hand. Any figure that gains dragging needs
+  the same property.
+
+### Starting again
+
+Every figure panel ends with a reset that puts the figure back to
+`figureDef(kind).blank()`, and the Generate panel has the same for a graph:
+it rewrites the source with the notation's template and draws it. Both ask
+twice — one press arms, the second does it — because both throw work away.
+
+### Adding a notation
+
+1. A folder under `lib/` with its own `spec.ts`, layout and build. Nothing in
+   it should import another notation's layout — the palettes and the colour
+   helpers in `lib/chart/spec.ts` are shared on purpose; geometry is not.
+2. Its parser in `lib/parser/`, over the shared tokeniser in `tokens.ts`.
+3. A row in `lib/figures/registry.ts`, and the kind in `FIGURE_KINDS`
+   (`lib/types.ts`) so `isFigure()` knows it.
+4. Its own panel, `components/editor/<kind>-drawer.tsx`, picked up by
+   `figure-drawer.tsx`, and its handles picked up by `figure-controls.tsx`.
+   Those two files switch on `spec.kind` and hold nothing else: a fishbone's
+   panel is a list of causes and a Venn's is a list of regions, so there is
+   nothing to share between them beyond the fields in `figure-fields.tsx`.
+5. Its guide section in `lib/guide.ts`, a template in `lib/templates.ts`, and
+   the three listings named at the top of this file.
 
 Everything else — the rail, the inspector, redrawing, copies, resizing,
-export — already asks `isChart()` and needs no change. If you find yourself
-editing the rail or the canvas to add a chart kind, the abstraction has
-slipped and that is the thing to fix.
+export — already asks `isFigure()` and needs no change. If you find yourself
+editing the rail or the canvas to add a notation, the abstraction has slipped
+and that is the thing to fix.
 
 ## Checks
 
 `npm run self-check` runs three assert-based scripts under `tsx`:
-`scripts/self-check.ts` (parser, layout, connector geometry, copies, charts),
+`scripts/self-check.ts` (parser, layout, connector geometry, copies, and every
+figure's own geometry — a Venn region really falls inside the right rings, a
+fishbone's causes really meet their bone),
 `scripts/mapper-check.ts` (skeletons) and `scripts/editor-check.ts` (styles,
 inspector, export). No test framework. Anything that can be answered without a
 browser should be asserted there rather than clicked through.

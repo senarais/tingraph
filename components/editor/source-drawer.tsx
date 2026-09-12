@@ -3,8 +3,17 @@
 import { useEffect, useRef, useState } from "react";
 import Editor, { loader, type Monaco, type OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
-import { ArrowDown, ArrowRight, Check, Copy, TriangleAlert, Wand2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowRight,
+  Check,
+  Copy,
+  RotateCcw,
+  TriangleAlert,
+  Wand2,
+} from "lucide-react";
 import { useTingraphStore } from "@/lib/store";
+import { TEMPLATES } from "@/lib/templates";
 import { GUIDE_INTRO, GUIDE_SECTIONS, promptFor } from "@/lib/guide";
 import { DiagramCategory, LayoutDirection } from "@/lib/types";
 import { Segmented, SlabButton, Tick } from "@/components/editor/ui";
@@ -96,6 +105,8 @@ interface SourceDrawerProps {
   summary: string;
   error: { message: string; line: number } | null;
   onGenerate: () => void;
+  /** draws the starting diagram again, over whatever is on the sheet */
+  onReset: () => void;
   onEditorMount: OnMount;
 }
 
@@ -128,6 +139,7 @@ export default function SourceDrawer({
   summary,
   error,
   onGenerate,
+  onReset,
   onEditorMount,
 }: SourceDrawerProps) {
   const code = useTingraphStore((s) => s.code);
@@ -137,6 +149,18 @@ export default function SourceDrawer({
   const tab = useTingraphStore((s) => s.sourceTab);
   const setTab = useTingraphStore((s) => s.setSourceTab);
   const codeKeys = useCodeKeys();
+  const [armed, setArmed] = useState(false);
+
+  /** Back to the drawing this notation opens with, source and sheet alike. */
+  const reset = () => {
+    if (!armed) {
+      setArmed(true);
+      return;
+    }
+    setArmed(false);
+    setCode(TEMPLATES[category]);
+    onReset();
+  };
 
   return (
     <>
@@ -206,6 +230,15 @@ export default function SourceDrawer({
                 />
               </div>
             )}
+            <SlabButton
+              onClick={reset}
+              onBlur={() => setArmed(false)}
+              tone={armed ? "solid" : "plain"}
+              title="Put the source and the sheet back to the diagram this notation opens with"
+            >
+              <RotateCcw size={13} />
+              {armed ? "Sure?" : "Reset"}
+            </SlabButton>
             <SlabButton tone="solid" onClick={onGenerate} disabled={!!error}>
               <Wand2 size={13} />
               Generate

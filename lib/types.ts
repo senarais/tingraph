@@ -1,4 +1,5 @@
-import { isChartKind, type ChartKind, type ChartSpec } from "@/lib/chart/spec";
+import { isChartKind, type ChartKind } from "@/lib/chart/spec";
+import type { FigureSpec } from "@/lib/figures/spec";
 
 export type FlowNodeType =
   | "start"
@@ -72,14 +73,34 @@ export interface DSLEdge {
  * almost nothing they need is the same — a chart has no shapes to drop and no
  * arrows to route, and it has a settings panel neither graph wants.
  */
-export type DiagramCategory = "flow" | "bpmn" | "org" | ChartKind;
+export type DiagramCategory = GraphCategory | ChartKind | FigureKind;
 
 export const GRAPH_CATEGORIES = ["flow", "bpmn", "org"] as const;
 
 export type GraphCategory = (typeof GRAPH_CATEGORIES)[number];
 
+/**
+ * The figures that are not charts. A figure is a notation whose whole state is
+ * one object drawn onto the sheet rather than a bag of elements; see
+ * `lib/figures/spec.ts` for why that distinction is the one that matters.
+ */
+export const FIGURE_KINDS = ["mind", "matrix", "venn", "fishbone"] as const;
+
+export type FigureKind = (typeof FIGURE_KINDS)[number];
+
 export function isChart(category: DiagramCategory): category is ChartKind {
   return isChartKind(category);
+}
+
+/** Every notation drawn from one spec: the charts, and the four beside them. */
+export function isFigure(
+  category: DiagramCategory,
+): category is ChartKind | FigureKind {
+  return isChartKind(category) || (FIGURE_KINDS as readonly string[]).includes(category);
+}
+
+export function isGraph(category: DiagramCategory): category is GraphCategory {
+  return (GRAPH_CATEGORIES as readonly string[]).includes(category);
 }
 
 /**
@@ -94,8 +115,8 @@ export interface AST {
   nodes: DSLNode[];
   edges: DSLEdge[];
   pools?: DSLPool[];
-  /** set instead of nodes and edges when the notation is a chart */
-  chart?: ChartSpec;
+  /** set instead of nodes and edges when the notation is a figure */
+  figure?: FigureSpec;
 }
 
 export class DSLError extends Error {
@@ -156,6 +177,6 @@ export interface PositionedAST {
   nodes: PositionedNode[];
   edges: PositionedEdge[];
   pools?: PositionedPool[];
-  /** a chart is laid out where it is drawn, so it travels through unchanged */
-  chart?: ChartSpec;
+  /** a figure is laid out where it is drawn, so it travels through unchanged */
+  figure?: FigureSpec;
 }

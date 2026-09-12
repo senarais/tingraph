@@ -8,7 +8,7 @@ import { DiagramCategory } from "@/lib/types";
  * Every `sample` is real source: `npm run self-check` parses each of them.
  */
 
-export type DiagramFamily = "Process" | "Structure" | "Data";
+export type DiagramFamily = "Process" | "Structure" | "Data" | "Thinking";
 
 /** Which formal ink the preview is drawn in. Named in `lib/ink.ts`. */
 export type Accent = "mono" | "navy" | "oxblood" | "forest" | "slate";
@@ -108,6 +108,62 @@ export const SCATTER_SAMPLE = `scatter "Local Index by Year" {
 }
 `;
 
+export const MIND_SAMPLE = `mind "Web Design" {
+  "Visual Design" {
+    "Colour Scheme"
+    "Typography"
+  }
+  "User Experience" {
+    "Wireframing"
+    "User Research"
+  }
+  "Development" {
+    "Responsive Design"
+  }
+}
+`;
+
+export const MATRIX_SAMPLE = `matrix "Priorities" {
+  x "Value" "Low value" "High value"
+  y "Effort" "High effort" "Low effort"
+
+  top-left "Do later"
+  top-right "Do now"
+  bottom-left "Don't do"
+  bottom-right "Do next"
+}
+`;
+
+export const VENN_SAMPLE = `venn "Three sets" {
+  set A "Set 1"
+  set B "Set 2"
+  set C "Set 3"
+
+  A "126"
+  B "129"
+  C "128"
+  AB "32"
+  ABC "9"
+}
+`;
+
+export const FISHBONE_SAMPLE = `fishbone "The part is the wrong size" {
+  bone "Material" {
+    "Wrong specification"
+    "Poor storage"
+  }
+  bone "Method" {
+    "Wrong procedure"
+  }
+  bone "Machine" {
+    "Machine malfunction"
+  }
+  bone "People" {
+    "Employee mistake"
+  }
+}
+`;
+
 export const READY_DIAGRAMS: DiagramKind[] = [
   {
     id: "flow",
@@ -186,6 +242,50 @@ export const READY_DIAGRAMS: DiagramKind[] = [
     accent: "slate",
     sample: SCATTER_SAMPLE,
   },
+  {
+    id: "mind",
+    name: "Mind map",
+    family: "Thinking",
+    keyword: "mind",
+    summary:
+      "One idea with everything that hangs off it, arranged around it, along two sides or downward — and built branch by branch on the sheet.",
+    parts: ["Central idea", "Branches", "Seven shapes", "Pictures in place of shapes"],
+    accent: "navy",
+    sample: MIND_SAMPLE,
+  },
+  {
+    id: "matrix",
+    name: "2×2 matrix",
+    family: "Thinking",
+    keyword: "matrix",
+    summary:
+      "Two things weighed against each other, the four cases named, and the work dropped into the field where it belongs.",
+    parts: ["Two axes", "Four quadrants", "Items in the field", "Four styles"],
+    accent: "oxblood",
+    sample: MATRIX_SAMPLE,
+  },
+  {
+    id: "venn",
+    name: "Venn diagram",
+    family: "Thinking",
+    keyword: "venn",
+    summary:
+      "Two or three sets and everything that falls in the regions between them, with the overlap dragged to where it reads best.",
+    parts: ["Two or three rings", "Every region", "Adjustable overlap", "Tinted or outlined"],
+    accent: "forest",
+    sample: VENN_SAMPLE,
+  },
+  {
+    id: "fishbone",
+    name: "Fishbone",
+    family: "Thinking",
+    keyword: "fishbone",
+    summary:
+      "One effect at the head and the categories of cause that lead to it, with the causes behind each cause nested under it.",
+    parts: ["The effect", "Bones", "Causes", "Causes behind causes"],
+    accent: "mono",
+    sample: FISHBONE_SAMPLE,
+  },
 ];
 
 /** Announced, not drawable yet. The catalogue greys these out. */
@@ -214,19 +314,37 @@ export const PLANNED_DIAGRAMS: DiagramKind[] = [
     parts: ["States", "Transitions", "Initial and final"],
     accent: "slate",
   },
-  {
-    id: "mindmap",
-    name: "Mind map",
-    family: "Structure",
-    summary: "One central idea and the branches that hang off it.",
-    parts: ["Central node", "Branches", "Leaves"],
-    accent: "slate",
-  },
 ];
 
 export const ALL_DIAGRAMS: DiagramKind[] = [
   ...READY_DIAGRAMS,
   ...PLANNED_DIAGRAMS,
+];
+
+/**
+ * The three the landing page types out. Three on purpose: the hero demo shows
+ * one notation at a time and cycles, and a row of tabs that keeps growing
+ * would wrap and stop being a hero. One from each family.
+ */
+export const HERO_DIAGRAMS: DiagramKind[] = ["bpmn", "flow", "line"]
+  .map((id) => READY_DIAGRAMS.find((kind) => kind.id === id))
+  .filter((kind): kind is DiagramKind => Boolean(kind));
+
+/**
+ * How many the landing page puts on cards before sending the reader to the
+ * catalogue. The order of `READY_DIAGRAMS` is the curation: whatever is first
+ * is what a first-time reader is shown.
+ */
+export const FEATURED_COUNT = 6;
+
+export const FEATURED_DIAGRAMS: DiagramKind[] = READY_DIAGRAMS.slice(
+  0,
+  FEATURED_COUNT,
+);
+
+/** Every family that has something in it, for the catalogue's own filters. */
+export const FAMILIES: DiagramFamily[] = [
+  ...new Set(ALL_DIAGRAMS.map((kind) => kind.family)),
 ];
 
 /** stroke and wash for one preview, matching the editor's formal inks */

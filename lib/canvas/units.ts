@@ -8,9 +8,9 @@
  */
 
 import type { Side } from "@/lib/canvas/connect";
-import type { ChartSpec } from "@/lib/chart/spec";
+import type { FigureSpec } from "@/lib/figures/spec";
 
-export type UnitKind = "node" | "edge" | "pool" | "lane" | "chart";
+export type UnitKind = "node" | "edge" | "pool" | "lane" | "figure";
 
 /** One end of a connector: the element it is tied to, and the side it uses. */
 export interface LinkEnd {
@@ -55,11 +55,12 @@ export interface UnitMark {
   /** edge only: the two ends this connector joins, and how it is routed */
   link?: LinkMark;
   /**
-   * chart only, and only on the frame: everything the chart is. The marks on
-   * the sheet are drawn from this, so the settings panel and the handles on
-   * the sheet both work by rewriting it and letting the chart be drawn again.
+   * figure only, and only on its frame: everything the figure is. The marks on
+   * the sheet are drawn from this, so the settings panel, the handles on the
+   * sheet and the source all work by rewriting it and having the figure drawn
+   * again. See `lib/figures/spec.ts`.
    */
-  chart?: ChartSpec;
+  figure?: FigureSpec;
 }
 
 interface Marked {

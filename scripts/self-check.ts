@@ -9,6 +9,10 @@ import {
   LINE_TEMPLATE,
   PIE_TEMPLATE,
   SCATTER_TEMPLATE,
+  MIND_TEMPLATE,
+  MATRIX_TEMPLATE,
+  VENN_TEMPLATE,
+  FISHBONE_TEMPLATE,
 } from "@/lib/templates";
 import { READY_DIAGRAMS } from "@/lib/diagrams";
 import { DSLError } from "@/lib/types";
@@ -17,8 +21,18 @@ import {
   CATEGORICAL,
   effectivePalette,
   markColor,
+  type ChartSpec,
 } from "@/lib/chart/spec";
 import { layoutChart, niceScale, readValue, tickLabel } from "@/lib/chart/layout-chart";
+import { legendFor } from "@/lib/chart/spec";
+import { rewriteMind, walkMind, type MindSpec } from "@/lib/mind/spec";
+import { layoutMind, pinAt } from "@/lib/mind/layout-mind";
+import type { MatrixSpec } from "@/lib/matrix/spec";
+import { itemAt, matrixField, matrixQuadrants } from "@/lib/matrix/build-matrix";
+import type { VennSpec } from "@/lib/venn/spec";
+import { planVenn } from "@/lib/venn/build-venn";
+import type { FishboneSpec } from "@/lib/fishbone/spec";
+import { planFishbone } from "@/lib/fishbone/build-fishbone";
 import {
   asElement,
   gripSide,
@@ -808,7 +822,7 @@ assert.notEqual(
 
 // -------------------------------------------------------------------- charts
 
-const columns = parseDSL(BAR_TEMPLATE).chart!;
+const columns = parseDSL(BAR_TEMPLATE).figure as ChartSpec;
 assert.equal(columns.kind, "bar");
 assert.deepEqual(columns.categories, ["Apples", "Bananas", "Oranges", "Grapes"]);
 assert.equal(columns.series.length, 1, "readings written plainly make one series");
@@ -818,31 +832,31 @@ assert.equal(columns.options.xTitle, "Favourite fruit");
 
 const grouped = parseDSL(
   `bar "T" {\n layout stacked\n categories A B C\n series "One" 1 2 3\n series "Two" 4 5 6\n}`,
-).chart!;
+).figure as ChartSpec;
 assert.equal(grouped.series.length, 2);
 assert.deepEqual(grouped.series[1].values, [4, 5, 6]);
 assert.equal(grouped.options.layout, "stacked");
 
 // a series shorter than the categories is padded rather than refused
-const halfTyped = parseDSL(`bar "T" {\n categories A B C\n series "One" 1\n}`).chart!;
+const halfTyped = parseDSL(`bar "T" {\n categories A B C\n series "One" 1\n}`).figure as ChartSpec;
 assert.deepEqual(halfTyped.series[0].values, [1, 0, 0], "a half-typed chart still draws");
 
 // `categories` takes its own line, because a category may be a bare number
 const years = parseDSL(
   `line "T" {\n categories 2017 2018\n series "A" 1 2\n}`,
-).chart!;
+).figure as ChartSpec;
 assert.deepEqual(years.categories, ["2017", "2018"]);
 assert.equal(years.series.length, 1, "the series after it is not swallowed");
 
 const cloud = parseDSL(
   `scatter "T" {\n trend on\n series "A" (1, 2) (3, 4) "tip"\n}`,
-).chart!;
+).figure as ChartSpec;
 assert.equal(cloud.series[0].points!.length, 2);
 assert.deepEqual(cloud.series[0].points![0], { x: 1, y: 2 });
 assert.equal(cloud.series[0].points![1].label, "tip", "a point may be named");
 assert.equal(cloud.options.trend, true);
 
-const slices = parseDSL(PIE_TEMPLATE).chart!;
+const slices = parseDSL(PIE_TEMPLATE).figure as ChartSpec;
 assert.equal(slices.categories.length, 6);
 assert.equal(slices.options.percent, true);
 
@@ -879,6 +893,17 @@ assert.equal(niceScale(-4, 7, true).min <= -4, true, "a negative reading fits");
 assert.equal(tickLabel(0.25, 0.25), "0.25", "and the caption keeps its places");
 assert.equal(tickLabel(-0, 1), "0", "with no minus nought");
 
+// "none" means none, even where a key would otherwise be drawn on its own
+{
+  const two = `line "T" { categories A B\n series "One" 3 7\n series "Two" 2 1 }`;
+  const withKey = parseDSL(two).figure as ChartSpec;
+  assert.equal(legendFor(withKey), "bottom", "two series get a key by themselves");
+  const hidden = parseDSL(`${two.slice(0, -1)} legend none }`).figure as ChartSpec;
+  assert.equal(legendFor(hidden), "none", "legend none hides the key");
+  const box = { x: 0, y: 0, width: hidden.options.width, height: hidden.options.height };
+  assert.equal(layoutChart(hidden, box).legend.length, 0, "legend none draws no key");
+}
+
 // every mark lands inside the chart, whatever is asked of it
 const VARIANTS = [
   BAR_TEMPLATE,
@@ -896,7 +921,7 @@ const VARIANTS = [
   `bar "T" { size 200 140\n A 3\n B 7\n C 5 }`,
 ];
 for (const source of VARIANTS) {
-  const spec = parseDSL(source).chart!;
+  const spec = parseDSL(source).figure as ChartSpec;
   const box = { x: 40, y: 30, width: spec.options.width, height: spec.options.height };
   const drawn = layoutChart(spec, box);
   const inside = (point: { x: number; y: number }) =>
@@ -928,7 +953,7 @@ for (const source of VARIANTS) {
 
 // a wash under a line is a closed shape too, or Excalidraw leaves it unfilled
 const washed = layoutChart(
-  parseDSL(`line "T" { area on\n 1 3\n 2 7\n 3 5 }`).chart!,
+  parseDSL(`line "T" { area on\n 1 3\n 2 7\n 3 5 }`).figure as ChartSpec,
   { x: 0, y: 0, width: 520, height: 340 },
 );
 const wash = washed.runs[0].area!;
@@ -936,7 +961,7 @@ assert.ok(wash, "the wash is there when it is asked for");
 assert.deepEqual(wash[0], wash[wash.length - 1], "and it closes on itself");
 
 // the shares of a pie add up to the whole, and each slice closes on itself
-const pieDrawn = layoutChart(parseDSL(PIE_TEMPLATE).chart!, {
+const pieDrawn = layoutChart(parseDSL(PIE_TEMPLATE).figure as ChartSpec, {
   x: 0,
   y: 0,
   width: 520,
@@ -957,7 +982,7 @@ for (const slice of pieDrawn.slices) {
 }
 
 // a reading dragged to a place on the sheet reads as the number drawn there
-const barDrawn = layoutChart(parseDSL(BAR_TEMPLATE).chart!, {
+const barDrawn = layoutChart(parseDSL(BAR_TEMPLATE).figure as ChartSpec, {
   x: 0,
   y: 0,
   width: 520,
@@ -968,6 +993,141 @@ for (const mark of barDrawn.bars) {
     Math.abs(readValue(barDrawn, mark.grip) - mark.value) < 0.1,
     `the grip on a bar of ${mark.value} reads back as ${mark.value}`,
   );
+}
+
+// ------------------------------------------------------------- mind maps
+
+const map = parseDSL(MIND_TEMPLATE).figure as MindSpec;
+assert.equal(map.kind, "mind");
+assert.equal(map.root.label, "Web Design", "the title is the idea in the middle");
+assert.equal(map.root.children.length, 4, "four branches");
+assert.equal(map.root.children[0].children.length, 3, "and three off the first");
+assert.equal(walkMind(map.root).length, 17, "seventeen nodes in all");
+
+const shaped = parseDSL(
+  `mind "T" {\n layout sides\n "One" "#e34948" circle {\n  "Deeper"\n }\n}`,
+).figure as MindSpec;
+assert.equal(shaped.options.layout, "sides");
+assert.equal(shaped.root.children[0].color, "#e34948", "a branch may pin its colour");
+assert.equal(shaped.root.children[0].shape, "circle", "and its shape");
+
+// a branch the reader pinnedMap is drawn where they put it, and takes its own
+// branch with it — while everything else stays exactly where it was
+const roomy = { x: 0, y: 0, width: 760, height: 560 };
+const loose = layoutMind(map, roomy);
+const pinnedSpec: MindSpec = {
+  ...map,
+  root: {
+    ...map.root,
+    children: map.root.children.map((child, index) =>
+      index === 0 ? { ...child, at: { x: -300, y: -200 } } : child,
+    ),
+  },
+};
+const pinnedMap = layoutMind(pinnedSpec, roomy);
+const movedNode = pinnedMap.nodes.find((entry) => entry.id === map.root.children[0].id)!;
+const movedChild = pinnedMap.nodes.find(
+  (entry) => entry.id === map.root.children[0].children[0].id,
+)!;
+const looseChild = loose.nodes.find(
+  (entry) => entry.id === map.root.children[0].children[0].id,
+)!;
+const looseMoved = loose.nodes.find(
+  (entry) => entry.id === map.root.children[0].id,
+)!;
+assert.notDeepEqual(movedNode.at, looseMoved.at, "the pinned branch moved");
+assert.deepEqual(
+  {
+    x: Math.round(movedChild.at.x - looseChild.at.x),
+    y: Math.round(movedChild.at.y - looseChild.at.y),
+  },
+  {
+    x: Math.round(movedNode.at.x - looseMoved.at.x),
+    y: Math.round(movedNode.at.y - looseMoved.at.y),
+  },
+  "and took what hangs off it with it, by the same amount",
+);
+const still = pinnedMap.nodes.find((entry) => entry.id === map.root.children[2].id)!;
+const wasStill = loose.nodes.find((entry) => entry.id === map.root.children[2].id)!;
+assert.deepEqual(still.at, wasStill.at, "a branch nobody touched did not move");
+
+// a point on the sheet reads back as the place a pin would put it
+const back = pinAt(pinnedMap, movedNode.at);
+assert.ok(
+  Math.abs(back.x - -300) < 1 && Math.abs(back.y - -200) < 1,
+  "a branch let go of under the pointer is drawn back under the pointer",
+);
+
+// one node rewritten leaves every other node alone
+const renamed = rewriteMind(map.root, map.root.children[1].id, (found) => ({
+  ...found,
+  label: "Changed",
+}))!;
+assert.equal(renamed.children[1].label, "Changed");
+assert.equal(renamed.children[0].label, map.root.children[0].label, "the rest stands");
+assert.equal(
+  rewriteMind(map.root, map.root.children[1].id, () => null)!.children.length,
+  3,
+  "and removing one takes only that one",
+);
+
+// --------------------------------------------------- matrix, venn, fishbone
+
+const grid = parseDSL(MATRIX_TEMPLATE).figure as MatrixSpec;
+assert.equal(grid.kind, "matrix");
+assert.equal(grid.x.label, "Value");
+assert.equal(grid.y.high, "Low effort", "the high end of the up axis is the top");
+assert.equal(grid.quadrants[1].label, "Do now", "top-right is the second quadrant");
+const field = matrixField(grid, { x: 0, y: 0, width: 560, height: 480 });
+assert.ok(field.width > 60 && field.height > 60, "the field has room left in it");
+const quads = matrixQuadrants(grid, { x: 0, y: 0, width: 560, height: 480 });
+assert.equal(quads.length, 4);
+assert.ok(quads[0].x < quads[1].x && quads[0].y < quads[2].y, "in reading order");
+const placed = itemAt(grid, { x: 0, y: 0, width: 560, height: 480 }, { x: 1, y: 1 });
+assert.ok(
+  placed.x > field.x + field.width - 1 && placed.y < field.y + 1,
+  "all the way across and all the way up is the top right corner",
+);
+
+const rings = parseDSL(VENN_TEMPLATE).figure as VennSpec;
+assert.equal(rings.sets.length, 3);
+assert.equal(rings.regions.ABC, "9");
+const plan = planVenn(rings, { x: 0, y: 0, width: 520, height: 460 });
+for (const centre of plan.centres) {
+  assert.ok(
+    Math.hypot(centre.x - plan.middle.x, centre.y - plan.middle.y) < plan.radius,
+    "every ring covers the middle, or there is no region in all three",
+  );
+}
+for (const [key, spot] of Object.entries(plan.spots)) {
+  const inside = plan.centres.filter(
+    (centre) => Math.hypot(spot.x - centre.x, spot.y - centre.y) <= plan.radius,
+  ).length;
+  assert.equal(inside, key.length, `region ${key} is in exactly ${key.length} ring(s)`);
+}
+for (const name of plan.names) {
+  assert.ok(
+    plan.centres.every(
+      (centre) => Math.hypot(name.at.x - centre.x, name.at.y - centre.y) >= plan.radius - 1,
+    ),
+    "a set's name is written outside every ring",
+  );
+}
+
+const fish = parseDSL(FISHBONE_TEMPLATE).figure as FishboneSpec;
+assert.equal(fish.bones.length, 6);
+assert.equal(fish.bones[0].causes.length, 3);
+const bones = planFishbone(fish, { x: 0, y: 0, width: 820, height: 460 });
+assert.equal(bones.bones.length, 6);
+assert.ok(bones.bones[0].up && !bones.bones[1].up, "bones alternate above and below");
+for (const bone of bones.bones) {
+  assert.ok(
+    bone.tip.x < bone.root.x,
+    "a bone leans back towards the head, so it reads as running into it",
+  );
+  for (const cause of bone.causes) {
+    assert.ok(cause.from.x < cause.at.x, "a cause runs into its bone from the left");
+  }
 }
 
 // the samples the public pages type out are real source, not prose that looks

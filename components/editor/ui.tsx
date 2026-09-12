@@ -86,6 +86,7 @@ export function Segmented<T extends string | number>({
 export function SlabButton({
   children,
   onClick,
+  onBlur,
   disabled,
   tone = "plain",
   title,
@@ -94,6 +95,7 @@ export function SlabButton({
 }: {
   children: ReactNode;
   onClick?: () => void;
+  onBlur?: () => void;
   disabled?: boolean;
   tone?: "plain" | "solid";
   title?: string;
@@ -104,6 +106,7 @@ export function SlabButton({
     <button
       type={type}
       onClick={onClick}
+      onBlur={onBlur}
       disabled={disabled}
       title={title}
       className={`slab-tight press flex items-center justify-center gap-1.5 px-3 py-1.5 text-[12px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none ${

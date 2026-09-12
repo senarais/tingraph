@@ -17,6 +17,10 @@ const CATEGORIES: DiagramCategory[] = [
   "line",
   "pie",
   "scatter",
+  "mind",
+  "matrix",
+  "venn",
+  "fishbone",
 ];
 
 function requested(value: string | string[] | undefined): DiagramCategory | undefined {

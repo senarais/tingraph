@@ -2,8 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  Blend,
   ChartColumn,
   Eraser,
+  Fish,
+  Grid2x2,
   Hand,
   Image as ImageIcon,
   MousePointer2,
@@ -13,11 +16,13 @@ import {
   Shapes,
   Type,
   Wand2,
+  Waypoints,
   type LucideIcon,
 } from "lucide-react";
 import { useTingraphStore, type CanvasTool, type Drawer } from "@/lib/store";
 import { CONNECTORS, defaultConnector, type ConnectorKind } from "@/lib/connectors";
-import { isChart, type DiagramCategory } from "@/lib/types";
+import { figureDef } from "@/lib/figures/registry";
+import { isFigure, type DiagramCategory } from "@/lib/types";
 
 /**
  * Every instrument the editor has, in one column. A tool takes the pointer; a
@@ -25,22 +30,25 @@ import { isChart, type DiagramCategory } from "@/lib/types";
  * lines its notation draws with. Pressing whatever is already held puts it
  * back, so the column is never in a state the reader cannot leave.
  *
- * Each instrument answers to a key as well as to the pointer, and says which
- * key on the label that comes out under the cursor.
+ * Only the two instruments that decide what the pointer *is* answer to a key:
+ * the hand and the pointer itself. Everything else is pressed, because a
+ * letter or a digit belongs to whatever the reader is writing — a caption on
+ * the sheet, a name in a panel, a line of source — far more often than it
+ * belongs to a tool.
  */
 
 interface Entry {
   icon: LucideIcon;
   label: string;
   hint: string;
-  /** the key that reaches for it */
-  key: string;
+  /** the key that reaches for it, on the two that have one */
+  key?: string;
   tool?: CanvasTool;
   drawer?: Drawer;
   /** the connector instrument, which opens its own list */
   lines?: true;
   /** left out of the column when the notation has no use for it */
-  only?: "graph" | "chart";
+  only?: "graph" | "figure";
 }
 
 const INSTRUMENTS: Entry[] = [
@@ -56,30 +64,27 @@ const INSTRUMENTS: Entry[] = [
     icon: Shapes,
     label: "Shapes",
     hint: "Drop a shape on the sheet",
-    key: "2",
     drawer: "shapes",
     only: "graph",
   },
   {
     icon: ChartColumn,
-    label: "Chart",
-    hint: "Readings, colours and everything else",
-    key: "2",
-    drawer: "chart",
-    only: "chart",
+    label: "Figure",
+    hint: "Everything this diagram is made of",
+    drawer: "figure",
+    only: "figure",
   },
-  { icon: Type, label: "Text", hint: "Write on the sheet", key: "3", tool: "text" },
-  { icon: ImageIcon, label: "Image", hint: "Place a picture", key: "4", tool: "image" },
+  { icon: Type, label: "Text", hint: "Write on the sheet", tool: "text" },
+  { icon: ImageIcon, label: "Image", hint: "Place a picture", tool: "image" },
   {
     icon: MoveUpRight,
     label: "Connector",
     hint: "Join two elements",
-    key: "5",
     lines: true,
     only: "graph",
   },
-  { icon: Pencil, label: "Draw", hint: "Freehand stroke", key: "6", tool: "freedraw" },
-  { icon: Eraser, label: "Erase", hint: "Rub something out", key: "7", tool: "eraser" },
+  { icon: Pencil, label: "Draw", hint: "Freehand stroke", tool: "freedraw" },
+  { icon: Eraser, label: "Erase", hint: "Rub something out", tool: "eraser" },
 ];
 
 const PANELS: Entry[] = [
@@ -87,32 +92,74 @@ const PANELS: Entry[] = [
     icon: Wand2,
     label: "Generate",
     hint: "Write the diagram as source",
-    key: "8",
     drawer: "source",
   },
-  { icon: Palette, label: "Style", hint: "Ink and drawing style", key: "9", drawer: "style" },
+  { icon: Palette, label: "Style", hint: "Ink and drawing style", drawer: "style" },
 ];
 
+/** The panel a figure opens under, said and drawn the way that figure is. */
+const FIGURE_ICONS: Partial<Record<DiagramCategory, LucideIcon>> = {
+  mind: Waypoints,
+  matrix: Grid2x2,
+  venn: Blend,
+  fishbone: Fish,
+};
+
 /**
- * What the column carries for one notation. A chart has no shapes to drop and
- * nothing to join, and a graph has no readings to set, so each is offered only
- * what it can use — and the key stays on the same number either way, so `2` is
- * always "this notation's own panel".
+ * What the column carries for one notation. A figure has no shapes to drop and
+ * nothing to join, and a graph has no spec to set, so each is offered only
+ * what it can use. The figure's own panel is named and drawn after the figure
+ * it opens — Fishbone, Venn, Mind map — because "Chart" means nothing on a
+ * sheet that holds none.
  */
 function instrumentsFor(category: DiagramCategory): Entry[] {
-  const wants = isChart(category) ? "chart" : "graph";
-  return INSTRUMENTS.filter((entry) => !entry.only || entry.only === wants);
+  const wants = isFigure(category) ? "figure" : "graph";
+  const def = figureDef(category);
+  return INSTRUMENTS.filter((entry) => !entry.only || entry.only === wants).map(
+    (entry) =>
+      entry.drawer === "figure" && def
+        ? {
+            ...entry,
+            label: def.label,
+            icon: FIGURE_ICONS[category] ?? entry.icon,
+            hint: `Everything this ${def.label.toLowerCase()} is made of`,
+          }
+        : entry,
+  );
 }
 
-/** Whether a key press belongs to whatever the reader is typing into. */
+/**
+ * Whether a key press belongs to whatever the reader is typing into.
+ *
+ * The code editor is the awkward one: Monaco writes through an `EditContext`
+ * on a plain `div`, which is neither an input nor contenteditable, so it has
+ * to be recognised by where it sits rather than by what it is. Miss it and
+ * every letter typed into the source reaches for a tool instead.
+ */
 function typing(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement ||
     target instanceof HTMLSelectElement ||
-    (target instanceof HTMLElement && target.isContentEditable)
+    (target instanceof HTMLElement &&
+      (target.isContentEditable || target.closest(".monaco-editor") !== null))
   );
 }
+
+/** The only keys the column answers to, and what they reach for. */
+const POINTER_KEYS: Record<string, CanvasTool | undefined> = {
+  "0": "hand",
+  h: "hand",
+  "1": "selection",
+  v: "selection",
+};
+
+/**
+ * The keys Excalidraw would otherwise take a tool from. Tingraph draws its
+ * shapes from the notation rather than from a toolbar, so these reach for
+ * nothing — they are stopped so that they do nothing at all.
+ */
+const STOLEN_KEYS = new Set("rdolfpkxaeti23456789".split(""));
 
 /** How a line is drawn, in miniature, beside its name. */
 function LineSample({ kind }: { kind: ConnectorKind }) {
@@ -159,9 +206,11 @@ function Label({ entry, shown }: { entry: Entry; shown: boolean }) {
       <span className="whitespace-nowrap font-mono text-[11.5px] leading-none">
         {entry.label}
       </span>
-      <kbd className="border border-bone/50 px-1 font-mono text-[10px] leading-[14px] text-bone">
-        {entry.key}
-      </kbd>
+      {entry.key && (
+        <kbd className="border border-bone/50 px-1 font-mono text-[10px] leading-[14px] text-bone">
+          {entry.key}
+        </kbd>
+      )}
     </div>
   );
 }
@@ -265,10 +314,18 @@ export default function Rail({ category }: { category: DiagramCategory }) {
   };
 
   /**
-   * The keyboard half of the column. It runs before Excalidraw's own handler
-   * and stops the event there, so a key that would have reached for a tool
-   * Tingraph does not carry — a bare rectangle, Excalidraw's own arrow —
-   * never gets that far.
+   * The keyboard half of the column.
+   *
+   * Two instruments answer to a key, and they are the two that say what the
+   * pointer is: `1` or `v` for the pointer, `0` or `h` for the hand. Every
+   * other key Excalidraw would take one of its own tools from is swallowed
+   * here instead — the rail is the only place a tool is chosen, so a stray `r`
+   * must not leave a rectangle tool in the reader's hand.
+   *
+   * Nothing is swallowed while the reader is writing: in a panel field, in a
+   * caption on the sheet, or in the code editor. The Generate panel goes
+   * further and takes the keyboard entirely — it is open in order to be typed
+   * into, so not even the pointer keys are answered while it is out.
    */
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
@@ -285,35 +342,24 @@ export default function Rail({ category }: { category: DiagramCategory }) {
         setLines(false);
         return;
       }
-      const entry = [...instrumentsFor(category), ...PANELS].find(
-        (instrument) => instrument.key === event.key,
-      );
+      const wanted = POINTER_KEYS[event.key];
+      const entry = wanted
+        ? instrumentsFor(category).find((instrument) => instrument.tool === wanted)
+        : undefined;
       if (entry) {
         event.preventDefault();
         event.stopPropagation();
-        press(entry);
+        // the source panel is out to be written in, so it keeps the keyboard
+        if (drawer !== "source") {
+          press(entry);
+        }
         return;
       }
-      // Excalidraw's own tool letters reach for instruments this editor does
-      // not carry, so they are swallowed rather than left to bounce
-      if (/^[a-z]$/.test(event.key)) {
-        const column = instrumentsFor(category);
-        const by = (label: string) => column.find((entry) => entry.label === label);
-        const named: Record<string, Entry | undefined> = {
-          v: by("Select"),
-          h: by("Hand"),
-          t: by("Text"),
-          a: by("Connector"),
-          e: by("Erase"),
-        };
-        const reached = named[event.key];
-        if (reached || "rdolfpkx".includes(event.key)) {
-          event.preventDefault();
-          event.stopPropagation();
-          if (reached) {
-            press(reached);
-          }
-        }
+      // every other tool key Excalidraw carries: stopped here, answered by
+      // nothing, so the rail stays the only place a tool comes from
+      if (STOLEN_KEYS.has(event.key)) {
+        event.preventDefault();
+        event.stopPropagation();
       }
     };
     const up = (event: KeyboardEvent) => {

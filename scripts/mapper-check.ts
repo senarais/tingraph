@@ -396,14 +396,14 @@ for (const source of [BAR_TEMPLATE, LINE_TEMPLATE, PIE_TEMPLATE, SCATTER_TEMPLAT
   const frame = skeletons[0];
   assert.equal(frame.type, "rectangle", `${ast.category}: the frame comes first`);
   assert.equal(frame.strokeColor, "transparent", "and is not drawn");
-  const mark = (frame.customData as { tingraph?: { kind?: string; chart?: unknown } })
+  const mark = (frame.customData as { tingraph?: { kind?: string; figure?: unknown } })
     ?.tingraph;
-  assert.equal(mark?.kind, "chart");
-  assert.ok(mark?.chart, `${ast.category}: the frame carries the whole chart`);
+  assert.equal(mark?.kind, "figure");
+  assert.ok(mark?.figure, `${ast.category}: the frame carries the whole figure`);
   assert.ok(skeletons.length > 8, `${ast.category}: it has marks on it`);
   for (const piece of skeletons) {
     const own = (piece.customData as { tingraph?: { unit?: string } })?.tingraph;
-    assert.equal(own?.unit, `chart-${ast.category}`, "every piece belongs to the chart");
+    assert.equal(own?.unit, `${ast.category}-1`, "every piece belongs to the figure");
     assert.ok(
       Array.isArray(piece.groupIds) && (piece.groupIds as string[]).length === 1,
       "and moves with it",

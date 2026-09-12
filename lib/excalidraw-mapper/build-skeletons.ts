@@ -12,8 +12,7 @@ import {
 } from "@/lib/types";
 import { marked, type UnitMark } from "@/lib/canvas/units";
 import { connectorInk, connectorKind, defaultConnector } from "@/lib/connectors";
-import { buildChartSkeletons } from "@/lib/chart/build-chart";
-import { chartBox } from "@/lib/chart/layout-chart";
+import { buildFigure } from "@/lib/figures/registry";
 import {
   BPMN_EXTERNAL_LABEL_DISTANCE,
   BPMN_LABEL_FONT_SIZE,
@@ -870,13 +869,14 @@ export function buildSkeletons(
   ink: Ink = MONOCHROME,
   style: SheetStyle = FORMAL,
 ): ExcalidrawElementSkeleton[] {
-  if (positioned.chart) {
-    return buildChartSkeletons(
-      positioned.chart,
-      chartBox(positioned.chart),
+  if (positioned.figure) {
+    const figure = positioned.figure;
+    return buildFigure(
+      figure,
+      { x: 0, y: 0, width: figure.options.width, height: figure.options.height },
       ink,
       style,
-      `chart-${positioned.chart.kind}`,
+      `${figure.kind}-1`,
     );
   }
   const theme = themeFor(ink, positioned.category, style);

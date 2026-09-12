@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { DiagramArt } from "@/components/site/diagram-art";
-import { READY_DIAGRAMS } from "@/lib/diagrams";
+import { HERO_DIAGRAMS } from "@/lib/diagrams";
+import { summarise } from "@/lib/summary";
 import { parseDSL } from "@/lib/parser/parse-dsl";
 
 /**
@@ -91,12 +92,12 @@ export default function HeroDemo() {
   const [picked, setPicked] = useState(false);
   const reduced = useRef(false);
 
-  const kind = READY_DIAGRAMS[index];
+  const kind = HERO_DIAGRAMS[index];
   const source = kind.sample ?? "";
   const tokens = useMemo(() => tokenize(source), [source]);
   const reading = useMemo(() => {
     const ast = parseDSL(source);
-    return { nodes: ast.nodes.length, edges: ast.edges.length, title: ast.title };
+    return { title: ast.title, made: summarise(ast) };
   }, [source]);
 
   useEffect(() => {
@@ -129,7 +130,7 @@ export default function HeroDemo() {
       return;
     }
     const id = window.setTimeout(
-      () => setIndex((n) => (n + 1) % READY_DIAGRAMS.length),
+      () => setIndex((n) => (n + 1) % HERO_DIAGRAMS.length),
       HOLD_MS,
     );
     return () => window.clearTimeout(id);
@@ -140,7 +141,7 @@ export default function HeroDemo() {
   return (
     <div className="slab mx-auto w-full max-w-4xl bg-white">
       <div className="flex items-stretch border-b-2 border-edge">
-        {READY_DIAGRAMS.map((entry, i) => (
+        {HERO_DIAGRAMS.map((entry, i) => (
           <button
             key={entry.id}
             type="button"
@@ -197,7 +198,7 @@ export default function HeroDemo() {
 
       <div className="grid grid-cols-2 border-t-2 border-edge bg-bone sm:grid-cols-4">
         <Cell label="Drawing" value={reading.title} />
-        <Cell label="Elements" value={`${reading.nodes} nodes, ${reading.edges} flows`} />
+        <Cell label="Elements" value={reading.made} />
         <Cell label="Export" value="PNG, JPG, SVG, PDF" />
         <div className="flex items-center border-l-2 border-edge sm:border-l-0">
           <Link

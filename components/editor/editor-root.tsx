@@ -12,6 +12,7 @@ import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { X } from "lucide-react";
 import { useTingraphStore, type Drawer } from "@/lib/store";
+import { TEMPLATES } from "@/lib/templates";
 import { styleFor, type SheetStyle } from "@/lib/sheet";
 import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
 import { computeLayout } from "@/lib/layout/compute-layout";
@@ -32,11 +33,13 @@ import {
   withSnippet,
 } from "@/lib/palette";
 import { applyStyle, reink, restyle, type StylePatch } from "@/lib/canvas/restyle";
-import { newChart, redrawChart, type ChartOnSheet } from "@/lib/canvas/scene";
-import { defaultOptions, type ChartKind, type ChartSpec } from "@/lib/chart/spec";
-import ChartDrawer from "@/components/editor/chart-drawer";
+import { newFigure, redrawFigure, type FigureOnSheet } from "@/lib/canvas/scene";
+import { figureDef } from "@/lib/figures/registry";
+import type { FigureSpec } from "@/lib/figures/spec";
+import FigureDrawer from "@/components/editor/figure-drawer";
 import { fontReady, styleOfFont } from "@/lib/canvas/text-metrics";
 import { unitOf } from "@/lib/canvas/units";
+import { summarise } from "@/lib/summary";
 import type { Ink } from "@/lib/ink";
 import { DSLError, DiagramCategory, LayoutDirection, NodeType } from "@/lib/types";
 import Canvas from "@/components/editor/canvas";
@@ -66,16 +69,11 @@ function readSource(code: string, direction: LayoutDirection): Reading {
   try {
     const ast = parseDSL(code);
     computeLayout(ast, direction);
-    const chart = ast.chart;
     return {
       title: ast.title,
-      nodeCount: chart ? chart.categories.length : ast.nodes.length,
-      edgeCount: chart ? chart.series.length : ast.edges.length,
-      summary: chart
-        ? `${chart.kind === "scatter" ? chart.series.reduce((n, s) => n + (s.points?.length ?? 0), 0) : chart.categories.length} ${
-            chart.kind === "pie" ? "slices" : chart.kind === "scatter" ? "points" : "readings"
-          } · ${chart.series.length} series`
-        : `${ast.nodes.length} nodes · ${ast.edges.length} flows`,
+      nodeCount: ast.nodes.length,
+      edgeCount: ast.edges.length,
+      summary: summarise(ast),
       error: null,
     };
   } catch (cause) {
@@ -115,7 +113,7 @@ function drawFromSource(
 
 const DRAWER_TITLES: Record<Drawer, string> = {
   shapes: "Shapes",
-  chart: "Chart",
+  figure: "Figure",
   source: "Generate",
   style: "Style",
 };
@@ -139,7 +137,9 @@ export default function EditorRoot() {
   const [picked, setPicked] = useState<ExcalidrawElement[]>([]);
   const [dragging, setDragging] = useState<PaletteItem | null>(null);
   const [empty, setEmpty] = useState(false);
-  const [chart, setChart] = useState<ChartOnSheet | null>(null);
+  const [figure, setFigure] = useState<FigureOnSheet | null>(null);
+  /** the part of that figure the reader has hold of, for the ones with parts */
+  const [part, setPart] = useState<string | null>(null);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const monacoRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const counterRef = useRef(1);
@@ -269,22 +269,22 @@ export default function EditorRoot() {
    * A change still under the hand is not written to the history, so a drag
    * across a dozen readings comes back in one undo rather than a dozen.
    */
-  const changeChart = (spec: ChartSpec, settled = true) => {
-    if (!chart || !api) {
+  const changeFigure = (spec: FigureSpec, settled = true) => {
+    if (!figure || !api) {
       return;
     }
     const box = {
-      x: chart.box.x,
-      y: chart.box.y,
+      x: figure.box.x,
+      y: figure.box.y,
       width: spec.options.width,
       height: spec.options.height,
     };
     // every mark is replaced, so anything that was picked is picked again by
     // name rather than by the element it used to be
-    const wasHeld = picked.some((element) => unitOf(element)?.unit === chart.unit);
-    const next = redrawChart(
+    const wasHeld = picked.some((element) => unitOf(element)?.unit === figure.unit);
+    const next = redrawFigure(
       api.getSceneElementsIncludingDeleted(),
-      chart.unit,
+      figure.unit,
       spec,
       box,
       ink,
@@ -297,10 +297,10 @@ export default function EditorRoot() {
             appState: {
               selectedElementIds: Object.fromEntries(
                 next
-                  .filter((element) => unitOf(element)?.unit === chart.unit)
+                  .filter((element) => unitOf(element)?.unit === figure.unit)
                   .map((element) => [element.id, true as const]),
               ),
-              selectedGroupIds: { [chart.unit]: true },
+              selectedGroupIds: { [figure.unit]: true },
             },
           }
         : {}),
@@ -313,24 +313,13 @@ export default function EditorRoot() {
     });
   };
 
-  /** A chart on a sheet that has none yet, in the notation that was chosen. */
-  const addChart = () => {
-    const kind = editorCategory as ChartKind;
-    edit((elements) =>
-      newChart(
-        elements,
-        {
-          kind,
-          title: drawn.title || "Chart",
-          categories: ["One", "Two", "Three"],
-          series: [{ label: "Readings", values: [3, 5, 4] }],
-          options: defaultOptions(kind),
-        },
-        centre(),
-        ink,
-        style,
-      ),
-    );
+  /** A figure on a sheet that has none yet, in the notation that was chosen. */
+  const addFigure = () => {
+    const def = figureDef(editorCategory);
+    if (!def) {
+      return;
+    }
+    edit((elements) => newFigure(elements, def.blank(), centre(), ink, style));
   };
 
   /** The middle of the sheet, for a shape that was clicked rather than dragged. */
@@ -352,8 +341,8 @@ export default function EditorRoot() {
    * Redraws the sheet from the source. This is the only moment the code
    * touches the canvas: everything after it belongs to the reader.
    */
-  const generate = () => {
-    const fresh = drawFromSource(code, ink, direction, style);
+  const generate = (source: string = code) => {
+    const fresh = drawFromSource(source, ink, direction, style);
     if (!api || fresh.length === 0) {
       return;
     }
@@ -451,7 +440,11 @@ export default function EditorRoot() {
         {drawer && (
           <aside className="flex w-[352px] shrink-0 flex-col border-r-2 border-edge bg-bone">
             <header className="flex items-center gap-2 border-b-2 border-edge px-3 py-2.5">
-              <Tick>{DRAWER_TITLES[drawer]}</Tick>
+              <Tick>
+                {drawer === "figure"
+                  ? (figureDef(editorCategory)?.label ?? DRAWER_TITLES.figure)
+                  : DRAWER_TITLES[drawer]}
+              </Tick>
               <button
                 type="button"
                 onClick={closeDrawer}
@@ -463,12 +456,14 @@ export default function EditorRoot() {
               </button>
             </header>
 
-            {drawer === "chart" && (
-              <ChartDrawer
+            {drawer === "figure" && (
+              <FigureDrawer
                 category={editorCategory}
-                chart={chart}
-                onChange={changeChart}
-                onAdd={addChart}
+                figure={figure}
+                onChange={changeFigure}
+                onAdd={addFigure}
+                picked={part}
+                onPick={setPart}
               />
             )}
             {drawer === "shapes" && (
@@ -484,7 +479,8 @@ export default function EditorRoot() {
                 category={editorCategory}
                 summary={result.summary}
                 error={result.error}
-                onGenerate={generate}
+                onGenerate={() => generate()}
+                onReset={() => generate(TEMPLATES[editorCategory])}
                 onEditorMount={handleEditorMount}
               />
             )}
@@ -511,9 +507,11 @@ export default function EditorRoot() {
             }}
             onPoolEdit={edit}
             onEmptyChange={setEmpty}
-            onChart={setChart}
-            chart={chart}
-            onChartChange={changeChart}
+            onFigure={setFigure}
+            figure={figure}
+            onFigureChange={changeFigure}
+            part={part}
+            onPart={setPart}
           />
           <div className="crop-marks pointer-events-none absolute inset-2.5 z-10" />
           <Inspector

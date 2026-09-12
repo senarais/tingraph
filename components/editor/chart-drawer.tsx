@@ -1,8 +1,6 @@
 "use client";
 
-import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import type { ChartOnSheet } from "@/lib/canvas/scene";
 import {
   CHART_STYLES,
   PALETTES,
@@ -11,8 +9,16 @@ import {
   type ChartSeries,
   type ChartSpec,
 } from "@/lib/chart/spec";
-import { isChart, type DiagramCategory } from "@/lib/types";
 import { Field, Segmented, SlabButton, Tick } from "@/components/editor/ui";
+import {
+  ColourDot,
+  IconButton,
+  NumberField,
+  SizeField,
+  TextField,
+} from "@/components/editor/figure-fields";
+
+const round = (value: number) => Math.round(value * 1000) / 1000;
 
 /**
  * Everything a chart is, as controls.
@@ -28,167 +34,11 @@ import { Field, Segmented, SlabButton, Tick } from "@/components/editor/ui";
  */
 
 interface ChartDrawerProps {
-  category: DiagramCategory;
-  chart: ChartOnSheet | null;
+  spec: ChartSpec;
   onChange: (spec: ChartSpec) => void;
-  onAdd: () => void;
 }
 
-const round = (value: number) => Math.round(value * 1000) / 1000;
-
-/** A field that holds what is being typed and hands over only what parses. */
-function NumberField({
-  value,
-  onCommit,
-  title,
-  width = "w-full",
-}: {
-  value: number;
-  onCommit: (value: number) => void;
-  title?: string;
-  width?: string;
-}) {
-  const [draft, setDraft] = useState(String(round(value)));
-  const [shown, setShown] = useState(value);
-  if (shown !== value) {
-    setShown(value);
-    setDraft(String(round(value)));
-  }
-  return (
-    <input
-      value={draft}
-      title={title}
-      aria-label={title}
-      inputMode="decimal"
-      spellCheck={false}
-      onChange={(event) => {
-        const next = event.target.value;
-        setDraft(next);
-        const parsed = Number(next);
-        if (next.trim() !== "" && Number.isFinite(parsed)) {
-          onCommit(parsed);
-        }
-      }}
-      onBlur={() => setDraft(String(round(value)))}
-      className={`${width} border-2 border-edge bg-white px-1.5 py-1 text-right font-mono text-[11.5px] text-ink`}
-    />
-  );
-}
-
-/** A caption field that hands over what was typed when the reader leaves it. */
-function TextField({
-  value,
-  onCommit,
-  title,
-  placeholder,
-}: {
-  value: string;
-  onCommit: (value: string) => void;
-  title?: string;
-  placeholder?: string;
-}) {
-  const [draft, setDraft] = useState(value);
-  const [shown, setShown] = useState(value);
-  if (shown !== value) {
-    setShown(value);
-    setDraft(value);
-  }
-  return (
-    <input
-      value={draft}
-      title={title}
-      aria-label={title}
-      placeholder={placeholder}
-      spellCheck={false}
-      onChange={(event) => setDraft(event.target.value)}
-      onBlur={() => onCommit(draft)}
-      onKeyDown={(event) => {
-        if (event.key === "Enter") {
-          onCommit(draft);
-          (event.target as HTMLInputElement).blur();
-        }
-      }}
-      className="w-full min-w-0 border-2 border-edge bg-white px-1.5 py-1 font-mono text-[11.5px] text-ink"
-    />
-  );
-}
-
-function ColourDot({
-  colour,
-  onPick,
-  title,
-}: {
-  colour: string;
-  onPick: (colour: string) => void;
-  title: string;
-}) {
-  return (
-    <label
-      title={title}
-      className="relative block h-6 w-6 shrink-0 cursor-pointer border-2 border-edge"
-      style={{ backgroundColor: colour }}
-    >
-      <input
-        type="color"
-        value={colour}
-        onChange={(event) => onPick(event.target.value)}
-        className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-        aria-label={title}
-      />
-    </label>
-  );
-}
-
-function IconButton({
-  label,
-  onClick,
-  danger,
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  danger?: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      title={label}
-      aria-label={label}
-      onClick={onClick}
-      className={`grid h-[26px] w-[26px] shrink-0 place-items-center border-2 border-edge bg-white text-ink transition-colors ${
-        danger ? "hover:bg-alert-tint hover:text-alert" : "hover:bg-bone"
-      }`}
-    >
-      {children}
-    </button>
-  );
-}
-
-export default function ChartDrawer({
-  category,
-  chart,
-  onChange,
-  onAdd,
-}: ChartDrawerProps) {
-  if (!chart) {
-    return (
-      <div className="min-h-0 flex-1 overflow-y-auto p-3">
-        <p className="text-[12px] leading-relaxed text-ink-soft">
-          No chart on the sheet yet. Write one in the source and press Generate,
-          or drop a blank one here and set it up with these controls.
-        </p>
-        {isChart(category) && (
-          <SlabButton onClick={onAdd} tone="solid" className="mt-3">
-            <Plus size={13} />
-            Add a {category} chart
-          </SlabButton>
-        )}
-      </div>
-    );
-  }
-
-  const { spec } = chart;
+export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
   const { options } = spec;
   const palette = effectivePalette(spec);
   const bar = spec.kind === "bar";
@@ -629,6 +479,7 @@ export default function ChartDrawer({
           value={options.legend}
           onChange={(value) => set("legend", value)}
           options={[
+            { value: "auto", label: "Auto" },
             { value: "none", label: "None" },
             { value: "bottom", label: "Under" },
             { value: "right", label: "Beside" },
@@ -727,27 +578,11 @@ export default function ChartDrawer({
         </Field>
       )}
 
-      <Field label="Size" className="p-3">
-        <div className="flex items-center gap-1.5">
-          <NumberField
-            value={options.width}
-            width="w-[72px]"
-            title="How wide the chart is drawn"
-            onCommit={(value) => set("width", Math.max(160, Math.min(2400, value)))}
-          />
-          <span className="font-mono text-[11px] text-ink-faint">×</span>
-          <NumberField
-            value={options.height}
-            width="w-[72px]"
-            title="How tall the chart is drawn"
-            onCommit={(value) => set("height", Math.max(120, Math.min(2400, value)))}
-          />
-        </div>
-        <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
-          The chart can also be dragged to size on the sheet; it is drawn again
-          at whatever size it is let go of.
-        </p>
-      </Field>
+      <SizeField
+        width={options.width}
+        height={options.height}
+        onChange={(size) => onChange({ ...spec, options: { ...options, ...size } })}
+      />
     </div>
   );
 }

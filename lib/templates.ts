@@ -120,6 +120,83 @@ export const SCATTER_TEMPLATE = `scatter "Local Index by Year" {
 }
 `;
 
+export const MIND_TEMPLATE = `mind "Web Design" {
+  "Visual Design" {
+    "Colour Scheme"
+    "Typography"
+    "Imagery and Icons"
+  }
+  "User Experience" {
+    "Wireframing"
+    "User Research"
+    "Usability Testing"
+  }
+  "Development" {
+    "Responsive Design"
+    "JavaScript"
+    "HTML and CSS"
+  }
+  "Content Strategy" {
+    "Copywriting"
+    "Search Engine Optimisation"
+    "Content Management"
+  }
+}
+`;
+
+export const MATRIX_TEMPLATE = `matrix "Priorities" {
+  x "Value" "Low value" "High value"
+  y "Effort" "High effort" "Low effort"
+
+  top-left "Do later"
+  top-right "Do now"
+  bottom-left "Don't do"
+  bottom-right "Do next"
+}
+`;
+
+export const VENN_TEMPLATE = `venn "Three sets" {
+  set A "Set 1"
+  set B "Set 2"
+  set C "Set 3"
+
+  A "126"
+  B "129"
+  C "128"
+  AB "32"
+  AC "33"
+  BC "30"
+  ABC "9"
+}
+`;
+
+export const FISHBONE_TEMPLATE = `fishbone "The part is produced the wrong size" {
+  bone "Material" {
+    "Wrong specification of the material"
+    "Poor storage conditions"
+    "Worn out material"
+  }
+  bone "Method" {
+    "Wrong production procedure"
+  }
+  bone "Measurement" {
+    "Wrong size of the mould"
+    "Blueprint mistake"
+  }
+  bone "Environment" {
+    "Wrong production conditions"
+  }
+  bone "Machine" {
+    "Machine malfunction"
+    "Machine defect"
+  }
+  bone "People" {
+    "Employee mistake"
+    "Mistaken machine settings"
+  }
+}
+`;
+
 export const TEMPLATES: Record<DiagramCategory, string> = {
   flow: FLOWCHART_TEMPLATE,
   bpmn: BPMN_TEMPLATE,
@@ -128,6 +205,10 @@ export const TEMPLATES: Record<DiagramCategory, string> = {
   line: LINE_TEMPLATE,
   pie: PIE_TEMPLATE,
   scatter: SCATTER_TEMPLATE,
+  mind: MIND_TEMPLATE,
+  matrix: MATRIX_TEMPLATE,
+  venn: VENN_TEMPLATE,
+  fishbone: FISHBONE_TEMPLATE,
 };
 
 export const TEMPLATE_LABELS: Record<DiagramCategory, string> = {
@@ -138,4 +219,8 @@ export const TEMPLATE_LABELS: Record<DiagramCategory, string> = {
   line: "Line chart",
   pie: "Pie chart",
   scatter: "Scatter plot",
+  mind: "Mind map",
+  matrix: "2×2 matrix",
+  venn: "Venn diagram",
+  fishbone: "Fishbone",
 };

@@ -11,8 +11,15 @@ import {
   EdgeKind,
   NodeType,
   isChart,
+  isFigure,
 } from "@/lib/types";
 import { parseChart } from "@/lib/parser/parse-chart";
+import { parseMind } from "@/lib/parser/parse-mind";
+import {
+  parseFishbone,
+  parseMatrix,
+  parseVenn,
+} from "@/lib/parser/parse-figures";
 
 const FLOW_NODE_TYPES = new Map<string, NodeType>([
   ["start", "start"],
@@ -407,7 +414,9 @@ export function detectCategory(code: string): DiagramCategory | null {
     .replace(/(?:#|\/\/)[^\n]*/g, "")
     .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
     .trimStart();
-  const head = stripped.match(/^(flow|bpmn|org|bar|line|pie|scatter)\b/);
+  const head = stripped.match(
+    /^(flow|bpmn|org|bar|line|pie|scatter|mind|matrix|venn|fishbone)\b/,
+  );
   return head ? (head[1] as DiagramCategory) : null;
 }
 
@@ -415,13 +424,21 @@ export function parseDSL(code: string): AST {
   const category = detectCategory(code);
   if (!category) {
     throw new DSLError(
-      'A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are flow, bpmn, org, bar, line, pie and scatter',
+      'A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are flow, bpmn, org, bar, line, pie, scatter, mind, matrix, venn and fishbone',
       1,
     );
   }
-  if (isChart(category)) {
-    const chart = parseChart(code, category);
-    return { category, title: chart.title, nodes: [], edges: [], chart };
+  if (isFigure(category)) {
+    const figure = isChart(category)
+      ? parseChart(code, category)
+      : category === "mind"
+        ? parseMind(code)
+        : category === "matrix"
+          ? parseMatrix(code)
+          : category === "venn"
+            ? parseVenn(code)
+            : parseFishbone(code);
+    return { category, title: figure.title, nodes: [], edges: [], figure };
   }
   const nodeTypes =
     category === "flow"

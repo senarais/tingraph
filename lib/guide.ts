@@ -7,6 +7,10 @@ import {
   ORG_TEMPLATE,
   PIE_TEMPLATE,
   SCATTER_TEMPLATE,
+  MIND_TEMPLATE,
+  MATRIX_TEMPLATE,
+  VENN_TEMPLATE,
+  FISHBONE_TEMPLATE,
 } from "@/lib/templates";
 
 /**
@@ -137,7 +141,7 @@ const LOOK_ROWS: GuideRow[] = [
   row('colors colorful', "auto, single, colorful, warm, cool, ink"),
   row('colors "#2a78d6"', "one colour, pinned"),
   row("style framed", "plain, ruled, framed, bold"),
-  row("legend bottom", "none, right, bottom, top"),
+  row("legend bottom", "auto, none, right, bottom, top"),
   row("values on", "write the number on every mark"),
   row("size 520 340", "how big the chart is drawn"),
   row("# comment", "line comment (also //)"),
@@ -250,6 +254,142 @@ const SCATTER_SECTIONS: GuideSection[] = [
   { title: "Look", rows: LOOK_ROWS },
 ];
 
+
+const MIND_SECTIONS: GuideSection[] = [
+  {
+    title: "Map",
+    rows: [row('mind "Central idea" {', "open a mind map; the title is the middle")],
+  },
+  {
+    title: "Branches",
+    rows: [
+      row('"A branch"', "one branch off the idea"),
+      row('"A branch" {', "a branch with more hanging off it"),
+      row('"A branch" "#2a78d6"', "a branch in a colour of its own"),
+      row('"A branch" circle', "a branch drawn as a different shape"),
+    ],
+  },
+  {
+    title: "Arrangement",
+    rows: [
+      row("layout radial", "radial, sides, down"),
+      row("spread 150", "how far a level sits from the one above"),
+      row("line curve", "curve, elbow, straight"),
+      row("shape round", "round, pill, box, circle, diamond, hex, none"),
+    ],
+  },
+  {
+    title: "Look",
+    rows: [
+      row("colors colorful", "auto, single, colorful, warm, cool, ink"),
+      row("branch on", "one hue per branch, rather than per level"),
+      row("style formal", "formal, soft, bold, wire"),
+      row("text 13", "how big a caption is set"),
+      row("size 760 560", "how big the map is drawn"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
+const MATRIX_SECTIONS: GuideSection[] = [
+  {
+    title: "Matrix",
+    rows: [row('matrix "Title" {', "open a 2×2 matrix")],
+  },
+  {
+    title: "Axes",
+    rows: [
+      row('x "Value" "Low" "High"', "the across axis, and its two ends"),
+      row('y "Effort" "Low" "High"', "the up axis; low is the bottom end"),
+      row("axis cross", "cross, arrows, tabs, none"),
+    ],
+  },
+  {
+    title: "Quadrants",
+    rows: [
+      row('top-left "Do later"', "name one corner"),
+      row('top-right "Do now" "note"', "a name and a second line"),
+      row('bottom-left "Don\'t do"', "the other two the same way"),
+      row("labels inside", "inside the quadrants, or at the corners"),
+    ],
+  },
+  {
+    title: "Items",
+    rows: [row('item "Rewrite docs" 70 30', "a card, at a percentage across and up")],
+  },
+  {
+    title: "Look",
+    rows: [
+      row("style filled", "plain, filled, boxed, cards"),
+      row("colors colorful", "auto, single, colorful, warm, cool, ink"),
+      row("size 560 480", "how big the matrix is drawn"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
+const VENN_SECTIONS: GuideSection[] = [
+  {
+    title: "Diagram",
+    rows: [row('venn "Title" {', "open a Venn diagram")],
+  },
+  {
+    title: "Sets",
+    rows: [
+      row('set A "Human"', "name a ring; two or three of them"),
+      row('set A "Human" "#2a78d6"', "a ring in a colour of its own"),
+      row("overlap 0.5", "how far the rings sit into each other"),
+    ],
+  },
+  {
+    title: "Regions",
+    rows: [
+      row('A "126"', "what is only in A"),
+      row('AB "32"', "what is in A and B but not C"),
+      row('ABC "9"', "what is in all three"),
+      row('out "Kermit"', "what is in none of them"),
+    ],
+  },
+  {
+    title: "Look",
+    rows: [
+      row("style tint", "outline, tint, bold"),
+      row("colors colorful", "auto, single, colorful, warm, cool, ink"),
+      row("zeros on", "write a nought in an empty region"),
+      row("size 520 460", "how big the diagram is drawn"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
+const FISHBONE_SECTIONS: GuideSection[] = [
+  {
+    title: "Diagram",
+    rows: [row('fishbone "The effect" {', "open one; the title goes in the head")],
+  },
+  {
+    title: "Bones",
+    rows: [
+      row('bone "Material" {', "a category of cause; close it with }"),
+      row('"A cause"', "one cause on that bone"),
+      row('"A cause" {', "a cause with what is behind it"),
+      row('bone "Material" "#e34948"', "a bone in a colour of its own"),
+    ],
+  },
+  {
+    title: "Look",
+    rows: [
+      row("style formal", "formal, boxed, bold"),
+      row("head arrow", "arrow, box, curve"),
+      row("angle 60", "how steeply a bone leaves the spine"),
+      row("arrows on", "arrowheads where a cause meets its bone"),
+      row("colors colorful", "auto, single, colorful, warm, cool, ink"),
+      row("size 820 460", "how big it is drawn"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
 export const GUIDE_SECTIONS: Record<DiagramCategory, GuideSection[]> = {
   flow: FLOW_SECTIONS,
   bpmn: BPMN_SECTIONS,
@@ -258,6 +398,10 @@ export const GUIDE_SECTIONS: Record<DiagramCategory, GuideSection[]> = {
   line: LINE_SECTIONS,
   pie: PIE_SECTIONS,
   scatter: SCATTER_SECTIONS,
+  mind: MIND_SECTIONS,
+  matrix: MATRIX_SECTIONS,
+  venn: VENN_SECTIONS,
+  fishbone: FISHBONE_SECTIONS,
 };
 
 /** One line of orientation, shown at the top of the guide. */
@@ -269,6 +413,10 @@ export const GUIDE_INTRO: Record<DiagramCategory, string> = {
   line: "Name the readings along the axis, then one series per line you want drawn. Everything here is also a control in the Chart panel.",
   pie: "Write one slice per line. Shares are worked out for you, so the numbers can be counts rather than percentages.",
   scatter: "Write the points as (across, up) pairs, grouped into series. Everything here is also a control in the Chart panel.",
+  mind: "Write the branches as an outline: a caption, and a block under it for whatever hangs off it. Most of a mind map is built on the sheet instead — this is the quick way to start one.",
+  matrix: "Name the two axes and their ends, then the four corners. Items are dropped into the field and dragged where they belong on the sheet.",
+  venn: "Name the sets, then say what falls in each region between them. A region is named by the sets it is in: A, AB, ABC.",
+  fishbone: "The title is the effect, in the head. Each bone is a category of cause, and what is written inside it are the causes themselves.",
 };
 
 /** The rules every chart shares, with the one word that differs filled in. */
@@ -281,7 +429,35 @@ const CHART_RULES = (keyword: string, mark: string): string[] => [
   "Do not invent settings. Every one the language has is listed above.",
 ];
 
+const FIGURE_RULES = (keyword: string, body: string[]): string[] => [
+  `The file is one \`${keyword} "Title" { ... }\` block. Nothing may sit outside it.`,
+  ...body,
+  "Settings are written as `name value`, in any order.",
+  "Do not invent settings. Every one the language has is listed above.",
+];
+
 const RULES: Record<DiagramCategory, string[]> = {
+  mind: FIGURE_RULES("mind", [
+    "The title is the idea in the middle; everything else hangs off it.",
+    "A branch is a caption in quotes on its own line. Give it a `{ ... }` block for whatever hangs off it, nested as deep as you like.",
+    "A colour and a shape may follow a branch's caption, in that order, and apply to that branch alone.",
+  ]),
+  matrix: FIGURE_RULES("matrix", [
+    "`x` and `y` each take three captions: the axis name, the low end, the high end. On `y`, low is the bottom.",
+    "The four corners are `top-left`, `top-right`, `bottom-left` and `bottom-right`, each with a name and optionally a second line.",
+    "`item \"Name\" 70 30` places a card at a percentage across and up the field.",
+  ]),
+  venn: FIGURE_RULES("venn", [
+    "Declare two or three sets with `set A \"Name\"`, in order: A, then B, then C.",
+    "A region is named by the sets it belongs to — `A`, `AB`, `ABC` — and `out` is what belongs to none of them.",
+    "A region nobody names is left empty rather than drawn as a blank.",
+  ]),
+  fishbone: FIGURE_RULES("fishbone", [
+    "The title is the effect, and it is written in the head.",
+    "Each category of cause is `bone \"Name\" { ... }`, and the causes inside it are captions in quotes.",
+    "A cause may take a `{ ... }` block of its own for what is behind it, one level deep.",
+    "Bones alternate above and below the spine in the order they are written.",
+  ]),
   flow: [
     "The file is one `flow \"Title\" { ... }` block. Nothing may sit outside it.",
     "An element is `<keyword> <ID> \"Label\"`, one per line. The ID is short, unique, and never quoted.",
@@ -316,6 +492,10 @@ const KEYWORD: Record<DiagramCategory, string> = {
   line: "line",
   pie: "pie",
   scatter: "scatter",
+  mind: "mind",
+  matrix: "matrix",
+  venn: "venn",
+  fishbone: "fishbone",
 };
 
 const EXAMPLE: Record<DiagramCategory, string> = {
@@ -326,6 +506,10 @@ const EXAMPLE: Record<DiagramCategory, string> = {
   line: LINE_TEMPLATE,
   pie: PIE_TEMPLATE,
   scatter: SCATTER_TEMPLATE,
+  mind: MIND_TEMPLATE,
+  matrix: MATRIX_TEMPLATE,
+  venn: VENN_TEMPLATE,
+  fishbone: FISHBONE_TEMPLATE,
 };
 
 const NOTATION_NAME: Record<DiagramCategory, string> = {
@@ -336,6 +520,10 @@ const NOTATION_NAME: Record<DiagramCategory, string> = {
   line: "line chart",
   pie: "pie chart",
   scatter: "scatter plot",
+  mind: "mind map",
+  matrix: "2×2 matrix",
+  venn: "Venn diagram",
+  fishbone: "fishbone diagram",
 };
 
 /**

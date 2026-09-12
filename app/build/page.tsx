@@ -7,7 +7,7 @@ import { PLANNED_DIAGRAMS, READY_DIAGRAMS } from "@/lib/diagrams";
 export const metadata: Metadata = {
   title: "Diagrams — Tingraph",
   description:
-    "Every notation Tingraph can draw: flowcharts, BPMN 2.0 and org charts today, with more on the way.",
+    "Every notation Tingraph can draw: flowcharts, BPMN 2.0, org charts and bar, line, pie and scatter charts today, with more on the way.",
 };
 
 export default function BuildPage() {
@@ -36,9 +36,11 @@ export default function BuildPage() {
                 Everything Tingraph can draw
               </h1>
               <p className="mt-3 max-w-[62ch] text-[14.5px] leading-relaxed text-ink-soft">
-                Three notations are drawable today. The rest are here so you can
-                see where this is going — a card says plainly which of the two it
-                is, and only a ready one opens the editor.
+                {READY_DIAGRAMS.length} notations are drawable today. The rest
+                are here so you can see where this is going — a card says plainly
+                which of the two it is, and only a ready one opens the editor.
+                Search by name, by keyword, or by what a notation puts on the
+                sheet.
               </p>
 
               <div className="mt-9">

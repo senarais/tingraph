@@ -14,14 +14,15 @@ import { styleFor } from "@/lib/sheet";
 import {
   addLane,
   addPoolBelow,
-  chartsOn,
+  figuresOn,
   normalizeUnits,
   poolBoxes,
+  removeLane,
   removePool,
   reunit,
-  syncCharts,
+  syncFigures,
   syncConnectors,
-  type ChartOnSheet,
+  type FigureOnSheet,
   type PoolBox,
 } from "@/lib/canvas/scene";
 import { held, selection } from "@/lib/canvas/inspect";
@@ -30,9 +31,9 @@ import type { Rules } from "@/lib/canvas/connect";
 import type { ConnectorStyle } from "@/lib/excalidraw-mapper/build-skeletons";
 import { SHAPE_DRAG_TYPE, paletteShapeSize, type PaletteItem } from "@/lib/palette";
 import { DiagramCategory } from "@/lib/types";
-import ChartControls from "@/components/editor/chart-controls";
+import FigureControls from "@/components/editor/figure-controls";
 import ConnectLayer from "@/components/editor/connect-layer";
-import type { ChartSpec } from "@/lib/chart/spec";
+import type { FigureSpec } from "@/lib/figures/spec";
 import ShapeGhost from "@/components/editor/shape-ghost";
 import PoolControls, { type CanvasView } from "@/components/editor/pool-controls";
 import CanvasTools from "@/components/editor/canvas-tools";
@@ -56,11 +57,14 @@ interface CanvasProps {
   ) => void;
   /** whether there is anything left to fit or to export */
   onEmptyChange: (empty: boolean) => void;
-  /** the chart the settings panel is looking at, or null when there is none */
-  onChart: (chart: ChartOnSheet | null) => void;
-  /** the chart on the sheet right now, and the way to write it back */
-  chart: ChartOnSheet | null;
-  onChartChange: (spec: ChartSpec, settled: boolean) => void;
+  /** the figure the settings panel is looking at, or null when there is none */
+  onFigure: (figure: FigureOnSheet | null) => void;
+  /** the figure on the sheet right now, and the way to write it back */
+  figure: FigureOnSheet | null;
+  onFigureChange: (spec: FigureSpec, settled: boolean) => void;
+  /** the part of that figure the reader has hold of */
+  part: string | null;
+  onPart: (id: string | null) => void;
 }
 
 const NO_VIEW: CanvasView = {
@@ -92,9 +96,11 @@ export default function Canvas({
   onDropShape,
   onPoolEdit,
   onEmptyChange,
-  onChart,
-  chart,
-  onChartChange,
+  onFigure,
+  figure,
+  onFigureChange,
+  part,
+  onPart,
 }: CanvasProps) {
   const ink = useTingraphStore((s) => s.ink);
   const tool = useTingraphStore((s) => s.tool);
@@ -108,7 +114,7 @@ export default function Canvas({
   const [empty, setEmpty] = useState(false);
   const [view, setView] = useState<CanvasView>(NO_VIEW);
   const [line, setLine] = useState<ExcalidrawElement | null>(null);
-  /** whether the chart on the sheet is the thing currently picked */
+  /** whether the figure on the sheet is the thing currently picked */
   const [chartHeld, setChartHeld] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
   const ghostRef = useRef<HTMLDivElement>(null);
@@ -215,7 +221,7 @@ export default function Canvas({
       const cut = syncConnectors(fix?.elements ?? elements, rulesRef.current, busy);
       // a chart the reader has stretched is drawn again at the size they
       // dragged it to, rather than left as scaled shapes
-      const drawn = syncCharts(cut ?? fix?.elements ?? elements, ink, sheet, busy);
+      const drawn = syncFigures(cut ?? fix?.elements ?? elements, ink, sheet, busy);
       const next = drawn ?? cut ?? fix?.elements;
       // Excalidraw offers its own point editor for any line it is shown, and
       // its handles fight the routing; a Tingraph connector carries its own
@@ -226,9 +232,19 @@ export default function Canvas({
       const routed = scene.some(
         (element) => element.id === editing && unitOf(element)?.link,
       );
+      // a figure's captions are cut from its spec, so Excalidraw's own caption
+      // editor would write into a mark the next redraw throws away; the figure
+      // is renamed through its own handles instead
+      const caption = state.editingTextElement;
+      const drawnCaption =
+        caption &&
+        scene.some(
+          (element) => element.id === caption.id && unitOf(element)?.kind === "figure",
+        );
       const patch = {
         ...(fix?.appState ?? {}),
         ...(routed ? { editingLinearElement: null, selectedLinearElement: null } : {}),
+        ...(drawnCaption ? { editingTextElement: null } : {}),
       };
       if (next || Object.keys(patch).length > 0) {
         // deferred: this runs inside Excalidraw's own commit
@@ -269,9 +285,9 @@ export default function Canvas({
         setLine(alone);
       }
 
-      // --- the chart the settings panel works on: the one picked, or the one
+      // --- the figure the settings panel works on: the one picked, or the one
       // on the sheet when there is only one
-      const sheetCharts = chartsOn(scene);
+      const sheetCharts = figuresOn(scene);
       const chosen = new Set(
         picked.map((element) => unitOf(element)?.unit).filter(Boolean),
       );
@@ -285,7 +301,7 @@ export default function Canvas({
       if (stamp !== chartRef.current) {
         chartRef.current = stamp;
         setChartHeld(mine);
-        onChart(current);
+        onFigure(current);
       }
 
       // --- the canvas can put a tool back itself, so the rail follows it
@@ -320,7 +336,7 @@ export default function Canvas({
         height: state.height,
       });
     },
-    [ink, sheet, onChart, onEmptyChange, onSelection, setTool],
+    [ink, sheet, onFigure, onEmptyChange, onSelection, setTool],
   );
 
   return (
@@ -406,11 +422,13 @@ export default function Canvas({
           },
         }}
       />
-      <ChartControls
+      <FigureControls
         api={api}
-        chart={chartHeld ? chart : null}
+        figure={chartHeld ? figure : null}
         view={view}
-        onChange={onChartChange}
+        picked={part}
+        onPick={onPart}
+        onChange={onFigureChange}
       />
       <ConnectLayer
         api={api}
@@ -448,6 +466,7 @@ export default function Canvas({
         pools={pools}
         view={view}
         onAddLane={(pool) => onPoolEdit((elements) => addLane(elements, pool, ink))}
+        onRemoveLane={(pool) => onPoolEdit((elements) => removeLane(elements, pool))}
         onAddPool={(pool) =>
           onPoolEdit((elements) => addPoolBelow(elements, pool, ink))
         }

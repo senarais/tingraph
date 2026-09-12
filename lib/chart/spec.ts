@@ -25,8 +25,13 @@ export type Orientation = "vertical" | "horizontal";
 /** What a bar chart does with more than one series. */
 export type BarLayout = "grouped" | "stacked";
 
-/** Where the key sits, or that there is none. */
-export type LegendPlace = "none" | "right" | "bottom" | "top";
+/**
+ * Where the key sits. `auto` is the default and puts one under the plot as
+ * soon as there is more than one series, because colour alone must never be
+ * the only thing telling them apart; `none` means none, and is the reader's to
+ * choose even when there are several.
+ */
+export type LegendPlace = "auto" | "none" | "right" | "bottom" | "top";
 
 /** Which axis is ruled behind the marks. */
 export type GridLines = "none" | "value" | "category" | "both";
@@ -172,7 +177,7 @@ export function effectivePalette(spec: ChartSpec): PaletteId {
  */
 export function markColor(
   palette: PaletteId,
-  options: ChartOptions,
+  options: { color: string },
   index: number,
   pinned?: string,
 ): string {
@@ -282,7 +287,7 @@ export function defaultOptions(kind: ChartKind): ChartOptions {
     palette: "auto",
     color: DEFAULT_MARK,
     style: kind === "pie" ? "plain" : "ruled",
-    legend: "none",
+    legend: "auto",
     values: kind === "pie",
     percent: kind === "pie",
     grid: kind === "pie" ? "none" : "value",
@@ -306,7 +311,7 @@ export function defaultOptions(kind: ChartKind): ChartOptions {
  * slices on the sheet, so it only needs one when the reader asks.
  */
 export function legendFor(spec: ChartSpec): LegendPlace {
-  if (spec.options.legend !== "none") {
+  if (spec.options.legend !== "auto") {
     return spec.options.legend;
   }
   return spec.kind !== "pie" && spec.series.length > 1 ? "bottom" : "none";

@@ -129,11 +129,12 @@ export function controlsFor(
   const mark = unitOf(head);
   const hasText = picked.some((element) => element.type === "text");
 
-  if (mark?.kind === "chart") {
+  if (mark?.kind === "figure") {
     return {
       ...NOTHING,
-      name: "Chart",
-      fixed: "A chart is set from the Chart panel, and adjusted by its handles on the sheet.",
+      name: "Figure",
+      fixed:
+        "A figure is set from its own panel in the rail, and adjusted by its handles on the sheet.",
     };
   }
 

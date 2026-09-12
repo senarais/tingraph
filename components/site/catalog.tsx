@@ -7,17 +7,19 @@ import { DiagramArt } from "@/components/site/diagram-art";
 import {
   ACCENTS,
   ALL_DIAGRAMS,
+  FAMILIES,
   type DiagramFamily,
   type DiagramKind,
 } from "@/lib/diagrams";
 
 /**
- * The full list of notations, filtered in the browser. Three ready ones and the
+ * The full list of notations, filtered in the browser: the ready ones and the
  * ones still to come — a card says which it is, and only a ready card opens the
- * editor.
+ * editor. This is the page the landing page sends a reader to once there are
+ * more notations than it puts on cards, so every new one has to arrive here.
  */
 
-const FAMILIES: DiagramFamily[] = ["Process", "Structure"];
+
 type Status = "Ready now" | "Planned";
 const STATUSES: Status[] = ["Ready now", "Planned"];
 

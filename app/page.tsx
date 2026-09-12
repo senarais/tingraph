@@ -4,7 +4,7 @@ import { DiagramArt } from "@/components/site/diagram-art";
 import HeroDemo from "@/components/site/hero-demo";
 import HowItWorks from "@/components/site/how-it-works";
 import { SiteFooter, SiteNav } from "@/components/site/site-chrome";
-import { ACCENTS, READY_DIAGRAMS } from "@/lib/diagrams";
+import { ACCENTS, FEATURED_DIAGRAMS, READY_DIAGRAMS } from "@/lib/diagrams";
 
 const AUDIENCES = [
   "Thesis figures",
@@ -71,7 +71,7 @@ const FAQ = [
   },
   {
     q: "Which notations can it draw today?",
-    a: "Flowcharts, BPMN 2.0 with pools and lanes, and org charts with role bands and sub-role units. More are listed on the diagrams page as they arrive.",
+    a: "Flowcharts, BPMN 2.0 with pools and lanes, org charts with role bands and sub-role units, and bar, line, pie and scatter charts. Every one of them is listed on the diagrams page, which is where new ones appear first.",
   },
   {
     q: "Where is my work saved?",
@@ -95,7 +95,7 @@ export default function Home() {
           <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-14 sm:px-6 sm:pt-20">
             <div className="mx-auto flex w-fit items-center gap-3 border-2 border-edge bg-white p-1 pl-4">
               <span className="text-[12.5px] text-ink">
-                Three notations ready, more on the way
+                {READY_DIAGRAMS.length} notations ready, more on the way
               </span>
               <Link
                 href="/build"
@@ -113,9 +113,9 @@ export default function Home() {
             </h1>
 
             <p className="mx-auto mt-6 max-w-[46ch] text-center text-[15px] leading-relaxed text-ink-soft sm:text-base">
-              A small language for flowcharts, BPMN 2.0 and org charts. Spacing,
-              routing and lane geometry are worked out for you, and every shape
-              stays editable once it lands on the sheet.
+              A small language for flowcharts, BPMN 2.0, org charts, charts,
+              mind maps and more. Spacing, routing and geometry are worked out
+              for you, and every shape stays editable once it lands on the sheet.
             </p>
 
             <div className="mt-10">
@@ -162,7 +162,7 @@ export default function Home() {
             </div>
 
             <div className="mt-10 grid gap-6 md:grid-cols-3">
-              {READY_DIAGRAMS.map((kind) => (
+              {FEATURED_DIAGRAMS.map((kind) => (
                 <Link
                   key={kind.id}
                   href={`/editor?type=${kind.id}`}
@@ -198,6 +198,16 @@ export default function Home() {
                 </Link>
               ))}
             </div>
+
+            {READY_DIAGRAMS.length > FEATURED_DIAGRAMS.length && (
+              <Link
+                href="/build"
+                className="slab-tight press mt-6 flex items-center justify-center gap-2 bg-white px-4 py-3.5 text-[13.5px] font-medium text-ink"
+              >
+                Browse all {READY_DIAGRAMS.length} notations, searchable
+                <ArrowRight size={14} />
+              </Link>
+            )}
           </div>
         </section>
 

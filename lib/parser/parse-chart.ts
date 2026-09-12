@@ -199,6 +199,7 @@ class ChartParser {
         return;
       case "legend":
         this.options.legend = this.oneOf(tok, name, [
+          "auto",
           "none",
           "right",
           "bottom",

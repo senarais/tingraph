@@ -4,6 +4,9 @@ import { computeLayout } from "../lib/layout/compute-layout";
 import { buildSkeletons } from "../lib/excalidraw-mapper/build-skeletons";
 import { shapeFamily } from "../lib/layout/compute-layout";
 import { controlsFor, held } from "../lib/canvas/inspect";
+import Module from "node:module";
+import { createRequire } from "node:module";
+import type { PoolBox } from "../lib/canvas/scene";
 import { jpegToPdf } from "../lib/export/pdf";
 import { promptFor, GUIDE_SECTIONS } from "../lib/guide";
 import { customInk, inkFor, washFor } from "../lib/ink";
@@ -13,6 +16,31 @@ import type { DiagramCategory } from "../lib/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 
 type Skel = Record<string, unknown> & { id?: string; type: string };
+
+/**
+ * The scene rules, without a browser.
+ *
+ * `lib/canvas/scene.ts` keeps the sheet honest — it re-forms groups, decides
+ * what a double click may reach, and edits pools — and all of that is ordinary
+ * logic worth asserting. It only touches Excalidraw for two helpers that need
+ * a DOM to import, so those two are stood in for here and the rules underneath
+ * are checked directly.
+ */
+const loader = Module as unknown as {
+  _load: (request: string, parent: unknown, main: boolean) => unknown;
+};
+const loadModule = loader._load;
+loader._load = function (request: string, parent: unknown, main: boolean) {
+  if (request === "@excalidraw/excalidraw") {
+    return {
+      newElementWith: (element: object, patch: object) => ({ ...element, ...patch }),
+      convertToExcalidrawElements: (skeletons: unknown[]) => skeletons,
+    };
+  }
+  return loadModule.call(this, request, parent, main);
+};
+const scene = createRequire(__filename)("../lib/canvas/scene") as typeof import("../lib/canvas/scene");
+const { normalizeUnits, removeLane } = scene;
 
 const byId = (skeletons: unknown[]) =>
   new Map(skeletons.map((s) => [String((s as Skel).id ?? ""), s as Skel]));
@@ -271,6 +299,138 @@ async function checkPdf(): Promise<void> {
   });
   const startxref = Number(/startxref\s+(\d+)/.exec(text)![1]);
   assert.ok(text.startsWith("xref", startxref), "and the table is where the trailer says");
+}
+
+// ------------------------------------------------- a figure has no inside
+{
+  const frame = fake(
+    "rectangle",
+    { unit: "venn-1", kind: "figure", core: true, figure: { kind: "venn" } },
+    { id: "frame", groupIds: ["venn-1"], x: 0, y: 0, width: 400, height: 300 },
+  );
+  const ring = fake(
+    "ellipse",
+    { unit: "venn-1", kind: "figure" },
+    { id: "ring", groupIds: ["venn-1"], x: 40, y: 40, width: 200, height: 200 },
+  );
+  // the reader double-clicked the figure, which in Excalidraw steps inside it
+  const fix = normalizeUnits([frame, ring], {
+    selectedElementIds: { frame: true },
+    selectedGroupIds: {},
+    editingGroupId: "venn-1",
+  });
+  assert.ok(fix?.appState, "stepping into a figure is put right");
+  assert.equal(fix!.appState!.editingGroupId, null, "nobody is left inside it");
+  assert.deepEqual(
+    Object.keys(fix!.appState!.selectedElementIds).sort(),
+    ["frame", "ring"],
+    "the whole figure is held instead of the frame alone",
+  );
+
+  // a graph element still opens on its caption carrier, which is the point of it
+  const box = fake(
+    "rectangle",
+    { unit: "bpmn-A1", kind: "node", core: true },
+    { id: "box", groupIds: ["bpmn-A1"] },
+  );
+  const marker = fake(
+    "line",
+    { unit: "bpmn-A1", kind: "node" },
+    { id: "marker", groupIds: ["bpmn-A1"] },
+  );
+  const inside = normalizeUnits([box, marker], {
+    selectedElementIds: { marker: true },
+    selectedGroupIds: {},
+    editingGroupId: "bpmn-A1",
+  });
+  assert.equal(
+    inside?.appState?.editingGroupId,
+    "bpmn-A1",
+    "a task can still be stepped into",
+  );
+  assert.deepEqual(
+    Object.keys(inside!.appState!.selectedElementIds),
+    ["box"],
+    "and lands on the piece that carries its caption",
+  );
+}
+
+// ------------------------------------------------------ taking a lane off
+{
+  const pool: PoolBox = {
+    unit: "pool-P1",
+    x: 0,
+    y: 0,
+    width: 600,
+    height: 200,
+    band: 30,
+    laneBand: 24,
+  };
+  const body = fake(
+    "rectangle",
+    { unit: "pool-P1", kind: "pool", core: true },
+    { id: "pool", x: 0, y: 0, width: 600, height: 200 },
+  );
+  const top = fake(
+    "rectangle",
+    { unit: "lane-L1", kind: "lane" },
+    { id: "lane1", x: 30, y: 0, width: 570, height: 100 },
+  );
+  const low = fake(
+    "rectangle",
+    { unit: "lane-L2", kind: "lane" },
+    { id: "lane2", x: 30, y: 100, width: 570, height: 100 },
+  );
+  const task = fake(
+    "rectangle",
+    { unit: "bpmn-T1", kind: "node", core: true },
+    { id: "task", x: 120, y: 130, width: 80, height: 40 },
+  );
+  const below = fake("rectangle", undefined, {
+    id: "after",
+    x: 0,
+    y: 260,
+    width: 600,
+    height: 40,
+  });
+
+  // a line into the lane that goes has nothing left to join
+  const line = fake(
+    "arrow",
+    {
+      unit: "line-1",
+      kind: "connector",
+      link: { line: "sequence", from: { unit: "bpmn-A1" }, to: { unit: "bpmn-T1" } },
+    },
+    { id: "line", x: 60, y: 60, width: 60, height: 70 },
+  );
+  const keeper = fake(
+    "arrow",
+    {
+      unit: "line-2",
+      kind: "connector",
+      link: { line: "sequence", from: { unit: "lane-L1" }, to: { unit: "lane-L1" } },
+    },
+    { id: "keeper", x: 60, y: 20, width: 40, height: 10 },
+  );
+
+  const cut = removeLane([body, top, low, task, below, line, keeper], pool);
+  const find = (id: string) => cut.find((element) => element.id === id)!;
+  assert.equal(find("lane2").isDeleted, true, "the bottom lane goes");
+  assert.equal(find("task").isDeleted, true, "and what was drawn in it goes with it");
+  assert.equal(find("lane1").isDeleted, undefined, "the lane above stays");
+  assert.equal(find("pool").height, 100, "the pool shrinks by exactly that lane");
+  assert.equal(find("after").y, 160, "and the sheet below comes up by the same");
+  assert.equal(find("line").isDeleted, true, "a line into it goes too");
+  assert.equal(find("keeper").isDeleted, undefined, "one joining what stays is kept");
+
+  // the last lane is the pool's own body, so it is left alone
+  const alone = removeLane([body, top], { ...pool, height: 100 });
+  assert.equal(
+    alone.find((element) => element.id === "lane1")!.isDeleted,
+    undefined,
+    "a pool never loses its last lane",
+  );
 }
 
 checkPdf().then(() => {

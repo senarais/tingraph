@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus, Rows3, Trash2 } from "lucide-react";
+import { Minus, Plus, Rows3, Trash2 } from "lucide-react";
 import type { PoolBox } from "@/lib/canvas/scene";
 
 export interface CanvasView {
@@ -15,6 +15,7 @@ interface PoolControlsProps {
   pools: PoolBox[];
   view: CanvasView;
   onAddLane: (pool: PoolBox) => void;
+  onRemoveLane: (pool: PoolBox) => void;
   onAddPool: (pool: PoolBox) => void;
   onRemove: (pool: PoolBox) => void;
 }
@@ -29,6 +30,7 @@ export default function PoolControls({
   pools,
   view,
   onAddLane,
+  onRemoveLane,
   onAddPool,
   onRemove,
 }: PoolControlsProps) {
@@ -57,6 +59,15 @@ export default function PoolControls({
               className="block border-b-2 border-edge p-1.5 text-ink transition-colors hover:bg-bone"
             >
               <Rows3 size={14} />
+            </button>
+            <button
+              type="button"
+              onClick={() => onRemoveLane(pool)}
+              title="Take the bottom lane off this pool"
+              aria-label="Take the bottom lane off this pool"
+              className="block border-b-2 border-edge p-1.5 text-ink transition-colors hover:bg-alert-tint hover:text-alert"
+            >
+              <Minus size={14} />
             </button>
             <button
               type="button"

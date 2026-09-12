@@ -69,7 +69,7 @@ function caption(
     verticalAlign: entry.middle ? "middle" : "top",
     ...(entry.turned ? { angle: -Math.PI / 2 } : {}),
     groupIds: [unit],
-    ...marked({ unit, kind: "chart" }),
+    ...marked({ unit, kind: "figure" }),
     ...(weight ? {} : {}),
   } as unknown as ExcalidrawElementSkeleton;
 }
@@ -99,7 +99,7 @@ function rule(
     strokeWidth: width,
     roughness: paper.roughness,
     groupIds: [unit],
-    ...marked({ unit, kind: "chart" }),
+    ...marked({ unit, kind: "figure" }),
   } as unknown as ExcalidrawElementSkeleton;
 }
 
@@ -138,7 +138,7 @@ function polyline(
     opacity: options.opacity ?? 100,
     roughness: paper.roughness,
     groupIds: [unit],
-    ...marked({ unit, kind: "chart" }),
+    ...marked({ unit, kind: "figure" }),
   } as unknown as ExcalidrawElementSkeleton;
 }
 
@@ -162,7 +162,7 @@ function box(
     strokeWidth: Math.max(0.5, options.width),
     roughness: paper.roughness,
     groupIds: [unit],
-    ...marked({ unit, kind: "chart" }),
+    ...marked({ unit, kind: "figure" }),
   } as unknown as ExcalidrawElementSkeleton;
 }
 
@@ -199,7 +199,7 @@ export function buildChartSkeletons(
       strokeWidth: 1,
       roughness: 0,
       groupIds: [unit],
-      ...marked({ unit, kind: "chart", core: true, chart: spec }),
+      ...marked({ unit, kind: "figure", core: true, figure: spec }),
     } as unknown as ExcalidrawElementSkeleton,
   ];
   if (isEmptyChart(spec)) {
@@ -342,7 +342,7 @@ export function buildChartSkeletons(
       strokeWidth: 1,
       roughness: paper.roughness,
       groupIds: [unit],
-      ...marked({ unit, kind: "chart" }),
+      ...marked({ unit, kind: "figure" }),
     } as unknown as ExcalidrawElementSkeleton);
   }
   for (const slice of drawing.slices) {

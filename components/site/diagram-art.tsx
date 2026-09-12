@@ -516,7 +516,16 @@ export function PlannedArt({ id, className }: { id: string; className?: string }
 /* ------------------------------------------------------------------ charts */
 
 /** The eight hues the charts hand out, in the order they hand them out. */
-const HUES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"];
+const HUES = [
+  "#2a78d6",
+  "#eb6834",
+  "#1baf7a",
+  "#eda100",
+  "#e87ba4",
+  "#008300",
+  "#4a3aa7",
+  "#e34948",
+];
 
 function Plot({
   children,
@@ -636,6 +645,145 @@ export function ScatterArt({ accent = "slate", className }: ArtProps) {
   );
 }
 
+
+/* ---------------------------------------------------------------- thinking */
+
+export function MindArt({ accent = "navy", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const branches = [
+    { angle: -90, hue: HUES[0] },
+    { angle: -18, hue: HUES[1] },
+    { angle: 54, hue: HUES[2] },
+    { angle: 126, hue: HUES[3] },
+    { angle: 198, hue: HUES[4] },
+  ];
+  const at = (deg: number, r: number) => [
+    160 + Math.cos((deg * Math.PI) / 180) * r,
+    90 + Math.sin((deg * Math.PI) / 180) * r,
+  ];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      {branches.map((branch) => {
+        const [x, y] = at(branch.angle, 62);
+        return (
+          <g key={branch.angle}>
+            <path
+              d={`M160 90L${x} ${y}`}
+              stroke={branch.hue}
+              strokeWidth={CONNECTOR}
+              pathLength={1}
+              className="ink-path"
+            />
+            <rect
+              x={x - 24}
+              y={y - 11}
+              width={48}
+              height={22}
+              rx={6}
+              fill="#ffffff"
+              stroke={ink}
+              strokeWidth={CONNECTOR}
+            />
+          </g>
+        );
+      })}
+      <circle cx={160} cy={90} r={26} fill="#ffffff" stroke={ink} strokeWidth={RULE} />
+    </svg>
+  );
+}
+
+export function MatrixArt({ accent = "oxblood", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const cells = [
+    [70, 24, HUES[3]],
+    [166, 24, HUES[7] ?? HUES[1]],
+    [70, 96, "#8a8a8a"],
+    [166, 96, HUES[1]],
+  ] as const;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      {cells.map(([x, y, hue]) => (
+        <rect key={`${x}-${y}`} x={x} y={y} width={84} height={60} fill={hue} />
+      ))}
+      <path
+        d="M160 12v156M58 90h204"
+        stroke={ink}
+        strokeWidth={3}
+        pathLength={1}
+        className="ink-path"
+      />
+    </svg>
+  );
+}
+
+export function VennArt({ accent = "forest", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const rings = [
+    [160, 62],
+    [128, 116],
+    [192, 116],
+  ] as const;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      {rings.map(([cx, cy], index) => (
+        <circle
+          key={index}
+          cx={cx}
+          cy={cy}
+          r={48}
+          fill={HUES[index]}
+          fillOpacity={0.24}
+          stroke={ink}
+          strokeWidth={CONNECTOR}
+          pathLength={1}
+          className="ink-path"
+        />
+      ))}
+    </svg>
+  );
+}
+
+export function FishboneArt({ accent = "mono", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const bones = [42, 100, 158, 216];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <path
+        d="M20 90h244"
+        stroke={ink}
+        strokeWidth={RULE}
+        pathLength={1}
+        className="ink-path"
+      />
+      <path d="M264 66l32 24-32 24z" fill={ink} stroke="none" />
+      {bones.map((x, index) => {
+        const up = index % 2 === 0;
+        const y = up ? 32 : 148;
+        return (
+          <g key={x}>
+            <path
+              d={`M${x - 30} ${y}L${x} 90`}
+              stroke={ink}
+              strokeWidth={CONNECTOR}
+              pathLength={1}
+              className="ink-path"
+            />
+            <rect
+              x={x - 58}
+              y={y - 11}
+              width={56}
+              height={22}
+              fill="#ffffff"
+              stroke={ink}
+              strokeWidth={CONNECTOR}
+            />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 export function DiagramArt({
   id,
   accent,
@@ -652,6 +800,10 @@ export function DiagramArt({
   if (id === "line") return <LineArt accent={accent} className={className} />;
   if (id === "pie") return <PieArt accent={accent} className={className} />;
   if (id === "scatter") return <ScatterArt accent={accent} className={className} />;
+  if (id === "mind") return <MindArt accent={accent} className={className} />;
+  if (id === "matrix") return <MatrixArt accent={accent} className={className} />;
+  if (id === "venn") return <VennArt accent={accent} className={className} />;
+  if (id === "fishbone") return <FishboneArt accent={accent} className={className} />;
   return <PlannedArt id={id} className={className} />;
 }
 

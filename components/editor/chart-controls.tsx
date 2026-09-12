@@ -1,8 +1,8 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { Minus, Plus } from "lucide-react";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import type { ChartOnSheet } from "@/lib/canvas/scene";
 import {
   layoutChart,
   readAcross,
@@ -27,8 +27,9 @@ import type { CanvasView } from "@/components/editor/pool-controls";
  */
 
 interface ChartControlsProps {
-  api: ExcalidrawImperativeAPI | null;
-  chart: ChartOnSheet | null;
+  api: ExcalidrawImperativeAPI;
+  spec: ChartSpec;
+  box: { x: number; y: number; width: number; height: number };
   view: CanvasView;
   /** the whole chart again, and whether the hand has come off it */
   onChange: (spec: ChartSpec, settled: boolean) => void;
@@ -132,7 +133,8 @@ function withReading(spec: ChartSpec, grip: Grip, at: Pt, drawing: ChartDrawing)
 
 export default function ChartControls({
   api,
-  chart,
+  spec,
+  box,
   view,
   onChange,
 }: ChartControlsProps) {
@@ -145,12 +147,8 @@ export default function ChartControls({
   const [held, setHeld] = useState<{ grip: Grip; from: ChartDrawing } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
 
-  if (!api || !chart) {
-    return null;
-  }
-
-  const drawing = layoutChart(chart.spec, chart.box);
-  const handles = handlesOf(chart.spec, drawing);
+  const drawing = layoutChart(spec, box);
+  const handles = handlesOf(spec, drawing);
   const scale = view.zoom;
   const size = (value: number) => value / scale;
 
@@ -165,19 +163,54 @@ export default function ChartControls({
 
   const move = (event: React.PointerEvent) => {
     if (held) {
-      onChange(withReading(chart.spec, held.grip, sceneAt(event), held.from), false);
+      onChange(withReading(spec, held.grip, sceneAt(event), held.from), false);
     }
   };
   const up = (event: React.PointerEvent) => {
     if (held) {
-      onChange(withReading(chart.spec, held.grip, sceneAt(event), held.from), true);
+      onChange(withReading(spec, held.grip, sceneAt(event), held.from), true);
       setHeld(null);
     }
   };
 
+  /** The last reading, taken back off. A chart with one reading keeps it. */
+  const dropReading = () => {
+    if (spec.kind === "scatter") {
+      const points = spec.series[0]?.points ?? [];
+      if (points.length <= 1) {
+        return;
+      }
+      onChange(
+        {
+          ...spec,
+          series: spec.series.map((entry, index) =>
+            index === 0
+              ? { ...entry, points: (entry.points ?? []).slice(0, -1) }
+              : entry,
+          ),
+        },
+        true,
+      );
+      return;
+    }
+    if (spec.categories.length <= 1) {
+      return;
+    }
+    onChange(
+      {
+        ...spec,
+        categories: spec.categories.slice(0, -1),
+        series: spec.series.map((entry) => ({
+          ...entry,
+          values: entry.values.slice(0, -1),
+        })),
+      },
+      true,
+    );
+  };
+
   /** One more reading, at the end, taking the shape of the ones before it. */
   const addReading = () => {
-    const spec = chart.spec;
     if (spec.kind === "scatter") {
       const series = spec.series[0];
       const points = series?.points ?? [];
@@ -216,12 +249,16 @@ export default function ChartControls({
     top: (at.y + view.scrollY) * scale,
   });
 
-  // the button sits just past the last slot, where the next reading will go
+  /** how many readings there are to take off, whichever kind of chart it is */
+  const readings =
+    spec.kind === "scatter" ? (spec.series[0]?.points?.length ?? 0) : spec.categories.length;
+
+  // the pair sits just past the last slot, where the next reading will go
   const last = drawing.slots[drawing.slots.length - 1];
   const addAt: Pt | null =
-    chart.spec.kind === "pie"
+    spec.kind === "pie"
       ? { x: drawing.centre.x, y: drawing.centre.y + drawing.radius + 28 }
-      : chart.spec.kind === "scatter"
+      : spec.kind === "scatter"
         ? {
             x: drawing.plot.x + drawing.plot.width,
             y: drawing.plot.y + drawing.plot.height + 18,
@@ -276,16 +313,31 @@ export default function ChartControls({
           className="pointer-events-none absolute inset-0 z-20 overflow-hidden"
           aria-hidden={false}
         >
-          <button
-            type="button"
-            onClick={addReading}
-            title="Add a reading to this chart"
-            aria-label="Add a reading to this chart"
-            className="slab-tight pointer-events-auto absolute grid h-6 w-6 -translate-x-1/2 -translate-y-1/2 place-items-center bg-white text-[13px] font-semibold leading-none text-ink transition-colors hover:bg-bone"
+          {/* the pair that grows and shrinks the chart, where the next reading goes */}
+          <div
+            className="slab-tight pointer-events-auto absolute flex -translate-x-1/2 -translate-y-1/2 items-stretch bg-white"
             style={onSheet(addAt)}
           >
-            +
-          </button>
+            <button
+              type="button"
+              onClick={addReading}
+              title="Add a reading to this chart"
+              aria-label="Add a reading to this chart"
+              className="grid h-6 w-6 place-items-center border-r-2 border-edge text-ink transition-colors hover:bg-bone"
+            >
+              <Plus size={13} />
+            </button>
+            <button
+              type="button"
+              onClick={dropReading}
+              disabled={readings <= 1}
+              title="Take the last reading off"
+              aria-label="Take the last reading off"
+              className="grid h-6 w-6 place-items-center text-ink transition-colors hover:bg-alert-tint hover:text-alert disabled:opacity-30"
+            >
+              <Minus size={13} />
+            </button>
+          </div>
         </div>
       )}
     </>

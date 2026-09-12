@@ -14,8 +14,8 @@ import {
   type Box,
   type Rules,
 } from "@/lib/canvas/connect";
-import { buildChartSkeletons } from "@/lib/chart/build-chart";
-import type { ChartSpec } from "@/lib/chart/spec";
+import { buildFigure } from "@/lib/figures/registry";
+import type { FigureSpec } from "@/lib/figures/spec";
 import type { Rect } from "@/lib/chart/layout-chart";
 import {
   buildLaneSkeletons,
@@ -46,6 +46,8 @@ export interface SceneFix {
 interface Unit {
   members: ExcalidrawElement[];
   cores: ExcalidrawElement[];
+  /** drawn from a spec, so it is one object and has no inside */
+  figure: boolean;
 }
 
 function picked(ids: IdSet): string[] {
@@ -66,10 +68,13 @@ function unitIndex(elements: Elements): {
     unitOfId.set(element.id, mark.unit);
     let unit = units.get(mark.unit);
     if (!unit) {
-      unit = { members: [], cores: [] };
+      unit = { members: [], cores: [], figure: false };
       units.set(mark.unit, unit);
     }
     unit.members.push(element);
+    if (mark.kind === "figure") {
+      unit.figure = true;
+    }
     if (mark.core) {
       unit.cores.push(element);
     }
@@ -123,6 +128,22 @@ export function normalizeUnits(
   }
 
   const inside = state.editingGroupId ? units.get(state.editingGroupId) : undefined;
+  if (inside && inside.figure) {
+    // a figure has no inside: its shapes are cut from a spec rather than drawn,
+    // so a reader who steps in would be holding a mark that the next redraw
+    // replaces — most confusingly the invisible frame, which carries the spec
+    // and would then be dragged away from the drawing it belongs to
+    return {
+      ...fix,
+      appState: {
+        selectedElementIds: Object.fromEntries(
+          inside.members.map((member) => [member.id, true as const]),
+        ),
+        selectedGroupIds: { [state.editingGroupId as string]: true },
+        editingGroupId: null,
+      },
+    };
+  }
   if (inside) {
     // stepped into an element: only the caption carriers may be picked alone
     const held = picked(state.selectedElementIds).filter(
@@ -220,30 +241,30 @@ export function reunit(next: Elements, prev: Elements): ExcalidrawElement[] | vo
 
 // --------------------------------------------------------------------- charts
 
-export interface ChartOnSheet {
+export interface FigureOnSheet {
   unit: string;
-  spec: ChartSpec;
-  /** where the chart sits, taken from its frame rather than from the spec */
+  spec: FigureSpec;
+  /** where the figure sits, taken from its frame rather than from the spec */
   box: Rect;
 }
 
-/** The frame of one chart: the piece that carries the whole of it. */
-function chartFrames(elements: Elements): Array<{ element: ExcalidrawElement; mark: UnitMark }> {
+/** The frame of one figure: the piece that carries the whole of it. */
+function figureFrames(elements: Elements): Array<{ element: ExcalidrawElement; mark: UnitMark }> {
   const out: Array<{ element: ExcalidrawElement; mark: UnitMark }> = [];
   for (const element of elements) {
     const mark = element.isDeleted ? null : unitOf(element);
-    if (mark?.kind === "chart" && mark.chart && element.type === "rectangle") {
+    if (mark?.kind === "figure" && mark.figure && element.type === "rectangle") {
       out.push({ element, mark });
     }
   }
   return out;
 }
 
-/** Every chart on the sheet, in the order the sheet stacks them. */
-export function chartsOn(elements: Elements): ChartOnSheet[] {
-  return chartFrames(elements).map(({ element, mark }) => ({
+/** Every figure on the sheet, in the order the sheet stacks them. */
+export function figuresOn(elements: Elements): FigureOnSheet[] {
+  return figureFrames(elements).map(({ element, mark }) => ({
     unit: mark.unit,
-    spec: mark.chart as ChartSpec,
+    spec: mark.figure as FigureSpec,
     box: {
       x: element.x,
       y: element.y,
@@ -254,17 +275,17 @@ export function chartsOn(elements: Elements): ChartOnSheet[] {
 }
 
 /**
- * Draws one chart again.
+ * Draws one figure again.
  *
- * A chart is not edited piece by piece: a reading changes, or a setting does,
+ * A figure is not edited piece by piece: a reading changes, or a setting does,
  * and every mark is cut again from the spec. That is what lets the settings
  * panel, the handles on the sheet and the source all be the same edit — none
  * of them has to know which rectangle moved.
  */
-export function redrawChart(
+export function redrawFigure(
   elements: Elements,
   unit: string,
-  spec: ChartSpec,
+  spec: FigureSpec,
   box: Rect,
   ink: Ink,
   style: SheetStyle = FORMAL,
@@ -275,8 +296,11 @@ export function redrawChart(
   );
   const kept = elements.filter((element) => unitOf(element)?.unit !== unit);
   const drawn = convertToExcalidrawElements(
-    buildChartSkeletons(
-      { ...spec, options: { ...spec.options, width: box.width, height: box.height } },
+    buildFigure(
+      {
+        ...spec,
+        options: { ...spec.options, width: box.width, height: box.height },
+      } as FigureSpec,
       box,
       ink,
       style,
@@ -288,18 +312,18 @@ export function redrawChart(
 }
 
 /**
- * Keeps a chart the size the reader dragged it to. Excalidraw scales a group
- * by stretching every shape in it, captions included, so a chart that has been
- * resized is drawn again at its new size the moment the pointer comes up.
+ * Keeps a figure the size the reader dragged it to. Excalidraw scales a group
+ * by stretching every shape in it, captions included, so a figure that has
+ * been resized is drawn again at its new size the moment the pointer is up.
  */
-export function syncCharts(
+export function syncFigures(
   elements: Elements,
   ink: Ink,
   style: SheetStyle = FORMAL,
   busy: ReadonlySet<string> = new Set(),
 ): ExcalidrawElement[] | null {
-  for (const { element, mark } of chartFrames(elements)) {
-    const spec = mark.chart as ChartSpec;
+  for (const { element, mark } of figureFrames(elements)) {
+    const spec = mark.figure as FigureSpec;
     if (busy.has(element.id)) {
       continue;
     }
@@ -308,7 +332,7 @@ export function syncCharts(
     if (width === Math.round(spec.options.width) && height === Math.round(spec.options.height)) {
       continue;
     }
-    return redrawChart(
+    return redrawFigure(
       elements,
       mark.unit,
       spec,
@@ -320,15 +344,15 @@ export function syncCharts(
   return null;
 }
 
-/** One fresh chart, dropped on the sheet. */
-export function newChart(
+/** One fresh figure, dropped on the sheet. */
+export function newFigure(
   elements: Elements,
-  spec: ChartSpec,
+  spec: FigureSpec,
   at: { x: number; y: number },
   ink: Ink,
   style: SheetStyle = FORMAL,
 ): ExcalidrawElement[] {
-  const unit = `chart-${freshId()}`;
+  const unit = `${spec.kind}-${freshId()}`;
   const box = {
     x: Math.round(at.x - spec.options.width / 2),
     y: Math.round(at.y - spec.options.height / 2),
@@ -337,10 +361,9 @@ export function newChart(
   };
   return [
     ...elements,
-    ...convertToExcalidrawElements(
-      buildChartSkeletons(spec, box, ink, style, unit),
-      { regenerateIds: true },
-    ),
+    ...convertToExcalidrawElements(buildFigure(spec, box, ink, style, unit), {
+      regenerateIds: true,
+    }),
   ];
 }
 
@@ -681,6 +704,123 @@ export function addLane(
   return [...grown, ...added];
 }
 
+/**
+ * The connectors left hanging when a band of the sheet is taken away.
+ *
+ * A connector names the two elements it joins, so once one of them is gone it
+ * has nothing to be cut against and would be left pointing at where the shape
+ * used to be. Removing a lane or a pool therefore takes its lines with it.
+ */
+function withDanglingLinks(elements: Elements, gone: Set<string>): Set<string> {
+  const alive = new Set<string>();
+  for (const element of elements) {
+    if (element.isDeleted || gone.has(element.id)) {
+      continue;
+    }
+    const mark = unitOf(element);
+    alive.add(element.id);
+    if (mark) {
+      alive.add(mark.unit);
+    }
+  }
+  const out = new Set(gone);
+  for (const element of elements) {
+    const link = element.isDeleted ? null : unitOf(element)?.link;
+    if (link && (!alive.has(link.from.unit) || !alive.has(link.to.unit))) {
+      out.add(element.id);
+    }
+  }
+  return out;
+}
+
+/**
+ * Takes the bottom lane off a pool, and everything drawn in it.
+ *
+ * A pool with one lane is left alone: a lane is the pool's own body then, and
+ * removing it would leave a header with nothing under it. The pool shrinks by
+ * exactly the lane's height, so whatever is below on the sheet comes up by the
+ * same amount and the spacing the layout worked out is kept.
+ */
+export function removeLane(elements: Elements, pool: PoolBox): ExcalidrawElement[] {
+  const lanes = new Map<string, { top: number; bottom: number }>();
+  for (const element of elements) {
+    const mark = element.isDeleted ? null : unitOf(element);
+    if (
+      !mark ||
+      mark.kind !== "lane" ||
+      element.x < pool.x ||
+      element.x > pool.x + pool.width ||
+      element.y < pool.y ||
+      element.y > pool.y + pool.height
+    ) {
+      continue;
+    }
+    const box = lanes.get(mark.unit) ?? { top: element.y, bottom: element.y };
+    lanes.set(mark.unit, {
+      top: Math.min(box.top, element.y),
+      bottom: Math.max(box.bottom, element.y + element.height),
+    });
+  }
+  if (lanes.size < 2) {
+    return elements.slice();
+  }
+  const [name, band] = [...lanes].sort((a, b) => b[1].top - a[1].top)[0];
+  const height = band.bottom - band.top;
+
+  // the lane's own pieces, and everything standing in the band it ruled. The
+  // pool's own pieces are never in that reckoning: they are shrunk, not dropped
+  const gone = new Set<string>();
+  for (const element of elements) {
+    const mark = element.isDeleted ? null : unitOf(element);
+    if (element.isDeleted || mark?.unit === pool.unit) {
+      continue;
+    }
+    const midY = element.y + element.height / 2;
+    const midX = element.x + element.width / 2;
+    if (
+      mark?.unit === name ||
+      (midY >= band.top &&
+        midY <= band.bottom &&
+        midX >= pool.x &&
+        midX <= pool.x + pool.width)
+    ) {
+      gone.add(element.id);
+    }
+  }
+  for (const element of elements) {
+    const container = (element as { containerId?: string | null }).containerId;
+    if (container && gone.has(container)) {
+      gone.add(element.id);
+    }
+  }
+  const cut = withDanglingLinks(elements, gone);
+
+  const shrunk = elements.map((element) => {
+    if (cut.has(element.id)) {
+      return newElementWith(element, { isDeleted: true });
+    }
+    const mark = element.isDeleted ? null : unitOf(element);
+    if (!mark || mark.unit !== pool.unit) {
+      return element;
+    }
+    if (element.type === "rectangle") {
+      return newElementWith(element, { height: element.height - height });
+    }
+    if (element.type === "line") {
+      return newElementWith(element, {
+        height: element.height - height,
+        points: [
+          [0, 0],
+          [0, element.height - height],
+        ] as never,
+      });
+    }
+    // the rotated band caption is centred on the box
+    return newElementWith(element, { y: element.y - height / 2 });
+  });
+  return shiftBelow(shrunk, pool.y + pool.height, -height);
+}
+
 /** Drops a participant and everything drawn inside it, closing the gap. */
 export function removePool(elements: Elements, pool: PoolBox): ExcalidrawElement[] {
   const bottom = pool.y + pool.height;
@@ -706,8 +846,9 @@ export function removePool(elements: Elements, pool: PoolBox): ExcalidrawElement
       gone.add(element.id);
     }
   }
+  const cut = withDanglingLinks(elements, gone);
   const cleared = elements.map((element) =>
-    gone.has(element.id) ? newElementWith(element, { isDeleted: true }) : element,
+    cut.has(element.id) ? newElementWith(element, { isDeleted: true }) : element,
   );
   return shiftBelow(cleared, bottom, -(pool.height + POOL_GAP));
 }

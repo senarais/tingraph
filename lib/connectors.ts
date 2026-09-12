@@ -91,8 +91,10 @@ const ORG: ConnectorKind[] = [
 ];
 
 /**
- * A chart joins nothing: its marks are readings, not elements, so it carries
- * no connectors and the rail does not offer the instrument at all.
+ * A figure joins nothing: its marks are drawn from its own spec rather than
+ * placed one at a time, so it carries no connectors and the rail does not
+ * offer the instrument at all. A mind map's branches are not connectors —
+ * they are part of the map, and the map draws them itself.
  */
 export const CONNECTORS: Record<DiagramCategory, ConnectorKind[]> = {
   bpmn: BPMN,
@@ -102,6 +104,10 @@ export const CONNECTORS: Record<DiagramCategory, ConnectorKind[]> = {
   line: [],
   pie: [],
   scatter: [],
+  mind: [],
+  matrix: [],
+  venn: [],
+  fishbone: [],
 };
 
 const ALL = [...BPMN, ...FLOW, ...ORG];

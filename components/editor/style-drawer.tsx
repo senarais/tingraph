@@ -22,6 +22,9 @@ import { Field, Swatch, Tick } from "@/components/editor/ui";
 const CHART_FIXED =
   "The marks take their colours from the Chart panel. The ink writes the captions and rules the axes.";
 
+const FIGURE_FIXED =
+  "The colours come from this notation's own panel in the rail. The ink writes the captions and rules the lines.";
+
 const FIXED: Record<DiagramCategory, string> = {
   flow: "Arrowheads, routing and the terminator outline come from the notation.",
   bpmn: "Arrowheads, event ring weights, the task outline and the BPMN markers come from the notation.",
@@ -30,6 +33,10 @@ const FIXED: Record<DiagramCategory, string> = {
   line: CHART_FIXED,
   pie: CHART_FIXED,
   scatter: CHART_FIXED,
+  mind: FIGURE_FIXED,
+  matrix: FIGURE_FIXED,
+  venn: FIGURE_FIXED,
+  fishbone: FIGURE_FIXED,
 };
 
 /** A shape and a connector, drawn the way the style would draw them. */
