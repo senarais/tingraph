@@ -141,21 +141,44 @@ export function controlsFor(
   if (mark?.kind === "edge") {
     return {
       ...NOTHING,
-      name: category === "org" ? "Reporting line" : "Connector",
+      name:
+        category === "org"
+          ? "Reporting line"
+          : category === "erd"
+            ? "Relation"
+            : category === "usecase"
+              ? "Relation"
+              : "Connector",
       stroke: true,
       dash: true,
       text: hasText,
-      fixed: "The head and the square routing come from the notation.",
+      fixed:
+        category === "usecase"
+          ? "A use case diagram joins its elements with straight lines; the heads come from the notation."
+          : "The head and the square routing come from the notation.",
+    };
+  }
+
+  if (mark?.kind === "frame") {
+    return {
+      ...NOTHING,
+      name: category === "usecase" ? "System boundary" : "Partitions",
+      stroke: true,
+      text: hasText,
+      fixed: "The frame is an unfilled hairline box, and its captions sit where the notation puts them.",
     };
   }
 
   if (mark?.kind === "pool" || mark?.kind === "lane") {
     return {
       ...NOTHING,
-      name: mark.kind === "pool" ? "Pool" : "Lane",
+      name: mark.kind === "pool" ? "Pool" : category === "activity" ? "Partition" : "Lane",
       stroke: true,
       text: hasText,
-      fixed: "A participant band is an unfilled hairline box in BPMN 2.0.",
+      fixed:
+        category === "activity"
+          ? "A partition is a column with its name above it, the way UML reads it."
+          : "A participant band is an unfilled hairline box in BPMN 2.0.",
     };
   }
 
@@ -208,22 +231,38 @@ export function controlsFor(
   const isEvent = drawn && category === "bpmn" && head.type === "ellipse";
   const isTask = drawn && category === "bpmn" && head.type === "rectangle";
   const isOrgBox = drawn && category === "org";
+  const named = drawn
+    ? category === "usecase"
+      ? head.type === "ellipse"
+        ? "Use case"
+        : "Actor"
+      : category === "erd"
+        ? "Entity"
+        : category === "activity"
+          ? head.type === "diamond"
+            ? "Decision"
+            : head.type === "ellipse"
+              ? "Control node"
+              : "Action"
+          : null
+    : null;
   return {
     name: !drawn
       ? "Shape"
-      : isEvent
-        ? "Event"
-        : isTask
-          ? "Task"
-          : head.type === "diamond"
-            ? category === "bpmn"
-              ? "Gateway"
-              : "Decision"
-            : isOrgBox
-              ? "Role box"
-              : head.type === "ellipse"
-                ? "Terminator"
-                : "Step",
+      : (named ??
+        (isEvent
+          ? "Event"
+          : isTask
+            ? "Task"
+            : head.type === "diamond"
+              ? category === "bpmn"
+                ? "Gateway"
+                : "Decision"
+              : isOrgBox
+                ? "Role box"
+                : head.type === "ellipse"
+                  ? "Terminator"
+                  : "Step")),
     stroke: true,
     fill: true,
     // an event's ring weight is what tells a start from an end

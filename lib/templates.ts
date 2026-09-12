@@ -73,6 +73,131 @@ export const ORG_TEMPLATE = `org "FACULTY OF PSYCHOLOGY ORGANISATIONAL CHART" {
 }
 `;
 
+export const USECASE_TEMPLATE = `usecase "Bank ATM" {
+  actor CUST "Customer"
+  actor TECH "ATM Technician"
+  actor BANK "Bank" right
+
+  system ATM "Bank ATM" {
+    usecase U1 "Check Balances"
+    usecase U2 "Deposit Funds"
+    usecase U3 "Withdraw Cash"
+    usecase U4 "Transfer Funds"
+    usecase U5 "Maintenance"
+    usecase U6 "Repair"
+  }
+
+  CUST -> U1
+  CUST -> U2
+  CUST -> U3
+  CUST -> U4
+  TECH -> U5
+  TECH -> U6
+
+  U1 -> BANK
+  U2 -> BANK
+  U3 -> BANK
+  U4 -> BANK
+  U5 -> BANK
+  U6 -> BANK
+
+  include U3 -> U1
+}
+`;
+
+export const ACTIVITY_TEMPLATE = `activity "Client Visit" {
+  lane SALES "Sales Person" {
+    initial S1
+    action A1 "Call client and set up appointment"
+    decision D1
+    action A4 "Send follow-up letter"
+    decision D2
+    final E1
+  }
+
+  lane CONS "Consultant" {
+    action A2 "Prepare a laptop"
+    action A3 "Meet with the client"
+    action A5 "Create proposal"
+    action A6 "Send proposal to client"
+  }
+
+  lane TECH "Corporate Technician" {
+    action A7 "Prepare a conference room"
+  }
+
+  S1 -> A1 -> D1
+  D1 [appointment offsite] -> A2
+  D1 [appointment onsite] -> A7
+  A2 -> A3
+  A7 -> A3
+  A3 -> A4 -> D2
+  D2 [statement of problem] -> A5 -> A6 -> E1
+  D2 [no statement of problem] -> E1
+}
+`;
+
+export const ERD_TEMPLATE = `erd "Airline Booking" {
+  entity PASSENGER "passengers" {
+    pk "id" "bigint"
+    "first_name" "varchar(50)"
+    "last_name" "varchar(50)"
+    "passport_number" "varchar(20)" unique
+    "country_of_residence" "varchar(50)" null
+  }
+
+  entity BOOKING "booking" {
+    pk "booking_id" "bigint"
+    fk "passenger_id" "bigint"
+    fk "flight_id" "bigint"
+    "status" "varchar(20)"
+    "booking_platform" "varchar(20)"
+  }
+
+  entity FLIGHT "flights" {
+    pk "flight_id" "bigint"
+    fk "airline_id" "bigint"
+    "departing_gate" "varchar(20)"
+    "arriving_gate" "varchar(20)"
+  }
+
+  entity AIRLINE "airline" {
+    pk "airline_id" "bigint"
+    "airline_name" "varchar(50)"
+    "country" "varchar(50)"
+  }
+
+  weak BAGGAGE "baggage" {
+    pk "id" "bigint"
+    fk "booking_id" "bigint"
+    "weight_in_kg" "decimal(4,2)"
+  }
+
+  PASSENGER one -> many BOOKING "makes"
+  AIRLINE one -> many FLIGHT "operates"
+  FLIGHT one -> many BOOKING "carries"
+  BOOKING one -.-> many BAGGAGE "checks in"
+}
+`;
+
+export const SEQUENCE_TEMPLATE = `sequence "Shopping Cart" {
+  actor CUST "Customer"
+  object CART ":Shopping Cart"
+  object ORDER ":Order"
+  object ITEM ":Item"
+
+  numbers on
+  activations on
+
+  CUST -> CART "«create»"
+  CART -> ORDER "getTotal()"
+  ORDER -> ITEM "getPrice()"
+  ITEM --> ORDER "itemPrice"
+  ORDER -> ORDER "calculateTotal()"
+  ORDER --> CART "totalPrice"
+}
+`;
+
 export const BAR_TEMPLATE = `bar "Favourite Fruit" {
   x "Favourite fruit"
   y "Number of students"
@@ -201,6 +326,10 @@ export const TEMPLATES: Record<DiagramCategory, string> = {
   flow: FLOWCHART_TEMPLATE,
   bpmn: BPMN_TEMPLATE,
   org: ORG_TEMPLATE,
+  usecase: USECASE_TEMPLATE,
+  activity: ACTIVITY_TEMPLATE,
+  erd: ERD_TEMPLATE,
+  sequence: SEQUENCE_TEMPLATE,
   bar: BAR_TEMPLATE,
   line: LINE_TEMPLATE,
   pie: PIE_TEMPLATE,
@@ -215,6 +344,10 @@ export const TEMPLATE_LABELS: Record<DiagramCategory, string> = {
   flow: "Flowchart",
   bpmn: "BPMN 2.0",
   org: "Org chart",
+  usecase: "Use case",
+  activity: "Activity",
+  erd: "ER diagram",
+  sequence: "Sequence",
   bar: "Bar chart",
   line: "Line chart",
   pie: "Pie chart",

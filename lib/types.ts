@@ -27,9 +27,40 @@ export type BpmnNodeType =
 /** An org chart has one shape: a box holding a role and, optionally, a name. */
 export type OrgNodeType = "role";
 
+/**
+ * A use case diagram has two: the stick figure that wants something, and the
+ * rounded thing it wants. The boundary around the use cases is not a node —
+ * it is a `pool`, the way a BPMN participant is.
+ */
+export type UseCaseNodeType = "actor" | "usecase";
+
+/**
+ * UML activity: the control nodes that start, split, join and stop a flow, the
+ * actions between them, and the object nodes that pass along it.
+ */
+export type ActivityNodeType =
+  | "initial"
+  | "action"
+  | "decision"
+  | "merge"
+  | "fork"
+  | "join"
+  | "object"
+  | "final"
+  | "flow-final";
+
+/** An entity, and the weak entity that cannot be told apart without its owner. */
+export type ErdNodeType = "entity" | "weak";
+
 export type EdgeKind = "sequence" | "association";
 
-export type NodeType = FlowNodeType | BpmnNodeType | OrgNodeType;
+export type NodeType =
+  | FlowNodeType
+  | BpmnNodeType
+  | OrgNodeType
+  | UseCaseNodeType
+  | ActivityNodeType
+  | ErdNodeType;
 
 /** A sub-role listed inside an org box, e.g. one lab under a lab head. */
 export interface DSLEntry {
@@ -37,16 +68,35 @@ export interface DSLEntry {
   name?: string;
 }
 
+/**
+ * One attribute of an entity. The key marker is what an ERD is read by, so it
+ * is a field of its own rather than something buried in the name.
+ */
+export interface DSLField {
+  name: string;
+  /** the column type, written on the right of the row */
+  type?: string;
+  /** primary key, foreign key, or both */
+  key?: "pk" | "fk" | "pfk";
+  unique?: boolean;
+  /** the value may be missing; the type is written with a trailing ? */
+  optional?: boolean;
+}
+
 export interface DSLNode {
   id: string;
   type: NodeType;
   label: string;
-  /** id of the containing lane (BPMN only) */
+  /** id of the container this node sits in: a BPMN lane, an activity column, a use case boundary */
   lane?: string;
   /** org: the person holding the role */
   name?: string;
   /** org: sub-roles listed inside the same box */
   entries?: DSLEntry[];
+  /** erd: the rows inside the entity box */
+  fields?: DSLField[];
+  /** usecase: which side of the boundary the actor stands on, when it is pinned */
+  side?: "left" | "right";
 }
 
 export interface DSLLane {
@@ -65,6 +115,13 @@ export interface DSLEdge {
   to: string;
   label?: string;
   kind?: EdgeKind;
+  /**
+   * Which of the notation's lines this is, from `lib/connectors.ts`, when the
+   * source names it outright. A use case diagram tells an association from an
+   * include, and an ERD tells one crow's foot from another, so the plain
+   * solid/dashed pair `kind` carries is not enough for them.
+   */
+  line?: string;
 }
 
 /**
@@ -75,7 +132,14 @@ export interface DSLEdge {
  */
 export type DiagramCategory = GraphCategory | ChartKind | FigureKind;
 
-export const GRAPH_CATEGORIES = ["flow", "bpmn", "org"] as const;
+export const GRAPH_CATEGORIES = [
+  "flow",
+  "bpmn",
+  "org",
+  "usecase",
+  "activity",
+  "erd",
+] as const;
 
 export type GraphCategory = (typeof GRAPH_CATEGORIES)[number];
 
@@ -84,7 +148,13 @@ export type GraphCategory = (typeof GRAPH_CATEGORIES)[number];
  * one object drawn onto the sheet rather than a bag of elements; see
  * `lib/figures/spec.ts` for why that distinction is the one that matters.
  */
-export const FIGURE_KINDS = ["mind", "matrix", "venn", "fishbone"] as const;
+export const FIGURE_KINDS = [
+  "mind",
+  "matrix",
+  "venn",
+  "fishbone",
+  "sequence",
+] as const;
 
 export type FigureKind = (typeof FIGURE_KINDS)[number];
 
@@ -155,6 +225,12 @@ export interface PositionedLane {
   height: number;
   /** width of the vertical label band on the left (0 when unlabelled) */
   headerWidth: number;
+  /**
+   * Height of the label band along the top, for a notation whose lanes are
+   * columns rather than rows. A UML activity partition is read downwards, so
+   * its name sits above it; exactly one of the two bands is ever set.
+   */
+  headerHeight?: number;
   /** id of the containing pool */
   poolId?: string;
 }
@@ -168,6 +244,8 @@ export interface PositionedPool {
   height: number;
   /** width of the vertical label band on the left (0 when unlabelled) */
   headerWidth: number;
+  /** height of the label band along the top, when the lanes are columns */
+  headerHeight?: number;
   lanes: PositionedLane[];
 }
 

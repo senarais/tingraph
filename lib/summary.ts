@@ -1,5 +1,6 @@
 import type { AST } from "@/lib/types";
 import { walkMind } from "@/lib/mind/spec";
+import { messagesOf } from "@/lib/sequence/spec";
 
 /**
  * What a drawing is made of, said the way its own notation says it.
@@ -24,6 +25,10 @@ export function summarise(ast: AST): string {
   if (figure.kind === "venn") {
     const named = Object.values(figure.regions).filter(Boolean).length;
     return `${figure.sets.length} sets · ${named} regions`;
+  }
+  if (figure.kind === "sequence") {
+    const sent = messagesOf(figure.steps).length;
+    return `${figure.participants.length} participants · ${sent} messages`;
   }
   if (figure.kind === "fishbone") {
     const causes = figure.bones.reduce((sum, bone) => sum + bone.causes.length, 0);

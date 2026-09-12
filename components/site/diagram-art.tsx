@@ -784,6 +784,195 @@ export function FishboneArt({ accent = "mono", className }: ArtProps) {
   );
 }
 
+/* --------------------------------------------------------------------- uml */
+
+/** The stick figure a use case diagram and a sequence diagram both draw. */
+function Stick({ x, y, ink }: { x: number; y: number; ink: string }) {
+  return (
+    <g stroke={ink} strokeWidth={CONNECTOR} fill="none">
+      <circle cx={x} cy={y} r={5} />
+      <path d={`M${x} ${y + 5}v11M${x - 7} ${y + 9}h14M${x - 7} ${y + 24}l7-8 7 8`} />
+    </g>
+  );
+}
+
+export function UseCaseArt({ accent = "navy", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const ovals = [46, 90, 134];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <rect
+        x={98}
+        y={20}
+        width={124}
+        height={140}
+        stroke={ink}
+        strokeWidth={CONNECTOR}
+        fill="#ffffff"
+      />
+      {ovals.map((cy) => (
+        <ellipse
+          key={cy}
+          cx={160}
+          cy={cy}
+          rx={48}
+          ry={19}
+          stroke={ink}
+          strokeWidth={CONNECTOR}
+          fill="#ffffff"
+          pathLength={1}
+          className="ink-path"
+        />
+      ))}
+      {ovals.map((cy) => (
+        <Line key={`l${cy}`} d={`M50 ${86}L112 ${cy}`} ink={ink} />
+      ))}
+      <Line d="M208 90L264 90" ink={ink} />
+      <Stick x={40} y={78} ink={ink} />
+      <Stick x={274} y={78} ink={ink} />
+    </svg>
+  );
+}
+
+export function ActivityArt({ accent = "slate", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <rect x={40} y={14} width={240} height={152} stroke={ink} strokeWidth={CONNECTOR} />
+      <path
+        d="M40 38h240M160 14v152"
+        stroke={ink}
+        strokeWidth={CONNECTOR}
+        pathLength={1}
+        className="ink-path"
+      />
+      <circle cx={100} cy={58} r={8} fill={ink} />
+      <rect
+        x={62}
+        y={82}
+        width={76}
+        height={26}
+        rx={10}
+        stroke={ink}
+        strokeWidth={CONNECTOR}
+        fill="#ffffff"
+      />
+      <rect
+        x={182}
+        y={82}
+        width={76}
+        height={26}
+        rx={10}
+        stroke={ink}
+        strokeWidth={CONNECTOR}
+        fill="#ffffff"
+      />
+      <path d="M100 122l16 16-16 16-16-16z" stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+      <circle cx={220} cy={138} r={10} stroke={ink} strokeWidth={CONNECTOR} />
+      <circle cx={220} cy={138} r={5} fill={ink} />
+      <Line d="M100 66v16" ink={ink} />
+      <Line d="M138 95h44" ink={ink} />
+      <Line d="M100 108v14" ink={ink} />
+      <Line d="M220 108v20" ink={ink} />
+      <Head x={100} y={82} dir="down" ink={ink} />
+      <Head x={182} y={95} dir="right" ink={ink} />
+    </svg>
+  );
+}
+
+export function SequenceArt({ accent = "oxblood", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const lanes = [64, 160, 256];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      {lanes.map((x) => (
+        <g key={x}>
+          <rect
+            x={x - 34}
+            y={12}
+            width={68}
+            height={26}
+            stroke={ink}
+            strokeWidth={CONNECTOR}
+            fill="#ffffff"
+          />
+          <path d={`M${x} 38v130`} stroke={ink} strokeWidth={1} strokeDasharray="5 5" />
+        </g>
+      ))}
+      <rect x={58} y={62} width={12} height={96} fill="#ffffff" stroke={ink} strokeWidth={1} />
+      <rect x={154} y={86} width={12} height={54} fill="#ffffff" stroke={ink} strokeWidth={1} />
+      <rect x={250} y={110} width={12} height={22} fill="#ffffff" stroke={ink} strokeWidth={1} />
+      <Line d="M70 86h78" ink={ink} />
+      <Head x={154} y={86} dir="right" ink={ink} />
+      <Line d="M166 110h78" ink={ink} />
+      <Head x={250} y={110} dir="right" ink={ink} />
+      <path d="M250 132H172" stroke={ink} strokeWidth={CONNECTOR} strokeDasharray="5 4" />
+      <Head x={166} y={132} dir="left" ink={ink} />
+    </svg>
+  );
+}
+
+export function ErdArt({ accent = "forest", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const wash = ACCENTS[accent].wash;
+  const tables = [
+    { x: 18, y: 26, rows: 3 },
+    { x: 186, y: 16, rows: 2 },
+    { x: 186, y: 110, rows: 2 },
+  ];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      {tables.map((table) => {
+        const height = 22 + table.rows * 18;
+        return (
+          <g key={`${table.x}-${table.y}`}>
+            <rect
+              x={table.x}
+              y={table.y}
+              width={116}
+              height={height}
+              stroke={ink}
+              strokeWidth={CONNECTOR}
+              fill="#ffffff"
+            />
+            <rect x={table.x} y={table.y} width={116} height={22} fill={wash} />
+            <rect
+              x={table.x}
+              y={table.y}
+              width={116}
+              height={22}
+              stroke={ink}
+              strokeWidth={CONNECTOR}
+            />
+            <path
+              d={`M${table.x + 26} ${table.y + 22}v${height - 22}`}
+              stroke={ink}
+              strokeWidth={1}
+            />
+            {Array.from({ length: table.rows }, (_, at) => (
+              <path
+                key={at}
+                d={`M${table.x + 34} ${table.y + 32 + at * 18}h${at === 0 ? 62 : 48}`}
+                stroke={ink}
+                strokeWidth={1}
+                opacity={0.55}
+              />
+            ))}
+          </g>
+        );
+      })}
+      <Line d="M134 62h30v-14h22" ink={ink} />
+      <Line d="M134 62h30v80h22" ink={ink} />
+      <path
+        d="M186 42v12M186 136v12M178 48h-8M178 142h-8"
+        stroke={ink}
+        strokeWidth={CONNECTOR}
+      />
+      <path d="M186 48l-10-6M186 48l-10 6M186 142l-10-6M186 142l-10 6" stroke={ink} strokeWidth={CONNECTOR} />
+    </svg>
+  );
+}
+
 export function DiagramArt({
   id,
   accent,
@@ -804,6 +993,10 @@ export function DiagramArt({
   if (id === "matrix") return <MatrixArt accent={accent} className={className} />;
   if (id === "venn") return <VennArt accent={accent} className={className} />;
   if (id === "fishbone") return <FishboneArt accent={accent} className={className} />;
+  if (id === "usecase") return <UseCaseArt accent={accent} className={className} />;
+  if (id === "activity") return <ActivityArt accent={accent} className={className} />;
+  if (id === "sequence") return <SequenceArt accent={accent} className={className} />;
+  if (id === "erd") return <ErdArt accent={accent} className={className} />;
   return <PlannedArt id={id} className={className} />;
 }
 

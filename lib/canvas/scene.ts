@@ -384,6 +384,9 @@ const SHAPES = new Set(["rectangle", "ellipse", "diamond", "image"]);
 export function linkTargets(elements: Elements): Map<string, Box> {
   const shapes = new Map<string, Box>();
   const all = new Map<string, Box>();
+  // an element drawn as one lone ellipse is met round its curve rather than at
+  // the corner of the box it sits in, on the notations that draw straight lines
+  const round = new Map<string, boolean>();
   const grow = (into: Map<string, Box>, key: string, element: ExcalidrawElement) => {
     const held = into.get(key);
     const left = held ? Math.min(held.x, element.x) : element.x;
@@ -404,13 +407,15 @@ export function linkTargets(elements: Elements): Map<string, Box> {
     const key = mark?.unit ?? element.id;
     grow(all, key, element);
     if (SHAPES.has(element.type)) {
+      round.set(key, !shapes.has(key) && element.type === "ellipse");
       grow(shapes, key, element);
     }
   }
   // kept in the order the sheet stacks them, so the shape on top wins a hit
   const out = new Map<string, Box>();
   for (const [key, box] of all) {
-    out.set(key, shapes.get(key) ?? box);
+    const shape = shapes.get(key);
+    out.set(key, shape ? { ...shape, ...(round.get(key) ? { round: true } : {}) } : box);
   }
   return out;
 }

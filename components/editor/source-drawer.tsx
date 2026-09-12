@@ -94,6 +94,14 @@ function registerDslLanguage(instance: Monaco): void {
   });
 }
 
+/**
+ * The notations that read one way and one way only: a BPMN sheet runs along
+ * its lanes, an activity down its partitions, and a use case diagram stands
+ * its actors either side of the boundary. Offering them a direction would be
+ * offering a setting that does nothing.
+ */
+const ONE_WAY = new Set<DiagramCategory>(["bpmn", "activity", "usecase"]);
+
 const DIRECTIONS = [
   { value: "down" as LayoutDirection, icon: ArrowDown, title: "Grow the drawing down the page" },
   { value: "right" as LayoutDirection, icon: ArrowRight, title: "Grow the drawing across the page" },
@@ -220,7 +228,7 @@ export default function SourceDrawer({
                 ? "Source has a syntax error"
                 : summary}
             </span>
-            {category !== "bpmn" && (
+            {!ONE_WAY.has(category) && (
               <div className="w-[86px] shrink-0">
                 <Segmented
                   size="sm"

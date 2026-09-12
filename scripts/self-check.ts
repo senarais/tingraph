@@ -13,7 +13,14 @@ import {
   MATRIX_TEMPLATE,
   VENN_TEMPLATE,
   FISHBONE_TEMPLATE,
+  USECASE_TEMPLATE,
+  ACTIVITY_TEMPLATE,
+  ERD_TEMPLATE,
+  SEQUENCE_TEMPLATE,
 } from "@/lib/templates";
+import { erdBoxLayout } from "@/lib/layout/layout-erd";
+import { planSequence, sequenceSize } from "@/lib/sequence/layout-sequence";
+import { messagesOf, type SequenceSpec } from "@/lib/sequence/spec";
 import { READY_DIAGRAMS } from "@/lib/diagrams";
 import { DSLError } from "@/lib/types";
 import { renameCopies } from "@/lib/canvas/copies";
@@ -1129,6 +1136,195 @@ for (const bone of bones.bones) {
     assert.ok(cause.from.x < cause.at.x, "a cause runs into its bone from the left");
   }
 }
+
+// ------------------------------------------------------------------ use case
+
+const useCase = parseDSL(USECASE_TEMPLATE);
+assert.equal(useCase.category, "usecase");
+assert.equal(useCase.pools!.length, 1, "one system boundary");
+assert.equal(
+  useCase.nodes.filter((node) => node.type === "actor").length,
+  3,
+  "three actors",
+);
+assert.equal(
+  useCase.nodes.find((node) => node.id === "BANK")?.side,
+  "right",
+  "an actor can be pinned to a side",
+);
+const included = useCase.edges.find((edge) => edge.line === "include");
+assert.ok(included, "include is its own relation");
+assert.equal(included?.label, "«include»", "and it says so on the line");
+
+const ucLaid = computeLayout(useCase, "down");
+const boundary = ucLaid.pools![0];
+for (const node of ucLaid.nodes.filter((entry) => entry.type === "usecase")) {
+  assert.ok(
+    node.x >= boundary.x &&
+      node.x + node.width <= boundary.x + boundary.width &&
+      node.y > boundary.y &&
+      node.y + node.height <= boundary.y + boundary.height,
+    `${node.id} stands inside the boundary`,
+  );
+}
+const customer = ucLaid.nodes.find((node) => node.id === "CUST")!;
+const bankActor = ucLaid.nodes.find((node) => node.id === "BANK")!;
+assert.ok(
+  customer.x + customer.width < boundary.x,
+  "an actor that starts something stands left of the boundary",
+);
+assert.ok(
+  bankActor.x > boundary.x + boundary.width,
+  "and one that only answers stands right of it",
+);
+for (const edge of ucLaid.edges) {
+  assert.equal(edge.points.length, 2, "a use case diagram is joined with straight lines");
+}
+
+// ------------------------------------------------------------------ activity
+
+const activity = parseDSL(ACTIVITY_TEMPLATE);
+assert.equal(activity.pools!.length, 1, "every partition belongs to one frame");
+assert.equal(activity.pools![0].lanes.length, 3, "three partitions");
+assert.equal(
+  activity.nodes.find((node) => node.id === "S1")?.type,
+  "initial",
+  "start is an alias for the initial node",
+);
+const acLaid = computeLayout(activity, "down");
+const partitions = acLaid.pools![0];
+let leftEdge = -Infinity;
+for (const lane of partitions.lanes) {
+  assert.ok(lane.x > leftEdge, "partitions run across the page in the order written");
+  leftEdge = lane.x;
+  assert.equal(lane.headerWidth, 0, "a partition is named above it, not up its side");
+  assert.ok((lane.headerHeight ?? 0) > 0, "so it carries a band along the top");
+}
+assert.ok(
+  acLaid.nodes.find((node) => node.id === "S1")!.y <
+    acLaid.nodes.find((node) => node.id === "E1")!.y,
+  "an activity reads down the page",
+);
+for (const node of acLaid.nodes) {
+  const lane = partitions.lanes.find((entry) => entry.id === node.lane)!;
+  assert.ok(
+    node.x >= lane.x && node.x + node.width <= lane.x + lane.width,
+    `${node.id} stays inside its own partition`,
+  );
+}
+
+// ----------------------------------------------------------------------- erd
+
+const erd = parseDSL(ERD_TEMPLATE);
+const passenger = erd.nodes.find((node) => node.id === "PASSENGER")!;
+assert.equal(passenger.fields!.length, 5, "five attributes");
+assert.equal(passenger.fields![0].key, "pk", "the key marker is read off the row");
+assert.equal(passenger.fields![3].unique, true, "and so is unique");
+assert.equal(passenger.fields![4].optional, true, "and null");
+assert.equal(erd.edges[0].line, "erd-one-to-many", "both ends name the crow's foot");
+assert.equal(
+  erd.edges[3].line,
+  "non-identifying",
+  "a dashed relation is non-identifying",
+);
+assert.equal(
+  parseDSL('erd "x" { entity A "a" entity B "b" A many -> one B }').edges[0].line,
+  "erd-many-to-one",
+  "the ends are read in the order they are written",
+);
+const table = erdBoxLayout(passenger);
+assert.equal(table.rows.length, 5);
+assert.equal(table.rows[0].mark, "PK");
+assert.ok(table.rows[4].type.endsWith("?"), "a nullable attribute says so on its type");
+assert.ok(table.gutter > 0, "a table with keys keeps a gutter for them");
+assert.equal(
+  table.height,
+  table.headerHeight + table.rows.length * table.rowHeight,
+  "a box is exactly its band plus its rows",
+);
+assert.equal(
+  erdBoxLayout({ id: "x", type: "entity", label: "x", fields: [{ name: "a" }] }).gutter,
+  0,
+  "and a table with no keys rules no gutter",
+);
+for (const edge of computeLayout(erd, "down").edges) {
+  assert.ok(edge.points.length >= 2, "every relation is routed");
+  for (let at = 1; at < edge.points.length; at += 1) {
+    const a = edge.points[at - 1];
+    const b = edge.points[at];
+    assert.ok(
+      Math.abs(a.x - b.x) < 1 || Math.abs(a.y - b.y) < 1,
+      "every leg of a relation runs square",
+    );
+  }
+}
+
+// ------------------------------------------------------------------ sequence
+
+const seq = parseDSL(SEQUENCE_TEMPLATE).figure as SequenceSpec;
+assert.equal(seq.participants.length, 4);
+const sent = messagesOf(seq.steps);
+assert.equal(sent.length, 6);
+assert.equal(sent[3].kind, "reply", "--> is a reply");
+assert.equal(sent[4].from, sent[4].to, "and a call to itself names one participant twice");
+const seqPlan = planSequence(seq, { x: 0, y: 0, ...sequenceSize(seq) });
+for (let at = 1; at < seqPlan.heads.length; at += 1) {
+  assert.ok(
+    seqPlan.heads[at].x > seqPlan.heads[at - 1].x,
+    "lifelines stand in the order they are written",
+  );
+}
+for (const message of seqPlan.messages) {
+  const from = seqPlan.heads[message.from];
+  const to = seqPlan.heads[message.to];
+  assert.ok(
+    message.y > from.top && message.y <= from.bottom,
+    "a message is sent while its sender is on the sheet",
+  );
+  if (!message.self) {
+    const low = Math.min(message.points[0].x, message.points[1].x);
+    const high = Math.max(message.points[0].x, message.points[1].x);
+    assert.ok(
+      low >= Math.min(from.x, to.x) - 1 && high <= Math.max(from.x, to.x) + 1,
+      "and it runs between the two lifelines it names",
+    );
+  }
+}
+const loop = seqPlan.messages.find((message) => message.self)!;
+assert.equal(loop.points.length, 4, "a call to itself is drawn as a loop");
+const outer = seqPlan.bars.find(
+  (bar) => bar.participant === 2 && bar.height > 100,
+)!;
+const answered = seqPlan.messages.find(
+  (message) => message.kind === "reply" && message.from === 2,
+)!;
+assert.equal(
+  outer.y + outer.height,
+  answered.y,
+  "a reply closes the execution its sender was running",
+);
+const nested = seqPlan.bars.find(
+  (bar) => bar.participant === 2 && bar.y === loop.y,
+)!;
+assert.ok(nested.x > outer.x, "a nested bar steps right of the one holding it");
+
+const fragment = parseDSL(
+  'sequence "F" {\n object A "A"\n object B "B"\n A -> B "one"\n alt "yes" { A -> B "two" } else "no" { B --> A "three" }\n}',
+).figure as SequenceSpec;
+assert.equal(fragment.steps.length, 2, "one message and one fragment");
+assert.equal(messagesOf(fragment.steps).length, 3, "and three messages inside them");
+const fragPlan = planSequence(fragment, { x: 0, y: 0, ...sequenceSize(fragment) });
+assert.equal(fragPlan.fragments.length, 1);
+assert.equal(fragPlan.fragments[0].sections.length, 2, "an alt has two sections");
+const inside = fragPlan.messages.filter((message) => message.y > fragPlan.fragments[0].box.y);
+assert.equal(inside.length, 2, "the two messages it wraps are inside its box");
+assert.ok(
+  inside.every(
+    (message) =>
+      message.y < fragPlan.fragments[0].box.y + fragPlan.fragments[0].box.height,
+  ),
+  "and the box closes under the last of them",
+);
 
 // the samples the public pages type out are real source, not prose that looks
 // like it: every one of them parses and lays out

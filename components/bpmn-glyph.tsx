@@ -181,6 +181,52 @@ const GLYPHS: Record<string, JSX.Element> = {
       <path d="M11 6v20M11 16h30" strokeWidth="1.4" />
     </g>
   ),
+  actor: (
+    <g strokeWidth="1.4">
+      <circle cx="22" cy="7" r="4" />
+      <path d="M22 11v9M15 14.5h14M16 28l6-8 6 8" fill="none" />
+    </g>
+  ),
+  usecase: <ellipse cx="22" cy="16" rx="17" ry="9" strokeWidth="1.4" />,
+  system: (
+    <g strokeWidth="1.4">
+      <rect x="4" y="4" width="36" height="24" />
+      <path d="M13 10h18" />
+      <ellipse cx="22" cy="19" rx="9" ry="5" />
+    </g>
+  ),
+  initial: <circle cx="22" cy="16" r="7" fill="currentColor" stroke="none" />,
+  final: (
+    <g>
+      <circle cx="22" cy="16" r="9" strokeWidth="1.4" />
+      <circle cx="22" cy="16" r="4.5" fill="currentColor" stroke="none" />
+    </g>
+  ),
+  "flow-final": (
+    <g strokeWidth="1.4">
+      <circle cx="22" cy="16" r="9" />
+      <path d="M17 11l10 10M27 11L17 21" />
+    </g>
+  ),
+  action: <rect x="6" y="6" width="32" height="20" rx="7" strokeWidth="1.4" />,
+  object: <rect x="6" y="6" width="32" height="20" strokeWidth="1.4" />,
+  merge: <path d="M22 3l13 13-13 13L9 16z" strokeWidth="1.4" />,
+  fork: <rect x="5" y="14" width="34" height="4" fill="currentColor" stroke="none" />,
+  join: <rect x="5" y="14" width="34" height="4" fill="currentColor" stroke="none" />,
+  entity: (
+    <g strokeWidth="1.4">
+      <rect x="5" y="5" width="34" height="22" />
+      <path d="M5 12h34M13 12v15" />
+      <rect x="5" y="5" width="34" height="7" fill="currentColor" fillOpacity="0.2" stroke="none" />
+    </g>
+  ),
+  weak: (
+    <g strokeWidth="1.4">
+      <rect x="5" y="5" width="34" height="22" />
+      <rect x="7.5" y="7.5" width="29" height="17" strokeWidth="1" />
+      <path d="M5 12h34" />
+    </g>
+  ),
   process: <rect x="6" y="6" width="32" height="20" strokeWidth="1.4" />,
   decision: <path d="M22 3l13 13-13 13L9 16z" strokeWidth="1.4" />,
   io: (

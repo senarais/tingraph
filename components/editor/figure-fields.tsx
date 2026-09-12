@@ -91,6 +91,37 @@ export function TextField({
   );
 }
 
+/** A short list to pick one thing from: a participant, a kind of message. */
+export function Picker<T extends string>({
+  value,
+  options,
+  onChange,
+  title,
+  className = "",
+}: {
+  value: T;
+  options: Array<{ value: T; label: string }>;
+  onChange: (value: T) => void;
+  title?: string;
+  className?: string;
+}) {
+  return (
+    <select
+      value={value}
+      title={title}
+      aria-label={title}
+      onChange={(event) => onChange(event.target.value as T)}
+      className={`min-w-0 border-2 border-edge bg-white px-1 py-1 font-mono text-[11.5px] text-ink ${className}`}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
 export function ColourDot({
   colour,
   onPick,

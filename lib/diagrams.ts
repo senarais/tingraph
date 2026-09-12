@@ -69,6 +69,81 @@ export const ORG_SAMPLE = `org "Faculty of Psychology" {
 }
 `;
 
+export const USECASE_SAMPLE = `usecase "Bank ATM" {
+  actor CUST "Customer"
+  actor BANK "Bank" right
+
+  system ATM "Bank ATM" {
+    usecase U1 "Check Balances"
+    usecase U2 "Withdraw Cash"
+    usecase U3 "Transfer Funds"
+  }
+
+  CUST -> U1
+  CUST -> U2
+  CUST -> U3
+  U2 -> BANK
+  U3 -> BANK
+  include U2 -> U1
+}
+`;
+
+export const ACTIVITY_SAMPLE = `activity "Order Payment" {
+  lane U "User" {
+    initial S1
+    action A1 "Log in"
+    decision D1
+    action A3 "Enter the password"
+  }
+  lane S "System" {
+    action A2 "View unpaid orders"
+    action A4 "Confirm payment"
+    final E1
+  }
+
+  S1 -> A1 -> A2 -> D1
+  D1 [confirm] -> A3 -> A4 -> E1
+  D1 [cancel] -> E1
+}
+`;
+
+export const SEQUENCE_SAMPLE = `sequence "Shopping Cart" {
+  actor CUST "Customer"
+  object CART ":Cart"
+  object ORDER ":Order"
+
+  numbers on
+
+  CUST -> CART "«create»"
+  CART -> ORDER "getTotal()"
+  ORDER -> ORDER "calculateTotal()"
+  ORDER --> CART "totalPrice"
+}
+`;
+
+export const ERD_SAMPLE = `erd "Airline Booking" {
+  entity PASSENGER "passengers" {
+    pk "id" "bigint"
+    "first_name" "varchar(50)"
+    "passport_number" "varchar(20)" unique
+  }
+
+  entity BOOKING "booking" {
+    pk "booking_id" "bigint"
+    fk "passenger_id" "bigint"
+    "status" "varchar(20)"
+  }
+
+  weak BAGGAGE "baggage" {
+    pk "id" "bigint"
+    fk "booking_id" "bigint"
+  }
+
+  PASSENGER one -> many BOOKING "makes"
+  BOOKING one -.-> many BAGGAGE "checks in"
+}
+`;
+
 export const BAR_SAMPLE = `bar "Favourite Fruit" {
   x "Favourite fruit"
   y "Number of students"
@@ -199,6 +274,50 @@ export const READY_DIAGRAMS: DiagramKind[] = [
     sample: ORG_SAMPLE,
   },
   {
+    id: "usecase",
+    name: "Use case",
+    family: "Process",
+    keyword: "usecase",
+    summary:
+      "Actors round a system boundary and the goals they want from it, joined by associations, includes, extends and generalisations.",
+    parts: ["Actors", "Use cases", "System boundary", "Include and extend"],
+    accent: "navy",
+    sample: USECASE_SAMPLE,
+  },
+  {
+    id: "activity",
+    name: "Activity diagram",
+    family: "Process",
+    keyword: "activity",
+    summary:
+      "UML control flow down the page through swimlane partitions, with decisions, merges, forks, joins and object nodes.",
+    parts: ["Partitions", "Actions", "Decisions", "Forks and joins"],
+    accent: "slate",
+    sample: ACTIVITY_SAMPLE,
+  },
+  {
+    id: "sequence",
+    name: "Sequence diagram",
+    family: "Process",
+    keyword: "sequence",
+    summary:
+      "Lifelines with the messages that pass between them in order, execution bars read off the calls, and combined fragments round the runs that need one.",
+    parts: ["Lifelines", "Messages", "Execution bars", "alt, opt and loop"],
+    accent: "oxblood",
+    sample: SEQUENCE_SAMPLE,
+  },
+  {
+    id: "erd",
+    name: "Entity relationship",
+    family: "Data",
+    keyword: "erd",
+    summary:
+      "Entities with their attributes, keys marked in a gutter of their own, and crow's-foot relations saying how many of each.",
+    parts: ["Entities", "Attributes", "Primary and foreign keys", "Crow's feet"],
+    accent: "forest",
+    sample: ERD_SAMPLE,
+  },
+  {
     id: "bar",
     name: "Bar chart",
     family: "Data",
@@ -291,27 +410,19 @@ export const READY_DIAGRAMS: DiagramKind[] = [
 /** Announced, not drawable yet. The catalogue greys these out. */
 export const PLANNED_DIAGRAMS: DiagramKind[] = [
   {
-    id: "sequence",
-    name: "Sequence diagram",
-    family: "Process",
-    summary: "Lifelines with the messages that pass between them, in order.",
-    parts: ["Lifelines", "Messages", "Activation bars"],
-    accent: "slate",
-  },
-  {
-    id: "erd",
-    name: "Entity relationship",
-    family: "Structure",
-    summary: "Entities, their attributes, and the cardinality between them.",
-    parts: ["Entities", "Attributes", "Cardinality"],
-    accent: "slate",
-  },
-  {
     id: "state",
     name: "State machine",
     family: "Process",
     summary: "States and the events that move a thing from one to the next.",
     parts: ["States", "Transitions", "Initial and final"],
+    accent: "slate",
+  },
+  {
+    id: "class",
+    name: "Class diagram",
+    family: "Structure",
+    summary: "Classes, what they hold, what they do, and how they are related.",
+    parts: ["Classes", "Attributes", "Operations", "Associations"],
     accent: "slate",
   },
 ];

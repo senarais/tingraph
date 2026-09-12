@@ -2,7 +2,6 @@ import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/tran
 import type { Arrowhead } from "@excalidraw/excalidraw/element/types";
 import {
   DiagramCategory,
-  EdgeKind,
   NodeType,
   PositionedAST,
   PositionedEdge,
@@ -10,7 +9,9 @@ import {
   PositionedNode,
   PositionedPool,
 } from "@/lib/types";
-import { marked, type UnitMark } from "@/lib/canvas/units";
+import { marked, nodeUnit, type UnitMark } from "@/lib/canvas/units";
+
+export { nodeUnit };
 import { connectorInk, connectorKind, defaultConnector } from "@/lib/connectors";
 import { buildFigure } from "@/lib/figures/registry";
 import {
@@ -33,74 +34,35 @@ import {
   buildBpmnIcons,
   buildDataObjectOutline,
 } from "@/lib/bpmn-icons/markers";
+import {
+  ACADEMIC_MONOCHROME_THEME,
+  CHROME_STROKE_WIDTH,
+  WHITE,
+  softRoundness,
+  themeFor,
+  type Theme,
+} from "@/lib/excalidraw-mapper/theme";
 
-export const ACADEMIC_MONOCHROME_THEME = {
-  strokeColor: "#1e1e1e",
-  backgroundColor: "transparent",
-  fillStyle: "solid",
-  strokeWidth: 2,
-  strokeStyle: "solid",
-  roughness: 0,
-  fontFamily: 2, // Helvetica — formal sans-serif for diagrams
-  fontSize: 16,
-  textAlign: "center",
-  verticalAlign: "middle",
-  opacity: 100,
-} as const;
+import {
+  activityChromeSkeletons,
+  activityNodeSkeletons,
+  erdNodeSkeletons,
+  usecaseNodeSkeletons,
+  usecaseSystemSkeletons,
+} from "@/lib/excalidraw-mapper/build-uml";
 
-const WHITE = "#ffffff";
+export { ACADEMIC_MONOCHROME_THEME };
+
 const ACCENT_GRAY = "#e5e7eb";
 const BPMN_END_STROKE_WIDTH = 4;
 const BPMN_INTERMEDIATE_STROKE_WIDTH = 1.5;
 const BPMN_TASK_ROUNDNESS = { type: 3, value: 10 } as const; // rx=10px cap
-const CHROME_STROKE_WIDTH = 1.5;
 const CONNECTOR_STROKE_WIDTH = 1.5;
 const TITLE_FONT_SIZE = 22;
 const TITLE_GAP = 28;
-/**
- * An org chart is drawn in plain black whatever the ink is, so that the wash
- * behind the role bands is the only colour on the sheet. The value is kept
- * apart from every ink preset on purpose: re-inking the sheet swaps ink for
- * ink and wash for wash, and these rules must sit out both swaps.
- */
-const ORG_STROKE = "#111827";
 const ORG_PILL_ROUNDNESS = { type: 3, value: 6 } as const;
 /** Hairline around a sub-role pill, so the pill still reads on a white wash. */
 const ORG_PILL_EDGE = "#d1d5db";
-
-interface Theme {
-  strokeColor: string;
-  /** wash behind highlighted text — the org band and its sub-role pills */
-  tint: string;
-  fontSize: number;
-  fontFamily: number;
-  lineHeight: number;
-  /** 0 draws true lines, 1 wobbles them */
-  roughness: number;
-  /** corner radius for the boxes the notation leaves free */
-  corner: number;
-}
-
-function themeFor(
-  ink: Ink,
-  category: PositionedAST["category"],
-  style: SheetStyle = FORMAL,
-): Theme {
-  return {
-    strokeColor: category === "org" ? ORG_STROKE : ink.color,
-    tint: ink.tint,
-    fontFamily: style.fontFamily,
-    lineHeight: style.lineHeight,
-    roughness: style.roughness,
-    corner: style.corner,
-    fontSize: category === "bpmn" ? BPMN_LABEL_FONT_SIZE : 16,
-  };
-}
-
-/** Corner setting for a box the notation lets the style round. */
-function softRoundness(theme: Theme) {
-  return theme.corner > 0 ? { type: 3, value: theme.corner } : null;
-}
 
 /**
  * How every connector on the sheet is drawn. The generated flows spread this,
@@ -430,20 +392,31 @@ function orgNodeSkeletons(
   return out;
 }
 
-/** The unit each notation stamps the pieces of one node with. */
-export function nodeUnit(category: DiagramCategory, id: string): string {
-  if (category === "bpmn") {
-    return `bpmn-${id}`;
-  }
-  return category === "org" ? `org-${id}` : `flow-node-${id}`;
-}
 
-/** Which of the notation's lines an edge in the source is drawn as. */
-function lineFor(category: DiagramCategory, kind: EdgeKind | undefined): string {
-  if (kind !== "association") {
+
+/**
+ * Which of the notation's lines an edge in the source is drawn as. A notation
+ * whose source names the line outright — a use case include, an ERD's pair of
+ * crow's feet — says so on the edge; the rest have one solid line and one
+ * dashed one, and the arrow written in the source picks between them.
+ */
+const DASHED: Partial<Record<DiagramCategory, string>> = {
+  bpmn: "association",
+  org: "advisory",
+  flow: "annotation",
+  usecase: "include",
+  activity: "object-flow",
+  erd: "non-identifying",
+};
+
+function lineFor(category: DiagramCategory, edge: PositionedEdge): string {
+  if (edge.line) {
+    return edge.line;
+  }
+  if (edge.kind !== "association") {
     return defaultConnector(category) ?? "sequence";
   }
-  return category === "bpmn" ? "association" : category === "org" ? "advisory" : "annotation";
+  return DASHED[category] ?? "annotation";
 }
 
 /**
@@ -471,7 +444,7 @@ function edgeSkeleton(
   );
   const xs = points.map((p) => p[0]);
   const ys = points.map((p) => p[1]);
-  const line = lineFor(category, edge.kind);
+  const line = lineFor(category, edge);
   return {
     type: "arrow",
     id: `edge-${index}`,
@@ -864,6 +837,38 @@ function poolLaneSkeletons(
   return out;
 }
 
+/** Whatever shape the notation draws this node as. */
+function nodeSkeletons(
+  category: DiagramCategory,
+  node: PositionedNode,
+  theme: Theme,
+): ExcalidrawElementSkeleton[] {
+  switch (category) {
+    case "bpmn":
+      return bpmnNodeSkeletons(node, theme);
+    case "org":
+      return orgNodeSkeletons(node, theme);
+    case "usecase":
+      return usecaseNodeSkeletons(node, theme);
+    case "activity":
+      return activityNodeSkeletons(node, theme);
+    case "erd":
+      return erdNodeSkeletons(node, theme);
+    default:
+      return flowNodeSkeletons(node, theme);
+  }
+}
+
+/** One free-standing shape of any notation, dropped straight onto the sheet. */
+export function buildShapeFor(
+  category: DiagramCategory,
+  node: PositionedNode,
+  ink: Ink = MONOCHROME,
+  style: SheetStyle = FORMAL,
+): ExcalidrawElementSkeleton[] {
+  return nodeSkeletons(category, node, themeFor(ink, category, style));
+}
+
 export function buildSkeletons(
   positioned: PositionedAST,
   ink: Ink = MONOCHROME,
@@ -879,34 +884,37 @@ export function buildSkeletons(
       `${figure.kind}-1`,
     );
   }
-  const theme = themeFor(ink, positioned.category, style);
+  const category = positioned.category;
+  const theme = themeFor(ink, category, style);
   const skeletons: ExcalidrawElementSkeleton[] = [];
-  const isBpmn = positioned.category === "bpmn";
-  const isOrg = positioned.category === "org";
+  const isBpmn = category === "bpmn";
+  // every notation but the flowchart writes its captions beside the line
+  // rather than on it, so they are placed after the shapes and nudged clear
+  const besideTheLine = category !== "flow";
 
   if (isBpmn && positioned.pools) {
     skeletons.push(...poolLaneSkeletons(positioned, theme));
   }
+  for (const pool of (category === "usecase" ? positioned.pools : undefined) ?? []) {
+    skeletons.push(...usecaseSystemSkeletons(pool, theme));
+  }
+  for (const pool of (category === "activity" ? positioned.pools : undefined) ?? []) {
+    skeletons.push(...activityChromeSkeletons(pool, theme));
+  }
 
   for (const node of positioned.nodes) {
-    skeletons.push(
-      ...(isBpmn
-        ? bpmnNodeSkeletons(node, theme)
-        : isOrg
-          ? orgNodeSkeletons(node, theme)
-          : flowNodeSkeletons(node, theme)),
-    );
+    skeletons.push(...nodeSkeletons(category, node, theme));
   }
 
   positioned.edges.forEach((edge, index) => {
-    const skeleton = isBpmn
-      ? edgeSkeleton(edge, index, theme, positioned.category)
-      : flowEdgeSkeleton(edge, index, theme, positioned.category);
+    const skeleton = besideTheLine
+      ? edgeSkeleton(edge, index, theme, category)
+      : flowEdgeSkeleton(edge, index, theme, category);
     if (skeleton) {
       skeletons.push(skeleton);
     }
   });
-  if (isBpmn || isOrg) {
+  if (besideTheLine) {
     skeletons.push(...edgeLabelSkeletons(positioned, theme));
   }
 
@@ -914,27 +922,6 @@ export function buildSkeletons(
     skeletons.push(titleSkeleton(positioned, theme));
   }
   return skeletons;
-}
-
-/**
- * One free-standing shape, for dropping a BPMN element straight onto the
- * canvas instead of writing it in the DSL.
- */
-export function buildShapeSkeletons(
-  node: PositionedNode,
-  ink: Ink = MONOCHROME,
-  style: SheetStyle = FORMAL,
-): ExcalidrawElementSkeleton[] {
-  return bpmnNodeSkeletons(node, themeFor(ink, "bpmn", style));
-}
-
-/** One free-standing flowchart shape, dropped straight onto the canvas. */
-export function buildFlowShapeSkeletons(
-  node: PositionedNode,
-  ink: Ink = MONOCHROME,
-  style: SheetStyle = FORMAL,
-): ExcalidrawElementSkeleton[] {
-  return flowNodeSkeletons(node, themeFor(ink, "flow", style));
 }
 
 /** One pool box, for adding a participant straight on the canvas. */
@@ -953,13 +940,4 @@ export function buildLaneSkeletons(
   style: SheetStyle = FORMAL,
 ): ExcalidrawElementSkeleton[] {
   return laneSkeletons(lane, themeFor(ink, "bpmn", style), true);
-}
-
-/** One free-standing org box, for dropping a role straight onto the sheet. */
-export function buildOrgShapeSkeletons(
-  node: PositionedNode,
-  ink: Ink = MONOCHROME,
-  style: SheetStyle = FORMAL,
-): ExcalidrawElementSkeleton[] {
-  return orgNodeSkeletons(node, themeFor(ink, "org", style));
 }

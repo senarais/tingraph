@@ -4,12 +4,21 @@
 
 A diagram editor. The reader writes a small DSL, Tingraph parses it, lays it
 out, and draws it onto an Excalidraw canvas; from that moment the sheet is
-theirs to edit by hand. Eleven notations ship today, in two families:
+theirs to edit by hand. Fifteen notations ship today, in two families:
 
-- **graphs** — `flow` (flowchart), `bpmn` (BPMN 2.0 with pools and lanes) and
-  `org` (org chart): elements joined by connectors, edited one at a time.
+- **graphs** — `flow` (flowchart), `bpmn` (BPMN 2.0 with pools and lanes),
+  `org` (org chart), `usecase` (UML use case), `activity` (UML activity with
+  partitions) and `erd` (entity relationship): elements joined by connectors,
+  edited one at a time.
 - **figures** — `bar`, `line`, `pie`, `scatter`, `mind` (mind map), `matrix`
-  (2×2), `venn` and `fishbone`: one object, drawn.
+  (2×2), `venn`, `fishbone` and `sequence` (UML sequence): one object, drawn.
+
+**Which family a notation belongs in is the first decision, and the only one
+that is hard to undo.** A notation whose elements can be anywhere on the sheet
+and joined to anything is a graph. A notation whose marks are *derived* — a
+sequence diagram's messages are third, fourth, fifth, and its execution bars
+are read off them rather than placed — is a figure, because there is no
+element for the reader to drag that would mean anything on its own.
 
 `isGraph()`, `isFigure()` and `isChart()` in `lib/types.ts` are what tell them
 apart, and almost everything in the editor asks one of them. The architecture
@@ -45,6 +54,15 @@ DSL text → parseDSL → AST → computeLayout → PositionedAST
 
 `lib/parser/parse-dsl.ts` → `lib/layout/compute-layout.ts` →
 `lib/excalidraw-mapper/build-skeletons.ts` → `lib/excalidraw-mapper/map-to-elements.ts`.
+
+`compute-layout.ts` dispatches; each notation's arrangement is its own file
+(`lib/layout/layout-usecase.ts`, `layout-activity.ts`, `layout-erd.ts`), and
+what more than one of them needs sits below them so nothing ever points back
+up: `lib/layout/text.ts` measures a caption without a browser, and
+`lib/layout/graph.ts` holds the ranking and the top-down routing a flowchart
+and an activity diagram share. `build-skeletons.ts` does the same on the way
+out — `lib/excalidraw-mapper/theme.ts` is what every notation draws with, and
+`build-uml.ts` is the three UML graphs' own shapes.
 
 The pipeline runs once, when the reader presses Generate in the source drawer
 (`generate()` in `components/editor/editor-root.tsx`). It is the only moment
@@ -114,8 +132,19 @@ Two rules follow from this and are easy to break by accident:
 - `unit` is an identity, not a label. Two elements with the same `unit` *are*
   the same element. Never copy a mark onto something new without renaming it.
 - The unit name each notation stamps a node with comes from `nodeUnit` in
-  `build-skeletons.ts`: `bpmn-<id>`, `org-<id>`, `flow-node-<id>`. Connectors
-  from the source use `flow-<index>`; ones drawn by hand use `line-<random>`.
+  `lib/canvas/units.ts`: `bpmn-<id>`, `org-<id>`, `uc-<id>`, `act-<id>`,
+  `erd-<id>`, `flow-node-<id>`. Connectors from the source use `flow-<index>`;
+  ones drawn by hand use `line-<random>`.
+- A `UnitKind` of `frame` is chrome a notation draws round its elements but
+  does not edit on the sheet: a use case boundary, an activity's partitions.
+  It is kept apart from `pool` on purpose — `poolBoxes` looks for `pool`, and
+  a use case boundary offered BPMN's add-a-lane controls would be nonsense.
+- **A notation whose element is drawn as strokes needs a box for a line to tie
+  itself to.** `linkTargets` takes the outline of a unit's *shape* pieces, so
+  a use case actor — a circle and four rules — would otherwise be joined at
+  its head. It carries a rectangle with no stroke and no fill, and that is the
+  thing connectors find. The layout anchors its generated routes on the same
+  box, or a line would move the first time anything did.
 
 ### Copies
 
@@ -185,6 +214,19 @@ Route shapes, chosen by which sides the two ends use:
   have to run backwards
 - ends leaving the same way → three legs past the further of them
 
+### Partitions are columns, and that is why they are their own layout
+
+A BPMN pool is a row with its name turned on its side; a UML activity
+partition is a **column** with its name above it, because an activity reads
+down the page while its partitions run across it. That is not a setting on one
+layout, it is the other arrangement — so `lib/layout/layout-activity.ts` is
+its own file and `PositionedLane` carries `headerHeight` beside `headerWidth`,
+with exactly one of the two ever set. `activityChromeSkeletons` draws the
+frame, the band and the column rules.
+
+The same field carries a use case boundary: a `system` block is parsed into a
+pool with no lanes at all, and drawn as one box with its name along the top.
+
 ### Pools carry their own controls
 
 A BPMN pool has a small rail beside it on the sheet: add a lane, take the
@@ -200,6 +242,16 @@ nothing left to be cut against.
 boxes are clear of each other both ways; when they are stacked, or standing
 side by side, the axis that separates them wins instead.
 
+- **usecase** is the one notation whose lines are **not square**: an actor is
+  joined to what it takes part in by a plain straight line, so `readsStraight`
+  sends it down a different path in `routeBetween` that returns two points.
+  A use case is met round its curve rather than at the corner of the box it
+  sits in, which is what `round` on a `Box` is for; `linkTargets` sets it when
+  a unit's only shape is an ellipse.
+- **activity** reads down the page like a flowchart. Its partitions run
+  *across* it, which is the whole reason it is not a BPMN sheet turned round.
+- **erd** turns square like the rest, and its two ends carry crow's feet
+  rather than an arrowhead.
 - **org** reads down the page, so a line leaves the **bottom** of a box and
   meets the **top** of the one below. `railBetween` then puts the middle leg a
   fixed `ORG_RAIL` under the box it leaves, rather than half way. That is the
@@ -269,10 +321,13 @@ message flow and association; the org chart's reporting line and advisory tie;
 the flowchart's flow line and annotation. The rail's arrow button opens the
 list; pressing it again with the list open puts the connector back.
 
-**To add ERD:** add its rows to `CONNECTORS` (Excalidraw already carries
-`crowfoot_one`, `crowfoot_many` and `crowfoot_one_or_many` arrowheads), and
-give `connect.ts` the rule for where a relation meets a table. The rest — the
-rail, the gestures, the re-cutting, copies, export — needs no change.
+A use case diagram adds the association and its three named relations, an
+activity diagram the control and object flows, and an ERD every pairing of
+crow's feet. The ERD list is generated: four ends (`one`, `many`,
+`one-or-many`, `zero-or-one`) make sixteen pairings, and all but five carry
+`hidden` so the rail offers the five a reader actually reaches for while the
+source can write any of them. Excalidraw has a head for each end but none that
+rings a fork, so `many` stands for zero-or-many.
 
 ## Figures: one object, drawn
 
@@ -295,6 +350,7 @@ One folder per notation, and they share nothing but the mechanism:
 | `lib/matrix/` | `matrix` |
 | `lib/venn/` | `venn` |
 | `lib/fishbone/` | `fishbone` |
+| `lib/sequence/` | `sequence` |
 
 Inside each, the split is the same and is worth keeping: `spec.ts` is what the
 thing *is* (no geometry), a layout step is where every mark goes in sheet units
@@ -327,6 +383,11 @@ Consequences to keep in mind:
   grew under it.
 - Excalidraw fills a `line` whose first and last points meet, which is how a
   pie slice is drawn. Keep slices closed.
+- **Every caption a figure draws is a text element of its own, never a caption
+  bound to a shape.** `redrawFigure` takes away the pieces carrying the
+  figure's mark, and Excalidraw puts no mark on a caption it binds for you, so
+  a bound one would be left behind by the first edit. The graph notations bind
+  freely; a figure never may.
 - Resizing a figure on the sheet stretches its shapes like any group;
   `syncFigures` notices the frame is no longer the size the spec claims and
   draws it again properly once the pointer is up.
@@ -354,6 +415,7 @@ stay different:
 | `matrix` | drag an item about the field; where it lands is what it means |
 | `venn` | drag a ring to set the overlap |
 | `fishbone` | press a bone to put a cause on it, a cause to put what is behind it |
+| `sequence` | drag a lifeline along the top to reorder the participants, press a message to move it up or down the order it is sent in |
 
 Three things every figure has on the sheet, built from
 `components/editor/figure-handles.tsx` so they behave alike:
@@ -388,12 +450,40 @@ Every figure panel ends with a reset that puts the figure back to
 it rewrites the source with the notation's template and draws it. Both ask
 twice — one press arms, the second does it — because both throw work away.
 
+### The sequence diagram, which is the odd one
+
+It is a figure because its marks are derived, not placed — but unlike every
+other figure it draws arrows, and its geometry has two directions worth
+knowing about.
+
+- **Across:** one lifeline per participant, in the order they are written,
+  spread to fill whatever width the figure has but never closer than
+  `spacing`.
+- **Down:** one row per message, in the order they are sent, which is the
+  order they are written. A combined fragment has no row of its own — its box
+  is opened before its first message and closed after its last, which is what
+  lets it wrap a nested one without any arithmetic about how deep it is.
+- **The execution bars are never written down.** A call opens one on whatever
+  it reaches, a reply closes the one its *sender* was running, and a call to
+  itself opens one a level deeper that closes a step later, because nothing
+  replies to it. That rule is the whole of `planSequence`'s bar pass, and it
+  is why the language has no way to say where a bar starts.
+- `create` moves the target's head box down to the message, and its bar starts
+  where its lifeline does rather than at the message. `destroy` cuts the
+  lifeline short and crosses it out.
+- Drawing order is stacking order: lifelines, heads, bars, fragments, then the
+  messages. The fragment tabs go over the bars on purpose — a filled tab that
+  a bar had covered would be unreadable.
+
 ### Adding a notation
 
 1. A folder under `lib/` with its own `spec.ts`, layout and build. Nothing in
    it should import another notation's layout — the palettes and the colour
    helpers in `lib/chart/spec.ts` are shared on purpose; geometry is not.
-2. Its parser in `lib/parser/`, over the shared tokeniser in `tokens.ts`.
+2. Its parser in `lib/parser/`, over the shared tokeniser in `tokens.ts` and,
+   for a figure, the block reader in `reader.ts`. The tokeniser knows three
+   arrows — `->`, `->>` and `-->` (which `-.->` also spells) — so a notation
+   that needs to tell a call from a signal from a reply already can.
 3. A row in `lib/figures/registry.ts`, and the kind in `FIGURE_KINDS`
    (`lib/types.ts`) so `isFigure()` knows it.
 4. Its own panel, `components/editor/<kind>-drawer.tsx`, picked up by
@@ -414,7 +504,8 @@ and that is the thing to fix.
 `npm run self-check` runs three assert-based scripts under `tsx`:
 `scripts/self-check.ts` (parser, layout, connector geometry, copies, and every
 figure's own geometry — a Venn region really falls inside the right rings, a
-fishbone's causes really meet their bone),
+fishbone's causes really meet their bone, a sequence reply really closes the
+execution its sender was running),
 `scripts/mapper-check.ts` (skeletons) and `scripts/editor-check.ts` (styles,
 inspector, export). No test framework. Anything that can be answered without a
 browser should be asserted there rather than clicked through.

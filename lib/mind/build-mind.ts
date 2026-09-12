@@ -3,7 +3,7 @@ import type { FileId } from "@excalidraw/excalidraw/element/types";
 import { marked } from "@/lib/canvas/units";
 import { MONOCHROME, type Ink } from "@/lib/ink";
 import { FORMAL, type SheetStyle } from "@/lib/sheet";
-import { readableOn } from "@/lib/chart/spec";
+import { readableOn, toPaper } from "@/lib/chart/spec";
 import { mindStyle, type MindShape, type MindSpec } from "@/lib/mind/spec";
 import {
   layoutMind,
@@ -27,24 +27,6 @@ const BASE = {
   opacity: 100,
   angle: 0,
 } as const;
-
-/** A colour taken most of the way to paper, for a fill under black writing. */
-function toPaper(hex: string, amount: number): string {
-  const value = hex.replace("#", "");
-  const full =
-    value.length === 3
-      ? value
-          .split("")
-          .map((c) => c + c)
-          .join("")
-      : value;
-  const mixed = [0, 2, 4]
-    .map((at) => parseInt(full.slice(at, at + 2), 16))
-    .map((channel) => Math.round(channel + (255 - channel) * amount))
-    .map((channel) => channel.toString(16).padStart(2, "0"))
-    .join("");
-  return `#${mixed}`;
-}
 
 interface Paper {
   ink: string;

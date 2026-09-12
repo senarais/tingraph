@@ -17,6 +17,7 @@ import {
   Type,
   Wand2,
   Waypoints,
+  MessagesSquare,
   type LucideIcon,
 } from "lucide-react";
 import { useTingraphStore, type CanvasTool, type Drawer } from "@/lib/store";
@@ -103,6 +104,7 @@ const FIGURE_ICONS: Partial<Record<DiagramCategory, LucideIcon>> = {
   matrix: Grid2x2,
   venn: Blend,
   fishbone: Fish,
+  sequence: MessagesSquare,
 };
 
 /**
@@ -161,37 +163,72 @@ const POINTER_KEYS: Record<string, CanvasTool | undefined> = {
  */
 const STOLEN_KEYS = new Set("rdolfpkxaeti23456789".split(""));
 
+/**
+ * One end of a line, drawn the way Excalidraw draws it: `at` is the tip and
+ * `way` says which end of the sample it sits on, so a crow's foot opens
+ * towards the table it belongs to whichever end that is.
+ */
+function LineHead({
+  head,
+  at,
+  way,
+}: {
+  head: ConnectorKind["endArrowhead"];
+  at: number;
+  way: 1 | -1;
+}) {
+  if (!head) {
+    return null;
+  }
+  const back = at - way * 7;
+  const line = { fill: "none", stroke: "currentColor", strokeWidth: 1.5 } as const;
+  switch (head) {
+    case "triangle":
+      return <path d={`M${back} 1.5L${at} 6L${back} 10.5Z`} fill="currentColor" />;
+    case "triangle_outline":
+      return (
+        <path d={`M${back} 1.5L${at} 6L${back} 10.5Z`} {...line} strokeLinejoin="round" />
+      );
+    case "arrow":
+      return <path d={`M${back} 1.8L${at} 6L${back} 10.2`} {...line} />;
+    case "circle_outline":
+      return (
+        <circle cx={at - way * 2.5} cy="6" r="2.5" {...line} />
+      );
+    case "crowfoot_one":
+      return <path d={`M${at - way * 4} 1.5V10.5`} {...line} />;
+    case "crowfoot_many":
+      return <path d={`M${back} 6L${at} 1M${back} 6L${at} 11M${back} 6L${at} 6`} {...line} />;
+    case "crowfoot_one_or_many":
+      return (
+        <g {...line}>
+          <path d={`M${back} 6L${at} 1M${back} 6L${at} 11`} />
+          <path d={`M${back - way * 3} 1.5V10.5`} />
+        </g>
+      );
+    default:
+      return null;
+  }
+}
+
 /** How a line is drawn, in miniature, beside its name. */
 function LineSample({ kind }: { kind: ConnectorKind }) {
   const dash =
     kind.strokeStyle === "dashed" ? "7 4" : kind.strokeStyle === "dotted" ? "1 4" : undefined;
   return (
-    <svg width="38" height="12" viewBox="0 0 38 12" aria-hidden="true" className="shrink-0">
+    <svg width="40" height="12" viewBox="0 0 40 12" aria-hidden="true" className="shrink-0">
       <line
-        x1={kind.startArrowhead ? 6 : 1}
+        x1={kind.startArrowhead ? 8 : 1}
         y1="6"
-        x2={kind.endArrowhead ? 29 : 37}
+        x2={kind.endArrowhead ? 32 : 39}
         y2="6"
         stroke="currentColor"
         strokeWidth="1.5"
         strokeDasharray={dash}
         strokeLinecap="butt"
       />
-      {kind.startArrowhead === "circle_outline" && (
-        <circle cx="3.5" cy="6" r="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-      )}
-      {kind.endArrowhead === "triangle" && (
-        <path d="M29 1.5 L37 6 L29 10.5 Z" fill="currentColor" />
-      )}
-      {kind.endArrowhead === "triangle_outline" && (
-        <path
-          d="M29 1.5 L37 6 L29 10.5 Z"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinejoin="round"
-        />
-      )}
+      <LineHead head={kind.startArrowhead} at={1} way={-1} />
+      <LineHead head={kind.endArrowhead} at={39} way={1} />
     </svg>
   );
 }
@@ -405,7 +442,9 @@ export default function Rail({ category }: { category: DiagramCategory }) {
               <p className="border-b-2 border-edge px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
                 Connector · hold space to pan
               </p>
-              {CONNECTORS[category].map((kind) => (
+              {CONNECTORS[category]
+                .filter((kind) => !kind.hidden)
+                .map((kind) => (
                 <button
                   key={kind.id}
                   type="button"

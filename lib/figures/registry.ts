@@ -14,6 +14,8 @@ import { buildVennSkeletons } from "@/lib/venn/build-venn";
 import { blankVenn } from "@/lib/venn/spec";
 import { buildFishboneSkeletons } from "@/lib/fishbone/build-fishbone";
 import { blankFishbone } from "@/lib/fishbone/spec";
+import { buildSequenceSkeletons } from "@/lib/sequence/build-sequence";
+import { blankSequence } from "@/lib/sequence/spec";
 
 /**
  * The one place that knows which figure is which.
@@ -88,6 +90,11 @@ export const FIGURES: Partial<Record<DiagramCategory, FigureDef>> = {
     label: "Fishbone",
     build: buildFishboneSkeletons as FigureDef["build"],
     blank: blankFishbone,
+  },
+  sequence: {
+    label: "Sequence diagram",
+    build: buildSequenceSkeletons as FigureDef["build"],
+    blank: blankSequence,
   },
 };
 

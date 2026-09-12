@@ -3,7 +3,10 @@ import {
   flowDimensions,
   orgBoxLayout,
 } from "@/lib/layout/compute-layout";
-import { DiagramCategory, NodeType } from "@/lib/types";
+import { activityShapeSize } from "@/lib/layout/layout-activity";
+import { usecaseNodeSize } from "@/lib/layout/layout-usecase";
+import { erdShapeSize } from "@/lib/layout/layout-erd";
+import { DiagramCategory, DSLNode, NodeType } from "@/lib/types";
 
 export interface PaletteItem {
   /** DSL keyword */
@@ -86,6 +89,55 @@ const ORG_GROUPS: PaletteGroup[] = [
   },
 ];
 
+const USECASE_GROUPS: PaletteGroup[] = [
+  {
+    title: "Elements",
+    items: [
+      { type: "actor", label: "Actor", hint: "stick figure", droppable: true },
+      { type: "usecase", label: "Use case", hint: "an oval goal", droppable: true },
+      { type: "system", label: "System", hint: "the boundary round them", droppable: false },
+    ],
+  },
+];
+
+const ACTIVITY_GROUPS: PaletteGroup[] = [
+  {
+    title: "Steps",
+    items: [
+      { type: "action", label: "Action", hint: "rounded box", droppable: true },
+      { type: "object", label: "Object", hint: "a value passing along", droppable: true },
+    ],
+  },
+  {
+    title: "Branches",
+    items: [
+      { type: "decision", label: "Decision", hint: "one way or the other", droppable: true },
+      { type: "merge", label: "Merge", hint: "the ways coming back", droppable: true },
+      { type: "fork", label: "Fork", hint: "split into several", droppable: true },
+      { type: "join", label: "Join", hint: "several back into one", droppable: true },
+    ],
+  },
+  {
+    title: "Start and stop",
+    items: [
+      { type: "initial", label: "Initial", hint: "filled dot", droppable: true },
+      { type: "final", label: "Final", hint: "bullseye", droppable: true },
+      { type: "flow-final", label: "Flow final", hint: "this branch stops", droppable: true },
+      { type: "lane", label: "Partition", hint: "a column, written in code", droppable: false },
+    ],
+  },
+];
+
+const ERD_GROUPS: PaletteGroup[] = [
+  {
+    title: "Tables",
+    items: [
+      { type: "entity", label: "Entity", hint: "a table and its attributes", droppable: true },
+      { type: "weak", label: "Weak entity", hint: "double outline", droppable: true },
+    ],
+  },
+];
+
 /**
  * A chart has no shapes to drop: what a reader adds to one is a reading, and
  * that is the Chart panel's job rather than the shape drawer's. The rail hides
@@ -95,6 +147,10 @@ export const PALETTE_GROUPS: Record<DiagramCategory, PaletteGroup[]> = {
   bpmn: BPMN_GROUPS,
   flow: FLOW_GROUPS,
   org: ORG_GROUPS,
+  usecase: USECASE_GROUPS,
+  activity: ACTIVITY_GROUPS,
+  erd: ERD_GROUPS,
+  sequence: [],
   bar: [],
   line: [],
   pie: [],
@@ -106,6 +162,16 @@ export const PALETTE_GROUPS: Record<DiagramCategory, PaletteGroup[]> = {
 };
 
 function idPrefix(type: string): string {
+  if (type === "usecase") return "U";
+  if (type === "actor") return "A";
+  if (type === "action") return "A";
+  if (type === "object") return "O";
+  if (type === "initial") return "S";
+  if (type === "final" || type === "flow-final") return "E";
+  if (type === "merge") return "M";
+  if (type === "fork") return "F";
+  if (type === "join") return "J";
+  if (type === "entity" || type === "weak") return "E";
   if (type.startsWith("msg-")) return "M";
   if (type.startsWith("send-") || type.startsWith("script-")) return "S";
   if (type.startsWith("recv-")) return "R";
@@ -142,6 +208,56 @@ export function orgSampleNode(type: string, counter: number) {
   };
 }
 
+/**
+ * The node a palette item stands for, as the layout reads it. One place, so
+ * the preview under the pointer, the shape that lands and the size the two are
+ * measured at can never disagree.
+ */
+export function sampleNode(
+  category: DiagramCategory,
+  type: string,
+  counter: number,
+): DSLNode {
+  if (category === "org") {
+    return orgSampleNode(type, counter) as DSLNode;
+  }
+  const id = `${idPrefix(type)}${counter}`;
+  if (category === "erd") {
+    return {
+      id,
+      type: type as NodeType,
+      label: `table_${counter}`,
+      fields: [
+        { name: "id", type: "bigint", key: "pk" },
+        { name: "name", type: "varchar(50)" },
+      ],
+    };
+  }
+  if (category === "usecase") {
+    return {
+      id,
+      type: type as NodeType,
+      label: type === "actor" ? `Actor ${counter}` : `Use case ${counter}`,
+    };
+  }
+  if (category === "activity") {
+    return {
+      id,
+      type: type as NodeType,
+      label:
+        type === "action" ? `Action ${counter}` : type === "object" ? `Object ${counter}` : "",
+    };
+  }
+  const item = PALETTE_GROUPS[category]
+    .flatMap((group) => group.items)
+    .find((entry) => entry.type === type);
+  return {
+    id,
+    type: type as NodeType,
+    label: category === "flow" ? (item?.label ?? type) : droppedLabel(item ?? { type, label: type, hint: "", droppable: true }),
+  };
+}
+
 /** DSL text for the item, ready to drop at the caret. */
 export function snippetFor(item: PaletteItem, counter: number): string {
   if (item.type === "role") {
@@ -157,6 +273,28 @@ export function snippetFor(item: PaletteItem, counter: number): string {
       `\n    unit "Sub-role" "Name"` +
       `\n  }`
     );
+  }
+  if (item.type === "system") {
+    return `\n  system S${counter} "System ${counter}" {\n    usecase U${counter} "Goal"\n  }\n`;
+  }
+  if (item.type === "entity" || item.type === "weak") {
+    return (
+      `\n  ${item.type} E${counter} "table_${counter}" {` +
+      `\n    pk "id" "bigint"` +
+      `\n    "name" "varchar(50)"` +
+      `\n  }`
+    );
+  }
+  if (
+    item.type === "initial" ||
+    item.type === "final" ||
+    item.type === "flow-final" ||
+    item.type === "decision" ||
+    item.type === "merge" ||
+    item.type === "fork" ||
+    item.type === "join"
+  ) {
+    return `\n  ${item.type} ${idPrefix(item.type)}${counter}`;
   }
   if (item.type === "pool") {
     return `\n  pool P${counter} "Pool ${counter}" {\n    lane L${counter} "Lane ${counter}" {\n    }\n  }\n`;
@@ -207,6 +345,15 @@ export function paletteShapeSize(
   }
   if (category === "flow") {
     return flowDimensions(item.type as NodeType, item.label);
+  }
+  if (category === "usecase") {
+    return usecaseNodeSize(item.type, sampleNode(category, item.type, 1).label);
+  }
+  if (category === "activity") {
+    return activityShapeSize(item.type, sampleNode(category, item.type, 1).label);
+  }
+  if (category === "erd") {
+    return erdShapeSize(sampleNode(category, item.type, 1));
   }
   return bpmnShapeSize(item.type as NodeType, droppedLabel(item));
 }

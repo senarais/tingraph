@@ -200,6 +200,28 @@ export function markColor(
   }
 }
 
+/**
+ * A colour taken `amount` of the way to paper: 0 leaves it alone, 1 is white.
+ * What every washed fill on the sheet is mixed with, so a tint under black
+ * writing stays readable and still prints.
+ */
+export function toPaper(hex: string, amount: number): string {
+  const value = hex.replace("#", "");
+  const full =
+    value.length === 3
+      ? value
+          .split("")
+          .map((c) => c + c)
+          .join("")
+      : value;
+  const mixed = [0, 2, 4]
+    .map((at) => parseInt(full.slice(at, at + 2), 16))
+    .map((channel) => Math.round(channel + (255 - channel) * amount))
+    .map((channel) => channel.toString(16).padStart(2, "0"))
+    .join("");
+  return `#${mixed}`;
+}
+
 /** Whether a caption written on this colour should be white or near-black. */
 export function readableOn(hex: string): string {
   const value = hex.replace("#", "");

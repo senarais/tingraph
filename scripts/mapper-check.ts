@@ -17,6 +17,10 @@ import {
   LINE_TEMPLATE,
   PIE_TEMPLATE,
   SCATTER_TEMPLATE,
+  USECASE_TEMPLATE,
+  ACTIVITY_TEMPLATE,
+  ERD_TEMPLATE,
+  SEQUENCE_TEMPLATE,
 } from "../lib/templates";
 
 type Skel = Record<string, unknown> & {
@@ -432,5 +436,133 @@ for (const wedge of wedges) {
     "a slice closes on itself, or Excalidraw will not fill it",
   );
 }
+
+// ------------------------------------------------------------------ use case
+
+const ucShapes = buildSkeletons(computeLayout(parseDSL(USECASE_TEMPLATE), "down"));
+const ucById = byId(ucShapes);
+const ucAll = indexByPrefix(ucShapes);
+assert.equal(ucById.get("U1")?.type, "ellipse", "a use case is an oval");
+assert.ok(
+  (ucById.get("U1")?.label as { text?: string } | undefined)?.text?.includes("Check"),
+  "with its goal written inside it",
+);
+const actorBox = ucById.get("CUST") as Skel | undefined;
+assert.equal(actorBox?.type, "rectangle", "an actor carries a box for a line to tie to");
+assert.equal(actorBox?.strokeColor, "transparent", "and that box is never drawn");
+const actorPieces = ucAll.filter(
+  (piece) => unitOf(piece as never)?.unit === nodeUnit("usecase", "CUST"),
+);
+assert.ok(actorPieces.length >= 5, "the stick figure is several shapes reading as one");
+assert.ok(
+  actorPieces.every((piece) => (piece.groupIds as string[]).includes("uc-CUST")),
+  "so every one of them moves with it",
+);
+const ucFrame = ucAll.findIndex((piece) => piece.id === "frame-ATM");
+assert.ok(ucFrame >= 0 && ucFrame < ucAll.findIndex((piece) => piece.id === "U1"),
+  "the boundary is drawn before what stands inside it");
+const includeArrow = ucAll.find(
+  (piece) =>
+    piece.type === "arrow" &&
+    (piece.customData as { tingraph?: { link?: { line?: string } } })?.tingraph?.link
+      ?.line === "include",
+);
+assert.ok(includeArrow, "an include is drawn as its own line");
+assert.equal(includeArrow?.strokeStyle, "dashed", "dashed, the way UML draws it");
+
+// ------------------------------------------------------------------ activity
+
+const acShapes = buildSkeletons(computeLayout(parseDSL(ACTIVITY_TEMPLATE), "down"));
+const acById = byId(acShapes);
+const acAll = indexByPrefix(acShapes);
+assert.equal(acById.get("S1")?.type, "ellipse", "an activity starts at a dot");
+assert.equal(acById.get("S1")?.backgroundColor, "#1e1e1e", "and the dot is filled");
+assert.equal(acById.get("E1")?.type, "ellipse", "and stops at a bullseye");
+assert.ok(
+  acAll.some((piece) => String(piece.id ?? "").startsWith("act-E1-dot")),
+  "which is a ring with a filled circle inside it",
+);
+assert.equal(acById.get("D1")?.type, "diamond", "a decision is a diamond");
+assert.equal(acById.get("A1")?.type, "rectangle", "an action is a box");
+assert.deepEqual(
+  acById.get("A1")?.roundness,
+  { type: 3, value: 14 },
+  "with the corners UML rounds",
+);
+const partitionFrame = acAll.findIndex((piece) => String(piece.id ?? "").startsWith("frame-"));
+assert.ok(
+  partitionFrame >= 0 && partitionFrame < acAll.findIndex((piece) => piece.id === "S1"),
+  "the partitions are ruled before anything is drawn in them",
+);
+const laneName = acAll.find(
+  (piece) => piece.type === "text" && piece.text === "Consultant",
+);
+assert.ok(laneName, "a partition is named");
+assert.ok(!laneName?.angle, "and its name is upright, not turned on its side");
+assert.equal(
+  unitOf(laneName as never)?.kind,
+  "lane",
+  "the name belongs to the partition",
+);
+
+// ----------------------------------------------------------------------- erd
+
+const erdShapes = buildSkeletons(computeLayout(parseDSL(ERD_TEMPLATE), "down"));
+const erdAll = indexByPrefix(erdShapes);
+const erdById = byId(erdShapes);
+assert.equal(erdById.get("PASSENGER")?.type, "rectangle", "an entity is a box");
+const erdBand = erdAll.find((piece) => String(piece.id ?? "").startsWith("erd-PASSENGER-band"));
+assert.ok(erdBand, "with a band across the top");
+assert.equal(erdBand?.backgroundColor, "#e5e7eb", "washed with the sheet's own tint");
+assert.ok(unitOf(erdBand as never)?.wash, "and it says so, so re-inking can find it");
+assert.equal(
+  (erdBand?.label as { text?: string } | undefined)?.text,
+  "passengers",
+  "the band carries the table's name",
+);
+assert.ok(
+  erdAll.some((piece) => piece.type === "text" && piece.text === "PK"),
+  "a primary key is marked in the gutter",
+);
+assert.ok(
+  erdAll.some((piece) => piece.type === "text" && piece.text === "varchar(50)?"),
+  "and a nullable attribute says so on its type",
+);
+assert.ok(
+  erdAll.some((piece) => String(piece.id ?? "").startsWith("erd-BAGGAGE-weak")),
+  "a weak entity carries a second outline",
+);
+const relation = erdAll.find((piece) => piece.type === "arrow");
+assert.equal(relation?.startArrowhead, "crowfoot_one", "one at the near end");
+assert.equal(relation?.endArrowhead, "crowfoot_many", "many at the far end");
+
+// ------------------------------------------------------------------ sequence
+
+const seqShapes = buildSkeletons(
+  computeLayout(parseDSL(SEQUENCE_TEMPLATE)),
+) as unknown as Array<Record<string, unknown>>;
+const seqFrame = seqShapes[0];
+assert.equal(seqFrame.type, "rectangle", "the frame comes first");
+assert.equal(seqFrame.strokeColor, "transparent", "and is not drawn");
+const seqMark = (seqFrame.customData as { tingraph?: { kind?: string; figure?: unknown } })
+  ?.tingraph;
+assert.equal(seqMark?.kind, "figure");
+assert.ok(seqMark?.figure, "and carries the whole diagram");
+for (const piece of seqShapes) {
+  const own = (piece.customData as { tingraph?: { unit?: string } })?.tingraph;
+  assert.equal(own?.unit, "sequence-1", "every piece belongs to the figure");
+}
+assert.ok(
+  seqShapes.some((piece) => piece.type === "arrow"),
+  "a sequence diagram is the one figure that draws arrows of its own",
+);
+const lifelines = seqShapes.filter(
+  (piece) => piece.type === "line" && piece.strokeStyle === "dashed",
+);
+assert.equal(lifelines.length, 4, "one dashed lifeline per participant");
+assert.ok(
+  seqShapes.some((piece) => piece.type === "text" && String(piece.text).startsWith("1: ")),
+  "and the messages are numbered in the order they are sent",
+);
 
 console.log("mapper self-check: all assertions passed");

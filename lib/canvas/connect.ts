@@ -19,6 +19,12 @@ export interface Box {
   y: number;
   width: number;
   height: number;
+  /**
+   * The element is drawn as an ellipse rather than a box, so a line that meets
+   * it off-square meets the curve instead of the corner it would otherwise
+   * stop short of. Only the notations that draw straight lines read it.
+   */
+  round?: boolean;
 }
 
 export interface Point {
@@ -106,10 +112,51 @@ function gap(aStart: number, aSize: number, bStart: number, bSize: number): numb
 
 /** The axis a notation reads along: a BPMN sheet runs across, a chart down. */
 function readsUpright(rules: Rules): boolean {
-  if (rules.category === "bpmn") {
+  if (rules.category === "bpmn" || rules.category === "usecase") {
     return false;
   }
   return rules.direction !== "right";
+}
+
+/**
+ * The notations whose lines are not square.
+ *
+ * A use case diagram is drawn with plain straight lines from an actor to what
+ * it takes part in — stepping one round a corner would say something the
+ * notation does not mean. Everything else on a Tingraph sheet turns square.
+ */
+function readsStraight(category: DiagramCategory): boolean {
+  return category === "usecase";
+}
+
+/**
+ * Where a straight line meets a shape: the point on its outline in the
+ * direction of the other shape, round the curve when the shape is an ellipse.
+ * A side the reader pinned wins, the way it does on a square route.
+ */
+function directAnchor(box: Box, towards: Point, side?: Side): Point {
+  if (side) {
+    return sideAnchor(box, side);
+  }
+  const cx = box.x + box.width / 2;
+  const cy = box.y + box.height / 2;
+  const dx = towards.x - cx;
+  const dy = towards.y - cy;
+  const span = Math.hypot(dx, dy);
+  if (span < 1) {
+    return { x: Math.round(cx), y: Math.round(cy) };
+  }
+  const ux = dx / span;
+  const uy = dy / span;
+  const rx = Math.max(1, box.width / 2);
+  const ry = Math.max(1, box.height / 2);
+  const reach = box.round
+    ? 1 / Math.hypot(ux / rx, uy / ry)
+    : Math.min(
+        Math.abs(ux) < 1e-6 ? Infinity : rx / Math.abs(ux),
+        Math.abs(uy) < 1e-6 ? Infinity : ry / Math.abs(uy),
+      );
+  return { x: Math.round(cx + ux * reach), y: Math.round(cy + uy * reach) };
 }
 
 /**
@@ -188,6 +235,14 @@ interface RouteOptions extends Rules {
  * either straight down the page or straight across it.
  */
 export function routeBetween(from: Box, to: Box, options: RouteOptions): Point[] {
+  if (readsStraight(options.category)) {
+    const here = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
+    const there = { x: to.x + to.width / 2, y: to.y + to.height / 2 };
+    return [
+      directAnchor(from, there, options.fromSide),
+      directAnchor(to, here, options.toSide),
+    ];
+  }
   const auto = sidesFor(from, to, options);
   const fromSide = options.fromSide ?? auto[0];
   const toSide = options.toSide ?? auto[1];

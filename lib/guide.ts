@@ -11,6 +11,10 @@ import {
   MATRIX_TEMPLATE,
   VENN_TEMPLATE,
   FISHBONE_TEMPLATE,
+  USECASE_TEMPLATE,
+  ACTIVITY_TEMPLATE,
+  ERD_TEMPLATE,
+  SEQUENCE_TEMPLATE,
 } from "@/lib/templates";
 
 /**
@@ -131,6 +135,151 @@ const ORG_SECTIONS: GuideSection[] = [
   },
 ];
 
+
+const USECASE_SECTIONS: GuideSection[] = [
+  {
+    title: "Diagram",
+    rows: [
+      row('usecase "Title" {', "open a use case diagram"),
+      row('system S "Name" {', "the boundary the use cases stand in"),
+    ],
+  },
+  {
+    title: "Elements",
+    rows: [
+      row('actor A "Name"', "a stick figure outside the system"),
+      row('actor A "Name" right', "pin it to that side of the boundary"),
+      row('usecase U "Goal"', "an oval, declared inside a system block"),
+    ],
+  },
+  {
+    title: "Relations",
+    rows: [
+      row("A -> U", "association: A takes part in U"),
+      row("include U -> V", "U always runs V"),
+      row("extend V -> U", "V adds to U, under a condition"),
+      row("inherit A -> B", "A is a kind of B (hollow head)"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
+const ACTIVITY_SECTIONS: GuideSection[] = [
+  {
+    title: "Diagram",
+    rows: [
+      row('activity "Title" {', "open an activity diagram"),
+      row('lane L "Name" {', "a partition; it is drawn as a column"),
+    ],
+  },
+  {
+    title: "Nodes",
+    rows: [
+      row("initial S1", "the filled dot it starts at; alias: start"),
+      row('action A1 "Do it"', "a rounded box; alias: task"),
+      row("decision D1", "a branch; guards go on the arrows"),
+      row("merge M1", "the branches coming back together"),
+      row("fork F1", "one flow splitting into several"),
+      row("join J1", "several coming back into one"),
+      row('object O1 "Invoice"', "a value passing along the flow"),
+      row("final E1", "the bullseye it ends at; alias: end"),
+      row("flow-final X1", "this one branch stops here"),
+    ],
+  },
+  {
+    title: "Flows",
+    rows: [
+      row("A -> B", "control flow"),
+      row("D1 [yes] -> B", "a guard on the branch"),
+      row("A -.-> O1", "object flow (dashed)"),
+      row("A -> B -> C", "chain"),
+    ],
+  },
+];
+
+const ERD_SECTIONS: GuideSection[] = [
+  {
+    title: "Diagram",
+    rows: [
+      row('erd "Title" {', "open an entity relationship diagram"),
+      row('entity E "table" {', "an entity, with its attributes inside"),
+      row('weak E "table" {', "one that needs its owner to be told apart"),
+    ],
+  },
+  {
+    title: "Attributes",
+    rows: [
+      row('"name" "type"', "one attribute row"),
+      row('pk "id" "bigint"', "primary key"),
+      row('fk "owner_id" "bigint"', "foreign key; pfk for both"),
+      row('"email" "varchar" unique', "unique"),
+      row('"closed_at" "date" null', "may be missing; drawn as type?"),
+    ],
+  },
+  {
+    title: "Relations",
+    rows: [
+      row("A -> B", "one to many, the usual case"),
+      row("A one -> many B", "the crow's foot at each end"),
+      row('A many -> one B "label"', "and what the relation is called"),
+      row("A -.-> B", "non-identifying (dashed)"),
+      row("ends", "one, many, one-or-many, zero-or-one"),
+    ],
+  },
+];
+
+const SEQUENCE_SECTIONS: GuideSection[] = [
+  {
+    title: "Diagram",
+    rows: [row('sequence "Title" {', "open a sequence diagram")],
+  },
+  {
+    title: "Participants",
+    rows: [
+      row('object B ":Order"', "a named box over a lifeline"),
+      row('actor A "Customer"', "a stick figure"),
+      row('boundary S "Screen"', "what the outside world touches"),
+      row('control C "Handler"', "what runs the work"),
+      row('entity E "Account"', "what is stored"),
+      row('database D "Ledger"', "a store drawn as a drum"),
+    ],
+  },
+  {
+    title: "Messages",
+    rows: [
+      row('A -> B "call()"', "a call; opens an execution on B"),
+      row('A ->> B "signal()"', "asynchronous, open head"),
+      row('B --> A "answer"', "a reply; ends B's execution"),
+      row('create A -> B "new"', "B's lifeline starts here"),
+      row('destroy A -> B "close"', "B's lifeline ends with a cross"),
+      row('B -> B "check()"', "a call to itself, drawn as a loop"),
+    ],
+  },
+  {
+    title: "Fragments",
+    rows: [
+      row('alt "guard" { … }', "one section runs"),
+      row('} else "guard" { … }', "the next section of an alt"),
+      row('opt "guard" { … }', "runs only if the guard holds"),
+      row('loop "while" { … }', "runs again and again"),
+      row("par { … } and { … }", "the sections run alongside"),
+      row("break / critical", "the other two operators"),
+    ],
+  },
+  {
+    title: "Settings",
+    rows: [
+      row("numbers on", "number every message in order"),
+      row("activations off", "leave the execution bars off"),
+      row("style tinted", "formal, tinted or bold"),
+      row("colors colorful", "or one colour: colors \"#2a78d6\""),
+      row("spacing 150", "least room between two lifelines"),
+      row("step 46", "from one message down to the next"),
+      row("text 12", "caption size"),
+      row("size 700 420", "how big it is drawn"),
+    ],
+  },
+];
 
 /**
  * The chart settings, written once. Every kind of chart understands the whole
@@ -398,6 +547,10 @@ export const GUIDE_SECTIONS: Record<DiagramCategory, GuideSection[]> = {
   line: LINE_SECTIONS,
   pie: PIE_SECTIONS,
   scatter: SCATTER_SECTIONS,
+  usecase: USECASE_SECTIONS,
+  activity: ACTIVITY_SECTIONS,
+  erd: ERD_SECTIONS,
+  sequence: SEQUENCE_SECTIONS,
   mind: MIND_SECTIONS,
   matrix: MATRIX_SECTIONS,
   venn: VENN_SECTIONS,
@@ -409,6 +562,10 @@ export const GUIDE_INTRO: Record<DiagramCategory, string> = {
   flow: "Declare every box once, then wire them with arrows. Spacing and routing are worked out for you.",
   bpmn: "Declare a pool, its lanes, then the elements inside each lane. Wire them afterwards, across lanes if you need to.",
   org: "Declare every role once, then draw the reporting lines. Levels, spacing and the bus routing are worked out for you.",
+  usecase: "Declare the actors, then the use cases inside a system block, then join them. Actors that start something stand on the left, actors that only answer stand on the right.",
+  activity: "Declare a partition, then the nodes inside it, then wire them. Partitions are drawn as columns and the flow reads down the page.",
+  erd: "Declare every entity with its attributes, then the relations between them. The crow's foot at each end says how many.",
+  sequence: "Declare the participants across the top, then the messages in the order they are sent. The execution bars are read off the messages, so there is nothing to place.",
   bar: "Write the readings one to a line, then any settings you want. Everything here is also a control in the Chart panel, and the two always agree.",
   line: "Name the readings along the axis, then one series per line you want drawn. Everything here is also a control in the Chart panel.",
   pie: "Write one slice per line. Shares are worked out for you, so the numbers can be counts rather than percentages.",
@@ -458,6 +615,35 @@ const RULES: Record<DiagramCategory, string[]> = {
     "A cause may take a `{ ... }` block of its own for what is behind it, one level deep.",
     "Bones alternate above and below the spine in the order they are written.",
   ]),
+  usecase: [
+    'The file is one `usecase "Title" { ... }` block.',
+    'Actors are declared at the top level; use cases go inside `system S "Name" { ... }`.',
+    "`A -> U` is an association and is the only relation written with a bare arrow.",
+    "`include`, `extend` and `inherit` each take one relation: `include U -> V`.",
+    "An actor with no side written takes the left if it starts anything, the right otherwise.",
+  ],
+  activity: [
+    'The file is one `activity "Title" { ... }` block.',
+    'Partitions are `lane L "Name" { ... }` and are drawn as columns, left to right in the order written.',
+    "Declare every node inside the partition it belongs to, then wire them after or inside.",
+    "A guard belongs on the arrow out of a decision: `D1 [yes] -> A2`.",
+    "A decision has one flow in and several out; a merge has several in and one out.",
+  ],
+  erd: [
+    'The file is one `erd "Title" { ... }` block.',
+    'An entity is `entity ID "table" { ... }`, and every attribute inside it is written in quotes.',
+    "An attribute is `\"name\" \"type\"`, optionally opened with `pk`, `fk` or `pfk` and closed with `unique` or `null`.",
+    "A relation is `A one -> many B`; leaving both ends out means one to many.",
+    "The ends are `one`, `many`, `one-or-many` and `zero-or-one`. A dashed arrow is non-identifying.",
+  ],
+  sequence: [
+    'The file is one `sequence "Title" { ... }` block.',
+    "Declare every participant before the messages, at the top level: `object B \":Order\"`.",
+    "Messages are written in the order they are sent, one per line, and that order is the diagram.",
+    "`->` is a call, `->>` is asynchronous, `-->` is a reply. `create` and `destroy` open a message line.",
+    "A fragment is a block: `alt \"guard\" { ... } else \"guard\" { ... }`. They may be nested.",
+    "The execution bars are worked out from the messages; never try to place them.",
+  ],
   flow: [
     "The file is one `flow \"Title\" { ... }` block. Nothing may sit outside it.",
     "An element is `<keyword> <ID> \"Label\"`, one per line. The ID is short, unique, and never quoted.",
@@ -488,6 +674,10 @@ const KEYWORD: Record<DiagramCategory, string> = {
   flow: "flow",
   bpmn: "bpmn",
   org: "org",
+  usecase: "usecase",
+  activity: "activity",
+  erd: "erd",
+  sequence: "sequence",
   bar: "bar",
   line: "line",
   pie: "pie",
@@ -502,6 +692,10 @@ const EXAMPLE: Record<DiagramCategory, string> = {
   flow: FLOWCHART_TEMPLATE,
   bpmn: BPMN_TEMPLATE,
   org: ORG_TEMPLATE,
+  usecase: USECASE_TEMPLATE,
+  activity: ACTIVITY_TEMPLATE,
+  erd: ERD_TEMPLATE,
+  sequence: SEQUENCE_TEMPLATE,
   bar: BAR_TEMPLATE,
   line: LINE_TEMPLATE,
   pie: PIE_TEMPLATE,
@@ -516,6 +710,10 @@ const NOTATION_NAME: Record<DiagramCategory, string> = {
   flow: "flowchart",
   bpmn: "BPMN 2.0 diagram",
   org: "organisational chart",
+  usecase: "UML use case diagram",
+  activity: "UML activity diagram",
+  erd: "entity relationship diagram",
+  sequence: "UML sequence diagram",
   bar: "bar chart",
   line: "line chart",
   pie: "pie chart",

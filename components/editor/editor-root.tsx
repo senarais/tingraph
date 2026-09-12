@@ -18,17 +18,14 @@ import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
 import { computeLayout } from "@/lib/layout/compute-layout";
 import { mapToExcalidrawElements } from "@/lib/excalidraw-mapper/map-to-elements";
 import {
-  buildFlowShapeSkeletons,
-  buildOrgShapeSkeletons,
-  buildShapeSkeletons,
+  buildShapeFor,
   connectorStyle,
 } from "@/lib/excalidraw-mapper/build-skeletons";
 import {
   PALETTE_GROUPS,
   PaletteItem,
-  droppedLabel,
-  orgSampleNode,
   paletteShapeSize,
+  sampleNode,
   snippetFor,
   withSnippet,
 } from "@/lib/palette";
@@ -41,7 +38,7 @@ import { fontReady, styleOfFont } from "@/lib/canvas/text-metrics";
 import { unitOf } from "@/lib/canvas/units";
 import { summarise } from "@/lib/summary";
 import type { Ink } from "@/lib/ink";
-import { DSLError, DiagramCategory, LayoutDirection, NodeType } from "@/lib/types";
+import { DSLError, DiagramCategory, LayoutDirection } from "@/lib/types";
 import Canvas from "@/components/editor/canvas";
 import ExportDialog from "@/components/editor/export-dialog";
 import Inspector from "@/components/editor/inspector";
@@ -231,26 +228,15 @@ export default function EditorRoot() {
       rank: 0,
     };
 
-    const skeletons =
-      editorCategory === "org"
-        ? buildOrgShapeSkeletons(
-            { ...orgSampleNode(item.type, seq), ...box },
-            ink,
-            style,
-          )
-        : editorCategory === "flow"
-          ? buildFlowShapeSkeletons(
-              { ...box, type: item.type as NodeType, label: item.label },
-              ink,
-              style,
-            )
-          : buildShapeSkeletons(
-              { ...box, type: item.type as NodeType, label: droppedLabel(item) },
-              ink,
-              style,
-            );
-
-    const added = convertToExcalidrawElements(skeletons, { regenerateIds: true });
+    const added = convertToExcalidrawElements(
+      buildShapeFor(
+        editorCategory,
+        { ...sampleNode(editorCategory, item.type, seq), ...box },
+        ink,
+        style,
+      ),
+      { regenerateIds: true },
+    );
     const unit = added.map(unitOf).find(Boolean)?.unit;
     api.updateScene({
       elements: [...api.getSceneElements(), ...added],

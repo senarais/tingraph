@@ -8,9 +8,10 @@
  */
 
 import type { Side } from "@/lib/canvas/connect";
+import type { DiagramCategory } from "@/lib/types";
 import type { FigureSpec } from "@/lib/figures/spec";
 
-export type UnitKind = "node" | "edge" | "pool" | "lane" | "figure";
+export type UnitKind = "node" | "edge" | "pool" | "lane" | "figure" | "frame";
 
 /** One end of a connector: the element it is tied to, and the side it uses. */
 export interface LinkEnd {
@@ -61,6 +62,28 @@ export interface UnitMark {
    * again. See `lib/figures/spec.ts`.
    */
   figure?: FigureSpec;
+}
+
+/**
+ * The name each notation stamps the pieces of one node with. A connector names
+ * the unit it joins rather than an element id, so this is what ties a line in
+ * the source to the shape it lands on.
+ */
+export function nodeUnit(category: DiagramCategory, id: string): string {
+  switch (category) {
+    case "bpmn":
+      return `bpmn-${id}`;
+    case "org":
+      return `org-${id}`;
+    case "usecase":
+      return `uc-${id}`;
+    case "activity":
+      return `act-${id}`;
+    case "erd":
+      return `erd-${id}`;
+    default:
+      return `flow-node-${id}`;
+  }
 }
 
 interface Marked {

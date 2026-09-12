@@ -13,28 +13,24 @@ import {
   PositionedNode,
   PositionedPool,
 } from "@/lib/types";
+import { linesWidth, textWidth, wrapByWidth } from "@/lib/layout/text";
+import {
+  findBackEdges,
+  hits,
+  rankNodes,
+  round,
+  routeFlowEdges,
+  type Box,
+  type Point,
+} from "@/lib/layout/graph";
+
+import { computeUseCaseLayout } from "@/lib/layout/layout-usecase";
+import { computeActivityLayout } from "@/lib/layout/layout-activity";
+import { computeErdLayout } from "@/lib/layout/layout-erd";
+
+export { textWidth, wrapByWidth } from "@/lib/layout/text";
 
 const MARGIN = 60;
-
-/** Advance width of one Helvetica glyph, relative to the font size. */
-function charRatio(char: string): number {
-  if (" ,.;:'!|iljt[]()".includes(char)) return 0.3;
-  if ("fr".includes(char)) return 0.37;
-  if ("mw".includes(char)) return 0.85;
-  if ("MW".includes(char)) return 0.92;
-  if (char >= "A" && char <= "Z") return 0.7;
-  if (char >= "0" && char <= "9") return 0.56;
-  return 0.55;
-}
-
-/** Approximate rendered width of a single text line. */
-export function textWidth(text: string, fontSize: number): number {
-  let ratio = 0;
-  for (const char of text) {
-    ratio += charRatio(char);
-  }
-  return ratio * fontSize;
-}
 
 // ---------------------------------------------------------------- typography
 
@@ -73,36 +69,8 @@ const LANE_PAD_Y = 24;
 export const POOL_GAP = 40;
 export const MIN_LANE_HEIGHT = 110;
 const LOOP_GAP = 28; // channel height reserved for a backward edge
-const CLEARANCE = 5; // how close a route may pass a shape
-const FLOW_SIDE_GAP = 40; // side channel for a flowchart loop
 
 // --------------------------------------------------------------- text utils
-
-export function wrapByWidth(label: string, maxWidth: number, fontSize: number): string[] {
-  const words = label.split(/\s+/).filter(Boolean);
-  if (words.length === 0) {
-    return [];
-  }
-  const lines: string[] = [];
-  let current = "";
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (textWidth(candidate, fontSize) > maxWidth && current) {
-      lines.push(current);
-      current = word;
-    } else {
-      current = candidate;
-    }
-  }
-  if (current) {
-    lines.push(current);
-  }
-  return lines;
-}
-
-function linesWidth(lines: string[], fontSize: number): number {
-  return lines.reduce((max, line) => Math.max(max, textWidth(line, fontSize)), 0);
-}
 
 /** External caption of an event / gateway / data object, already wrapped. */
 export function wrapExternalLabel(label: string): string[] {
@@ -141,8 +109,17 @@ export function shapeFamily(
   type: NodeType | string,
   category: DiagramCategory,
 ): ShapeFamily {
-  if (category === "org") {
+  if (category === "org" || category === "erd") {
     return "box";
+  }
+  if (category === "usecase") {
+    return type === "actor" ? "box" : "ellipse";
+  }
+  if (category === "activity") {
+    if (type === "initial" || type === "final" || type === "flow-final") {
+      return "ellipse";
+    }
+    return type === "decision" || type === "merge" ? "diamond" : "box";
   }
   if (category === "flow") {
     if (type === "start" || type === "end") {
@@ -268,168 +245,11 @@ function computeFlowLayout(
   };
 }
 
-/** A box seen with its axes swapped, for laying a chart out sideways. */
-function turned<T extends Box>(box: T): T {
-  return { ...box, x: box.y, y: box.x, width: box.height, height: box.width };
-}
-
-/**
- * Top-down orthogonal routing for flowcharts: straight down where the boxes
- * line up, a step through the channel between two ranks otherwise, and a run
- * down the side for edges that loop back up.
- *
- * A chart that grows sideways is the same drawing reflected across the
- * diagonal, so it is routed by turning the boxes a quarter turn, routing it as
- * a top-down chart, and turning the route back.
- */
-function routeFlowEdges(
-  nodes: PositionedNode[],
-  edges: DSLEdge[],
-  direction: LayoutDirection = "down",
-): PositionedEdge[] {
-  if (direction === "right") {
-    return routeFlowEdges(nodes.map(turned), edges).map((edge) => ({
-      ...edge,
-      points: edge.points.map((point) => ({ x: point.y, y: point.x })),
-    }));
-  }
-  const byId = new Map(nodes.map((node) => [node.id, node]));
-  return edges.map((edge) => {
-    const from = byId.get(edge.from);
-    const to = byId.get(edge.to);
-    if (!from || !to) {
-      return { ...edge, points: [] };
-    }
-    const blockers = nodes.filter((node) => node !== from && node !== to);
-    const fromCx = from.x + from.width / 2;
-    const toCx = to.x + to.width / 2;
-    const fromCy = from.y + from.height / 2;
-    const toCy = to.y + to.height / 2;
-    const downward = to.y >= from.y + from.height;
-
-    if (downward) {
-      // one x for both ends, so a near-miss between two centres still drops
-      // straight down instead of leaning a pixel to one side
-      const shared = Math.round((fromCx + toCx) / 2);
-      const straight: Point[] = [
-        { x: shared, y: from.y + from.height },
-        { x: shared, y: to.y },
-      ];
-      if (Math.abs(fromCx - toCx) < 1 && !hits(straight, blockers)) {
-        return { ...edge, points: straight.map(round) };
-      }
-      const midY = Math.round((from.y + from.height + to.y) / 2);
-      const stepped: Point[] = [
-        { x: fromCx, y: from.y + from.height },
-        { x: fromCx, y: midY },
-        { x: toCx, y: midY },
-        { x: toCx, y: to.y },
-      ];
-      if (!hits(stepped, blockers)) {
-        return { ...edge, points: stepped.map(round) };
-      }
-    }
-
-    // loops back up (or sideways): leave through the nearer side and climb
-    const goLeft = toCx <= fromCx;
-    const channel = goLeft
-      ? Math.min(from.x, to.x) - FLOW_SIDE_GAP
-      : Math.max(from.x + from.width, to.x + to.width) + FLOW_SIDE_GAP;
-    return {
-      ...edge,
-      points: [
-        { x: goLeft ? from.x : from.x + from.width, y: fromCy },
-        { x: channel, y: fromCy },
-        { x: channel, y: toCy },
-        { x: goLeft ? to.x : to.x + to.width, y: toCy },
-      ].map(round),
-    };
-  });
-}
-
 // ------------------------------------------------------------- bpmn ranking
 
 /** Edges that shape the flow; data links are placed relative to their host. */
 function isFlowEdge(edge: DSLEdge, typeOf: Map<string, NodeType>): boolean {
   return typeOf.get(edge.from) !== "data" && typeOf.get(edge.to) !== "data";
-}
-
-/** Indices of edges that close a cycle — excluded from ranking. */
-function findBackEdges(
-  nodes: DSLNode[],
-  edges: Array<{ from: string; to: string; index: number }>,
-): Set<number> {
-  const adj = new Map<string, Array<{ to: string; index: number }>>();
-  for (const node of nodes) {
-    adj.set(node.id, []);
-  }
-  for (const edge of edges) {
-    adj.get(edge.from)?.push({ to: edge.to, index: edge.index });
-  }
-  const indeg = new Map<string, number>(nodes.map((n) => [n.id, 0]));
-  for (const edge of edges) {
-    indeg.set(edge.to, (indeg.get(edge.to) ?? 0) + 1);
-  }
-
-  const state = new Map<string, 0 | 1 | 2>(nodes.map((n) => [n.id, 0]));
-  const back = new Set<number>();
-  const roots = [
-    ...nodes.filter((n) => (indeg.get(n.id) ?? 0) === 0).map((n) => n.id),
-    ...nodes.map((n) => n.id),
-  ];
-
-  for (const root of roots) {
-    if (state.get(root) !== 0) {
-      continue;
-    }
-    state.set(root, 1);
-    const stack: Array<{ id: string; next: number }> = [{ id: root, next: 0 }];
-    while (stack.length > 0) {
-      const top = stack[stack.length - 1];
-      const list = adj.get(top.id) ?? [];
-      if (top.next < list.length) {
-        const { to, index } = list[top.next++];
-        const seen = state.get(to) ?? 0;
-        if (seen === 1) {
-          back.add(index); // points at an ancestor → cycle
-        } else if (seen === 0) {
-          state.set(to, 1);
-          stack.push({ id: to, next: 0 });
-        }
-      } else {
-        state.set(top.id, 2);
-        stack.pop();
-      }
-    }
-  }
-  return back;
-}
-
-/** Longest-path ranking: a node sits one column right of its last predecessor. */
-function rankNodes(
-  nodes: DSLNode[],
-  edges: Array<{ from: string; to: string; index: number }>,
-): Map<string, number> {
-  const rank = new Map<string, number>(nodes.map((n) => [n.id, 0]));
-  const indeg = new Map<string, number>(nodes.map((n) => [n.id, 0]));
-  const out = new Map<string, string[]>(nodes.map((n) => [n.id, []]));
-  for (const edge of edges) {
-    out.get(edge.from)?.push(edge.to);
-    indeg.set(edge.to, (indeg.get(edge.to) ?? 0) + 1);
-  }
-  const queue = nodes.filter((n) => (indeg.get(n.id) ?? 0) === 0).map((n) => n.id);
-  while (queue.length > 0) {
-    const id = queue.shift() as string;
-    for (const next of out.get(id) ?? []) {
-      rank.set(next, Math.max(rank.get(next) ?? 0, (rank.get(id) ?? 0) + 1));
-      const left = (indeg.get(next) ?? 0) - 1;
-      indeg.set(next, left);
-      if (left === 0) {
-        queue.push(next);
-      }
-    }
-  }
-  return rank;
 }
 
 // ---------------------------------------------------------------- bpmn grid
@@ -779,11 +599,6 @@ function computeBpmnLayout(ast: AST): PositionedAST {
 
 // ------------------------------------------------------------------ routing
 
-interface Point {
-  x: number;
-  y: number;
-}
-
 interface Grid {
   colX: number[];
   colWidth: number[];
@@ -795,35 +610,6 @@ function centerX(cell: Cell): number {
 }
 function centerY(cell: Cell): number {
   return cell.y + cell.height / 2;
-}
-
-interface Box {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
-
-function hits(points: Point[], boxes: readonly Box[]): boolean {
-  for (let i = 1; i < points.length; i++) {
-    const a = points[i - 1];
-    const b = points[i];
-    const minX = Math.min(a.x, b.x) - CLEARANCE;
-    const maxX = Math.max(a.x, b.x) + CLEARANCE;
-    const minY = Math.min(a.y, b.y) - CLEARANCE;
-    const maxY = Math.max(a.y, b.y) + CLEARANCE;
-    for (const box of boxes) {
-      if (
-        minX < box.x + box.width &&
-        box.x < maxX &&
-        minY < box.y + box.height &&
-        box.y < maxY
-      ) {
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 type Plan =
@@ -987,10 +773,6 @@ function routeEdges(
       ].map(round),
     };
   });
-}
-
-function round(p: Point): Point {
-  return { x: Math.round(p.x), y: Math.round(p.y) };
 }
 
 // ------------------------------------------------------------------ org tree
@@ -1412,6 +1194,14 @@ export function computeLayout(
       return computeBpmnLayout(ast);
     case "org":
       return computeOrgLayout(ast, direction);
+    case "usecase":
+      return computeUseCaseLayout(ast, direction);
+    case "activity":
+      // a partition runs across the page, so an activity reads down it and has
+      // one direction, the way a BPMN diagram does
+      return computeActivityLayout(ast);
+    case "erd":
+      return computeErdLayout(ast, direction);
     default:
       return computeFlowLayout(ast, direction);
   }

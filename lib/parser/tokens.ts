@@ -20,6 +20,7 @@ export type TokenKind =
   | "string"
   | "arrow"
   | "dashed-arrow"
+  | "async-arrow"
   | "lbrace"
   | "rbrace"
   | "lbracket"
@@ -34,7 +35,7 @@ export interface Token {
 }
 
 const TOKEN_RE =
-  /([\s,]+)|((?:#|\/\/)[^\n]*)|("(?:[^"\\\n]|\\.)*")|(-\.->|-\.{2,}->|->|→)|(-?\d+(?:\.\d+)?)|([A-Za-z_$][\w$]*(?:[-.](?![.>])[\w$]+)*)|([{}[\]()])/y;
+  /([\s,]+)|((?:#|\/\/)[^\n]*)|("(?:[^"\\\n]|\\.)*")|(-\.->|-\.{2,}->|->>|-->|->|→)|(-?\d+(?:\.\d+)?)|([A-Za-z_$][\w$]*(?:[-.](?![.>])[\w$]+)*)|([{}[\]()])/y;
 
 const BRACKETS: Record<string, TokenKind> = {
   "{": "lbrace",
@@ -67,9 +68,13 @@ export function tokenize(code: string): Token[] {
     if (str) {
       tokens.push({ kind: "string", value: JSON.parse(str), line });
     } else if (arrow) {
+      // three lines, because three notations need to tell them apart: a solid
+      // call, an open-headed one, and a dashed reply
+      const dashed = arrow.startsWith("-.") || arrow === "-->";
+      const open = arrow === "->>";
       tokens.push({
-        kind: arrow.startsWith("-.") ? "dashed-arrow" : "arrow",
-        value: arrow.startsWith("-.") ? "-.->" : "->",
+        kind: dashed ? "dashed-arrow" : open ? "async-arrow" : "arrow",
+        value: dashed ? "-.->" : open ? "->>" : "->",
         line,
       });
     } else if (number) {

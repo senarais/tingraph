@@ -4,6 +4,7 @@ import {
   DSLEdge,
   DSLEntry,
   DSLError,
+  DSLField,
   DSLLane,
   DSLNode,
   DSLPool,
@@ -20,6 +21,8 @@ import {
   parseMatrix,
   parseVenn,
 } from "@/lib/parser/parse-figures";
+import { parseSequence } from "@/lib/parser/parse-sequence";
+import { erdLine, type ErdEnd } from "@/lib/connectors";
 
 const FLOW_NODE_TYPES = new Map<string, NodeType>([
   ["start", "start"],
@@ -52,6 +55,58 @@ const ORG_NODE_TYPES = new Map<string, NodeType>([
   ["role", "role"],
   ["unit", "role"],
 ]);
+
+const USECASE_NODE_TYPES = new Map<string, NodeType>([
+  ["actor", "actor"],
+  ["usecase", "usecase"],
+  ["case", "usecase"],
+]);
+
+const ACTIVITY_NODE_TYPES = new Map<string, NodeType>([
+  ["initial", "initial"],
+  ["start", "initial"],
+  ["action", "action"],
+  ["task", "action"],
+  ["decision", "decision"],
+  ["merge", "merge"],
+  ["fork", "fork"],
+  ["join", "join"],
+  ["object", "object"],
+  ["final", "final"],
+  ["end", "final"],
+  ["flow-final", "flow-final"],
+]);
+
+const ERD_NODE_TYPES = new Map<string, NodeType>([
+  ["entity", "entity"],
+  ["weak", "weak"],
+]);
+
+/** The three use case relations that are not a plain association. */
+const USECASE_RELATIONS = new Map<string, { line: string; label: string }>([
+  ["include", { line: "include", label: "«include»" }],
+  ["extend", { line: "extend", label: "«extend»" }],
+  ["inherit", { line: "inherit", label: "" }],
+]);
+
+/** How a crow's foot is written, and which end it stands for. */
+const ERD_END_WORDS = new Map<string, ErdEnd>([
+  ["one", "one"],
+  ["many", "many"],
+  ["one-or-many", "one-or-many"],
+  ["zero-or-one", "zero-or-one"],
+  ["optional", "zero-or-one"],
+]);
+
+/** What a statement in each notation usually opens with, for the error line. */
+const OPENERS: Partial<Record<DiagramCategory, string>> = {
+  flow: "process P1",
+  org: "role R1",
+  bpmn: "task T1",
+  usecase: "usecase U1",
+  activity: "action A1",
+  erd: "entity E1",
+};
 
 interface EdgeEndpoint {
   id: string;
@@ -129,13 +184,7 @@ class Parser {
     const tok = this.tokens[this.pos];
     if (tok.kind !== "id") {
       throw new DSLError(
-        `Expected a node type (e.g. "${
-          this.category === "flow"
-            ? 'process P1'
-            : this.category === "org"
-              ? 'role R1'
-              : 'task T1'
-        } \\"Label\\"") or an edge statement (e.g. "A -> B"), got "${tok.value}"`,
+        `Expected a node type (e.g. "${OPENERS[this.category] ?? "task T1"} \\"Label\\"") or an edge statement (e.g. "A -> B"), got "${tok.value}"`,
         tok.line,
       );
     }
@@ -143,8 +192,19 @@ class Parser {
       this.parsePool();
       return;
     }
-    if (this.category === "bpmn" && tok.value === "lane") {
+    if (
+      (this.category === "bpmn" || this.category === "activity") &&
+      tok.value === "lane"
+    ) {
       this.parseLane(undefined);
+      return;
+    }
+    if (this.category === "usecase" && tok.value === "system") {
+      this.parseSystem();
+      return;
+    }
+    if (this.category === "usecase" && USECASE_RELATIONS.has(tok.value)) {
+      this.parseRelation();
       return;
     }
     if (this.category === "org" && tok.value === "unit") {
@@ -158,9 +218,143 @@ class Parser {
       this.nodeTypes.has(tok.value) && next !== undefined && next.kind === "id";
     if (isDeclaration) {
       this.parseDeclaration();
+    } else if (this.category === "erd") {
+      this.parseErdRelation();
     } else {
       this.parseEdgeChain();
     }
+  }
+
+  /**
+   * `system S "Bank ATM" { ... }` — the box the use cases stand inside. It is
+   * a pool with no lanes: the same thing a BPMN participant is, drawn the way
+   * a use case diagram draws it.
+   */
+  private parseSystem(): void {
+    this.advance();
+    const idTok = this.eat("id", 'Expected a system id, e.g. system S1 "Bank ATM" {');
+    if (this.isIdTaken(idTok.value)) {
+      throw new DSLError(`Duplicate id "${idTok.value}"`, idTok.line);
+    }
+    const label = this.peekIs("string") ? this.advance().value : idTok.value;
+    this.eat("lbrace", 'Expected "{" after the system name');
+    this.pools.push({ id: idTok.value, label, lanes: [] });
+    this.openLaneIds.push(idTok.value);
+    while (!this.peekIs("rbrace")) {
+      if (this.pos >= this.tokens.length) {
+        throw new DSLError('Missing "}" for the system block', idTok.line);
+      }
+      const tok = this.tokens[this.pos];
+      if (tok.kind === "id" && tok.value === "system") {
+        throw new DSLError("A system boundary cannot hold another one", tok.line);
+      }
+      this.parseStatement();
+    }
+    this.advance();
+    this.openLaneIds.pop();
+  }
+
+  /** `include A -> B`, `extend A -> B`, `inherit A -> B`. */
+  private parseRelation(): void {
+    const keyword = this.advance();
+    const rule = USECASE_RELATIONS.get(keyword.value) as { line: string; label: string };
+    const from = this.eat("id", `Expected a name after "${keyword.value}"`);
+    if (!this.peekIsArrow()) {
+      throw new DSLError(
+        `"${keyword.value}" is written ${keyword.value} A -> B`,
+        keyword.line,
+      );
+    }
+    this.advance();
+    const to = this.eat("id", `Expected what "${from.value}" ${keyword.value}s`);
+    const label = this.peekIs("string") ? this.advance().value : rule.label;
+    this.edges.push({
+      from: from.value,
+      to: to.value,
+      line: rule.line,
+      ...(label ? { label } : {}),
+    });
+  }
+
+  /**
+   * `A one -> many B "places"` — one relation, with the crow's foot each end
+   * takes. Both ends may be left out: a relation with nothing said about it is
+   * one to many, which is what almost every one of them is. A dashed arrow is
+   * a non-identifying relation.
+   */
+  private parseErdRelation(): void {
+    const from = this.eat("id", "A relation is written A one -> many B");
+    const fromEnd = this.parseErdEnd("one");
+    if (!this.peekIsArrow()) {
+      throw new DSLError(
+        `Expected "->" after "${from.value}" (or declare it, e.g. entity ${from.value} "Name")`,
+        this.tokens[this.pos]?.line ?? 0,
+      );
+    }
+    const weak = this.peekIs("dashed-arrow");
+    this.advance();
+    const toEnd = this.parseErdEnd("many");
+    const to = this.eat("id", `Expected what "${from.value}" is related to`);
+    const label = this.peekIs("string") ? this.advance().value : undefined;
+    this.edges.push({
+      from: from.value,
+      to: to.value,
+      line: weak ? "non-identifying" : erdLine(fromEnd, toEnd),
+      ...(label ? { label } : {}),
+    });
+  }
+
+  private parseErdEnd(fallback: ErdEnd): ErdEnd {
+    const next = this.tokens[this.pos];
+    if (next?.kind === "id" && ERD_END_WORDS.has(next.value)) {
+      this.advance();
+      return ERD_END_WORDS.get(next.value) as ErdEnd;
+    }
+    return fallback;
+  }
+
+  /** `{ pk "id" "bigint" ... }` — the rows inside one entity box. */
+  private parseFields(openLine: number): DSLField[] {
+    this.advance();
+    const fields: DSLField[] = [];
+    while (!this.peekIs("rbrace")) {
+      if (this.pos >= this.tokens.length) {
+        throw new DSLError('Missing "}" for the entity block', openLine);
+      }
+      const field: DSLField = { name: "" };
+      const ahead = this.tokens[this.pos];
+      if (ahead.kind === "id") {
+        if (!["pk", "fk", "pfk"].includes(ahead.value)) {
+          throw new DSLError(
+            `"${ahead.value}" is not a key marker — use pk, fk or pfk, or write the attribute in quotes`,
+            ahead.line,
+          );
+        }
+        this.advance();
+        field.key = ahead.value as DSLField["key"];
+      }
+      field.name = this.eat(
+        "string",
+        'An attribute is written "name" "type", e.g. "email" "varchar(90)"',
+      ).value;
+      if (this.peekIs("string")) {
+        field.type = this.advance().value;
+      }
+      while (this.peekIs("id")) {
+        const tag = this.tokens[this.pos];
+        if (tag.value === "unique") {
+          field.unique = true;
+        } else if (tag.value === "null") {
+          field.optional = true;
+        } else {
+          break;
+        }
+        this.advance();
+      }
+      fields.push(field);
+    }
+    this.advance();
+    return fields;
   }
 
   private parsePool(): void {
@@ -228,7 +422,16 @@ class Parser {
     this.eat("lbrace", 'Expected "{" after lane declaration');
 
     let lane: DSLLane;
-    if (poolId === undefined) {
+    if (poolId === undefined && this.category === "activity") {
+      // an activity's partitions are columns of one frame, not one box each
+      const pool =
+        this.pools[0] ?? ({ id: "partitions", label: "", lanes: [] } as DSLPool);
+      if (this.pools.length === 0) {
+        this.pools.push(pool);
+      }
+      lane = { id: idTok.value, label };
+      pool.lanes.push(lane);
+    } else if (poolId === undefined) {
       // top-level lane without a pool → synthesize a pool
       const pool: DSLPool = { id: `${idTok.value}-pool`, label: "", lanes: [] };
       lane = { id: idTok.value, label };
@@ -272,12 +475,32 @@ class Parser {
     // org: `role R "Title" "Name"` — the second caption is who holds the role
     let name: string | undefined;
     let entries: DSLEntry[] | undefined;
+    let fields: DSLField[] | undefined;
+    let side: "left" | "right" | undefined;
     if (this.category === "org") {
       if (this.peekIs("string")) {
         name = this.advance().value;
       }
       if (this.peekIs("lbrace")) {
         entries = this.parseOrgEntries(idTok.line);
+      }
+    }
+    if (this.category === "erd" && this.peekIs("lbrace")) {
+      fields = this.parseFields(idTok.line);
+    }
+    // usecase: an actor may be pinned to one side of the boundary. Left out,
+    // it takes the left when it starts anything and the right otherwise
+    if (this.category === "usecase" && canonical === "actor") {
+      const where = this.tokens[this.pos];
+      const following = this.tokens[this.pos + 1];
+      const pinned =
+        where?.kind === "id" &&
+        (where.value === "left" || where.value === "right") &&
+        following?.kind !== "arrow" &&
+        following?.kind !== "dashed-arrow";
+      if (pinned) {
+        this.advance();
+        side = where.value as "left" | "right";
       }
     }
     const lane = this.openLaneIds.length > 0 ? this.openLaneIds[this.openLaneIds.length - 1] : undefined;
@@ -288,6 +511,8 @@ class Parser {
       ...(lane ? { lane } : {}),
       ...(name ? { name } : {}),
       ...(entries && entries.length > 0 ? { entries } : {}),
+      ...(fields && fields.length > 0 ? { fields } : {}),
+      ...(side ? { side } : {}),
     });
   }
 
@@ -415,7 +640,7 @@ export function detectCategory(code: string): DiagramCategory | null {
     .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
     .trimStart();
   const head = stripped.match(
-    /^(flow|bpmn|org|bar|line|pie|scatter|mind|matrix|venn|fishbone)\b/,
+    /^(flow|bpmn|org|usecase|activity|erd|bar|line|pie|scatter|mind|matrix|venn|fishbone|sequence)\b/,
   );
   return head ? (head[1] as DiagramCategory) : null;
 }
@@ -424,7 +649,7 @@ export function parseDSL(code: string): AST {
   const category = detectCategory(code);
   if (!category) {
     throw new DSLError(
-      'A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are flow, bpmn, org, bar, line, pie, scatter, mind, matrix, venn and fishbone',
+      'A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are flow, bpmn, org, usecase, activity, erd, sequence, bar, line, pie, scatter, mind, matrix, venn and fishbone',
       1,
     );
   }
@@ -437,7 +662,9 @@ export function parseDSL(code: string): AST {
           ? parseMatrix(code)
           : category === "venn"
             ? parseVenn(code)
-            : parseFishbone(code);
+            : category === "sequence"
+              ? parseSequence(code)
+              : parseFishbone(code);
     return { category, title: figure.title, nodes: [], edges: [], figure };
   }
   const nodeTypes =
@@ -445,6 +672,12 @@ export function parseDSL(code: string): AST {
       ? FLOW_NODE_TYPES
       : category === "org"
         ? ORG_NODE_TYPES
-        : BPMN_NODE_TYPES;
+        : category === "usecase"
+          ? USECASE_NODE_TYPES
+          : category === "activity"
+            ? ACTIVITY_NODE_TYPES
+            : category === "erd"
+              ? ERD_NODE_TYPES
+              : BPMN_NODE_TYPES;
   return new Parser(tokenize(code), category, nodeTypes).parse();
 }
