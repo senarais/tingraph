@@ -114,6 +114,14 @@ interface EdgeEndpoint {
   line: number;
 }
 
+/** `BOOKING.passenger_id` — the table, and the attribute the relation joins. */
+function erdEndpoint(token: Token): { id: string; port?: string } {
+  const dot = token.value.indexOf(".");
+  return dot < 1
+    ? { id: token.value }
+    : { id: token.value.slice(0, dot), port: token.value.slice(dot + 1) };
+}
+
 class Parser {
   private pos = 0;
   private readonly nodes = new Map<string, DSLNode>();
@@ -281,24 +289,31 @@ class Parser {
    * takes. Both ends may be left out: a relation with nothing said about it is
    * one to many, which is what almost every one of them is. A dashed arrow is
    * a non-identifying relation.
+   *
+   * Either end may name the attribute it joins — `PASSENGER.id one -> many
+   * BOOKING.passenger_id` — so the line leaves the primary key it comes from
+   * and meets the foreign key it lands on. Left unwritten, `pairPorts` in
+   * `layout-erd.ts` works the pair out from the keys themselves.
    */
   private parseErdRelation(): void {
-    const from = this.eat("id", "A relation is written A one -> many B");
+    const from = erdEndpoint(this.eat("id", "A relation is written A one -> many B"));
     const fromEnd = this.parseErdEnd("one");
     if (!this.peekIsArrow()) {
       throw new DSLError(
-        `Expected "->" after "${from.value}" (or declare it, e.g. entity ${from.value} "Name")`,
+        `Expected "->" after "${from.id}" (or declare it, e.g. entity ${from.id} "Name")`,
         this.tokens[this.pos]?.line ?? 0,
       );
     }
     const weak = this.peekIs("dashed-arrow");
     this.advance();
     const toEnd = this.parseErdEnd("many");
-    const to = this.eat("id", `Expected what "${from.value}" is related to`);
+    const to = erdEndpoint(this.eat("id", `Expected what "${from.id}" is related to`));
     const label = this.peekIs("string") ? this.advance().value : undefined;
     this.edges.push({
-      from: from.value,
-      to: to.value,
+      from: from.id,
+      to: to.id,
+      ...(from.port ? { fromPort: from.port } : {}),
+      ...(to.port ? { toPort: to.port } : {}),
       line: weak ? "non-identifying" : erdLine(fromEnd, toEnd),
       ...(label ? { label } : {}),
     });

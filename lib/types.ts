@@ -113,6 +113,14 @@ export interface DSLPool {
 export interface DSLEdge {
   from: string;
   to: string;
+  /**
+   * erd: the attribute each end is tied to, so a relation leaves the primary
+   * key it comes from and meets the foreign key it lands on rather than the
+   * middle of a table's side. Left out, `pairPorts` in `layout-erd.ts` works
+   * the pair out; nothing matched leaves the relation on the box.
+   */
+  fromPort?: string;
+  toPort?: string;
   label?: string;
   kind?: EdgeKind;
   /**
@@ -171,6 +179,26 @@ export function isFigure(
 
 export function isGraph(category: DiagramCategory): category is GraphCategory {
   return (GRAPH_CATEGORIES as readonly string[]).includes(category);
+}
+
+/**
+ * The graphs whose elements are set from a panel as well as drawn.
+ *
+ * A flowchart, a BPMN sheet and an org chart are a bag of boxes: what an
+ * element *is* can be read straight off the drawing, so the sheet is the whole
+ * record and a panel would only repeat it. These three are not. A use case
+ * stands inside a boundary, an action stands in a partition, and an ERD table
+ * has columns with keys — structure the reader cannot place by hand. Each of
+ * their elements therefore carries its own spec on the sheet
+ * (`UnitMark.spec`), which the panel reads and rewrites the way a figure's
+ * panel reads and rewrites its one spec.
+ */
+export const SETTABLE_CATEGORIES = ["usecase", "activity", "erd"] as const;
+
+export type SettableCategory = (typeof SETTABLE_CATEGORIES)[number];
+
+export function isSettable(category: DiagramCategory): category is SettableCategory {
+  return (SETTABLE_CATEGORIES as readonly string[]).includes(category);
 }
 
 /**

@@ -83,10 +83,12 @@ export function HitBox({
       width={Math.max(8, box.width + 4)}
       height={Math.max(8, box.height + 4)}
       fill="transparent"
-      stroke={held ? ACCENT : "none"}
       strokeWidth={1.5}
       strokeDasharray="5 3"
       vectorEffect="non-scaling-stroke"
+      // the part is the drawing underneath; the outline only says it can be
+      // reached, which is why it shows under the pointer and stays when held
+      className={held ? "stroke-[#6b46ff]" : "stroke-transparent hover:stroke-[#6b46ff99]"}
       aria-label={label}
       style={{ pointerEvents: "auto", cursor: onRename ? "text" : "pointer" }}
       onPointerDown={(event) => {
@@ -127,19 +129,29 @@ export function SheetKey({
   );
 }
 
-/** Everything a picked part can do, in a bar over the top of it. */
+/**
+ * Everything a picked part can do, in a bar beside it. It sits over the top of
+ * the part by default; a part in a stack of others — one row of a table — asks
+ * for `beside` instead, or the bar would cover the rows above it.
+ */
 export function PartBar({
   view,
   at,
+  align = "above",
   children,
 }: {
   view: CanvasView;
   at: Pt;
+  align?: "above" | "beside";
   children: ReactNode;
 }) {
   return (
     <div
-      className="slab-tight pointer-events-auto absolute flex -translate-x-1/2 -translate-y-full items-stretch bg-white"
+      className={`slab-tight pointer-events-auto absolute flex items-stretch bg-white ${
+        align === "above"
+          ? "-translate-x-1/2 -translate-y-full"
+          : "-translate-y-1/2"
+      }`}
       style={spotOn(view, at)}
     >
       {children}

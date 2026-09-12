@@ -11,10 +11,14 @@ import {
   asElement,
   linkSignature,
   routeBetween,
+  RECUT,
   type Box,
   type Rules,
 } from "@/lib/canvas/connect";
 import { buildFigure } from "@/lib/figures/registry";
+import { connectorInk, connectorKind } from "@/lib/connectors";
+import { themeFor } from "@/lib/excalidraw-mapper/theme";
+import type { DiagramCategory } from "@/lib/types";
 import type { FigureSpec } from "@/lib/figures/spec";
 import type { Rect } from "@/lib/chart/layout-chart";
 import {
@@ -29,6 +33,9 @@ import {
 } from "@/lib/layout/compute-layout";
 
 type Elements = readonly ExcalidrawElement[];
+
+/** The size a caption riding a connector is written at. */
+const LABEL_FONT_SIZE = 11;
 
 export interface UnitSelection {
   selectedElementIds: Readonly<{ [id: string]: true }>;
@@ -421,6 +428,30 @@ export function linkTargets(elements: Elements): Map<string, Box> {
 }
 
 /**
+ * The heights the two ends meet their boxes at, when they name a port rather
+ * than the box as a whole. An ERD relation joins a primary key to a foreign
+ * key, so it leaves one row and meets another; a port the table no longer has
+ * leaves that end on the box, where it was.
+ */
+export type Ports = ReadonlyMap<string, ReadonlyMap<string, number>>;
+
+const NO_PORTS: Ports = new Map();
+
+function portAnchors(
+  link: LinkMark,
+  ports: Ports,
+): { fromAt?: number; toAt?: number } {
+  const at = (end: LinkMark["from"]) =>
+    end.port === undefined ? undefined : ports.get(end.unit)?.get(end.port);
+  const fromAt = at(link.from);
+  const toAt = at(link.to);
+  return {
+    ...(fromAt === undefined ? {} : { fromAt }),
+    ...(toAt === undefined ? {} : { toAt }),
+  };
+}
+
+/**
  * One connector the reader has just drawn, cut to the notation's rule and
  * added to the sheet. Returns null when either end is no longer there.
  */
@@ -429,6 +460,7 @@ export function newConnector(
   link: LinkMark,
   rules: Rules,
   style: ConnectorStyle,
+  ports: Ports = NO_PORTS,
 ): ExcalidrawElement[] | null {
   const boxes = linkTargets(elements);
   const from = boxes.get(link.from.unit);
@@ -436,12 +468,14 @@ export function newConnector(
   if (!from || !to) {
     return null;
   }
+  const anchors = portAnchors(link, ports);
   const cut = asElement(
     routeBetween(from, to, {
       ...rules,
       fromSide: link.from.side,
       toSide: link.to.side,
       bend: link.bend,
+      ...anchors,
     }),
   );
   const unit = `line-${freshId()}`;
@@ -459,7 +493,7 @@ export function newConnector(
           unit,
           kind: "edge",
           core: true,
-          link: { ...link, at: linkSignature(from, to, link, cut) },
+          link: { ...link, at: linkSignature(from, to, { ...link, ...anchors }, cut) },
         }),
       } as never,
     ],
@@ -494,6 +528,7 @@ export function syncConnectors(
   elements: Elements,
   rules: Rules,
   busy: ReadonlySet<string> = new Set(),
+  ports: Ports = NO_PORTS,
 ): ExcalidrawElement[] | null {
   let next: ExcalidrawElement[] | null = null;
   let boxes: Map<string, Box> | null = null;
@@ -512,7 +547,8 @@ export function syncConnectors(
     if (!from || !to) {
       return;
     }
-    const signature = linkSignature(from, to, link, element);
+    const anchors = portAnchors(link, ports);
+    const signature = linkSignature(from, to, { ...link, ...anchors }, element);
     if (signature === link.at) {
       return;
     }
@@ -533,6 +569,7 @@ export function syncConnectors(
       fromSide: link.from.side,
       toSide: link.to.side,
       bend: link.bend,
+      ...anchors,
     });
     const cut = asElement(route);
     next ??= elements.slice();
@@ -546,7 +583,7 @@ export function syncConnectors(
         ...element.customData,
         tingraph: {
           ...mark,
-          link: { ...link, at: linkSignature(from, to, link, cut) },
+          link: { ...link, at: linkSignature(from, to, { ...link, ...anchors }, cut) },
         },
       },
     });
@@ -736,6 +773,140 @@ function withDanglingLinks(elements: Elements, gone: Set<string>): Set<string> {
     }
   }
   return out;
+}
+
+/**
+ * Takes an element off the sheet, and every connector that was tied to it.
+ *
+ * A connector names the two elements it joins, so one whose end has gone has
+ * nothing left to be cut against; it goes too. Excalidraw's bound captions
+ * carry no mark of their own, so they are followed by the shape they sit in.
+ */
+export function removeUnits(
+  elements: Elements,
+  units: Iterable<string>,
+): ExcalidrawElement[] {
+  const wanted = new Set(units);
+  const gone = new Set<string>();
+  for (const element of elements) {
+    if (!element.isDeleted && wanted.has(unitOf(element)?.unit ?? "")) {
+      gone.add(element.id);
+    }
+  }
+  for (const element of elements) {
+    const container = (element as { containerId?: string | null }).containerId;
+    if (container && gone.has(container)) {
+      gone.add(element.id);
+    }
+  }
+  const cut = withDanglingLinks(elements, gone);
+  return elements.map((element) =>
+    cut.has(element.id) ? newElementWith(element, { isDeleted: true }) : element,
+  );
+}
+
+/**
+ * One connector's own settings, written back with the route asked to be cut
+ * again. The gesture layer and the panel that lists the relations are the same
+ * edit, so they write through here.
+ *
+ * Which of the notation's lines this is decides how it is drawn, so a change
+ * of line carries its dash and its two heads with it — an ERD relation that is
+ * now one-to-one has to grow the bar at the far end, not only say so.
+ */
+export function writeLink(
+  elements: Elements,
+  id: string,
+  patch: Partial<LinkMark>,
+  category?: DiagramCategory,
+): ExcalidrawElement[] {
+  const ink =
+    patch.line && category
+      ? connectorInk(connectorKind(patch.line, category))
+      : null;
+  return elements.map((element) => {
+    const mark = element.id === id ? unitOf(element) : null;
+    if (!mark?.link) {
+      return element;
+    }
+    return newElementWith(element, {
+      ...((ink ?? {}) as object),
+      customData: {
+        ...element.customData,
+        tingraph: { ...mark, link: { ...mark.link, ...patch, at: RECUT } },
+      },
+    });
+  });
+}
+
+/**
+ * The caption riding one connector, written, changed or taken off.
+ *
+ * A connector's caption is a text element sharing its unit, so it copies,
+ * moves and is deleted along with the line. An empty name takes it away; a
+ * name on a line that has none writes a fresh one over the middle of the
+ * route, where the reader can then drag it wherever it reads best.
+ */
+export function labelLink(
+  elements: Elements,
+  id: string,
+  label: string,
+  ink: Ink,
+  style: SheetStyle = FORMAL,
+  category: DiagramCategory = "bpmn",
+): ExcalidrawElement[] {
+  const arrow = elements.find((element) => element.id === id && !element.isDeleted);
+  const mark = arrow ? unitOf(arrow) : null;
+  if (!arrow || !mark) {
+    return elements.slice();
+  }
+  const words = label.trim();
+  const held = elements.find(
+    (element) =>
+      !element.isDeleted &&
+      element.type === "text" &&
+      unitOf(element)?.unit === mark.unit,
+  );
+  if (held) {
+    return elements.map((element) =>
+      element.id !== held.id
+        ? element
+        : newElementWith(
+            element,
+            words
+              ? ({ text: words, originalText: words } as never)
+              : { isDeleted: true },
+          ),
+    );
+  }
+  if (!words) {
+    return elements.slice();
+  }
+  const theme = themeFor(ink, category, style);
+  return [
+    ...elements,
+    ...convertToExcalidrawElements(
+      [
+        {
+          type: "text",
+          text: words,
+          x: Math.round(arrow.x + arrow.width / 2),
+          y: Math.round(arrow.y + arrow.height / 2 - LABEL_FONT_SIZE),
+          groupIds: [mark.unit],
+          ...marked({ unit: mark.unit, kind: "edge", core: true }),
+          strokeColor: theme.strokeColor,
+          backgroundColor: "transparent",
+          roughness: theme.roughness,
+          fontSize: LABEL_FONT_SIZE,
+          fontFamily: theme.fontFamily,
+          textAlign: "center",
+          verticalAlign: "top",
+          opacity: 100,
+        } as never,
+      ],
+      { regenerateIds: true },
+    ),
+  ];
 }
 
 /**

@@ -1,11 +1,4 @@
-import {
-  bpmnShapeSize,
-  flowDimensions,
-  orgBoxLayout,
-} from "@/lib/layout/compute-layout";
-import { activityShapeSize } from "@/lib/layout/layout-activity";
-import { usecaseNodeSize } from "@/lib/layout/layout-usecase";
-import { erdShapeSize } from "@/lib/layout/layout-erd";
+import { nodeSize } from "@/lib/layout/compute-layout";
 import { DiagramCategory, DSLNode, NodeType } from "@/lib/types";
 
 export interface PaletteItem {
@@ -339,23 +332,7 @@ export function paletteShapeSize(
   item: PaletteItem,
   category: DiagramCategory,
 ): { width: number; height: number } {
-  if (category === "org") {
-    const box = orgBoxLayout(orgSampleNode(item.type, 1));
-    return { width: box.width, height: box.height };
-  }
-  if (category === "flow") {
-    return flowDimensions(item.type as NodeType, item.label);
-  }
-  if (category === "usecase") {
-    return usecaseNodeSize(item.type, sampleNode(category, item.type, 1).label);
-  }
-  if (category === "activity") {
-    return activityShapeSize(item.type, sampleNode(category, item.type, 1).label);
-  }
-  if (category === "erd") {
-    return erdShapeSize(sampleNode(category, item.type, 1));
-  }
-  return bpmnShapeSize(item.type as NodeType, droppedLabel(item));
+  return nodeSize(category, sampleNode(category, item.type, 1));
 }
 
 /**

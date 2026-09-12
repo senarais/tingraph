@@ -30,16 +30,32 @@ import {
   withSnippet,
 } from "@/lib/palette";
 import { applyStyle, reink, restyle, type StylePatch } from "@/lib/canvas/restyle";
-import { newFigure, redrawFigure, type FigureOnSheet } from "@/lib/canvas/scene";
+import {
+  newFigure,
+  redrawFigure,
+  labelLink,
+  removeUnits,
+  writeLink,
+  type FigureOnSheet,
+} from "@/lib/canvas/scene";
+import { elementOn, redrawElement } from "@/lib/canvas/elements";
+import {
+  addBoundary,
+  addColumn,
+  removeColumn,
+  removeFrame,
+  renameFrame,
+} from "@/lib/canvas/frames";
 import { figureDef } from "@/lib/figures/registry";
 import type { FigureSpec } from "@/lib/figures/spec";
 import FigureDrawer from "@/components/editor/figure-drawer";
+import ElementDrawer, { elementPanel } from "@/components/editor/element-drawer";
 import { fontReady, styleOfFont } from "@/lib/canvas/text-metrics";
 import { unitOf } from "@/lib/canvas/units";
 import { summarise } from "@/lib/summary";
 import type { Ink } from "@/lib/ink";
-import { DSLError, DiagramCategory, LayoutDirection } from "@/lib/types";
-import Canvas from "@/components/editor/canvas";
+import { DSLError, DiagramCategory, DSLNode, LayoutDirection } from "@/lib/types";
+import Canvas, { NO_PARTS, type SheetParts } from "@/components/editor/canvas";
 import ExportDialog from "@/components/editor/export-dialog";
 import Inspector from "@/components/editor/inspector";
 import Rail from "@/components/editor/rail";
@@ -111,6 +127,7 @@ function drawFromSource(
 const DRAWER_TITLES: Record<Drawer, string> = {
   shapes: "Shapes",
   figure: "Figure",
+  elements: "Elements",
   source: "Generate",
   style: "Style",
 };
@@ -137,6 +154,8 @@ export default function EditorRoot() {
   const [figure, setFigure] = useState<FigureOnSheet | null>(null);
   /** the part of that figure the reader has hold of, for the ones with parts */
   const [part, setPart] = useState<string | null>(null);
+  /** everything a settable notation's panel is looking at, read off the sheet */
+  const [parts, setParts] = useState<SheetParts>(NO_PARTS);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const monacoRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const counterRef = useRef(1);
@@ -299,6 +318,58 @@ export default function EditorRoot() {
     });
   };
 
+  /** Everything on the sheet that belongs to one element, picked as one. */
+  const selectUnit = (unit: string, elements?: readonly ExcalidrawElement[]) => {
+    if (!api) {
+      return;
+    }
+    const scene = elements ?? api.getSceneElements();
+    const mine = scene.filter((element) => unitOf(element)?.unit === unit);
+    if (mine.length === 0) {
+      return;
+    }
+    api.updateScene({
+      ...(elements ? { elements: elements as ExcalidrawElement[] } : {}),
+      appState: {
+        selectedElementIds: Object.fromEntries(
+          mine.map((element) => [element.id, true as const]),
+        ),
+        selectedGroupIds: { [unit]: true },
+        editingGroupId: null,
+      },
+      captureUpdate: elements
+        ? CaptureUpdateAction.IMMEDIATELY
+        : CaptureUpdateAction.NEVER,
+    });
+  };
+
+  /**
+   * One element rewritten and drawn again from its spec — a column added, a
+   * step turned into an object node. The same call serves the panel and the
+   * handles on the sheet, which is what keeps the two in step; the element is
+   * picked again afterwards by name, or the handles would vanish mid-edit.
+   */
+  const changeElement = (unit: string, spec: DSLNode) => {
+    if (!api) {
+      return;
+    }
+    const scene = api.getSceneElementsIncludingDeleted();
+    const entry = elementOn(scene, unit);
+    if (!entry) {
+      return;
+    }
+    const next = redrawElement(
+      scene,
+      unit,
+      spec,
+      { x: entry.box.x, y: entry.box.y, width: entry.box.width },
+      editorCategory,
+      ink,
+      style,
+    );
+    selectUnit(unit, next);
+  };
+
   /** A figure on a sheet that has none yet, in the notation that was chosen. */
   const addFigure = () => {
     const def = figureDef(editorCategory);
@@ -429,7 +500,9 @@ export default function EditorRoot() {
               <Tick>
                 {drawer === "figure"
                   ? (figureDef(editorCategory)?.label ?? DRAWER_TITLES.figure)
-                  : DRAWER_TITLES[drawer]}
+                  : drawer === "elements"
+                    ? (elementPanel(editorCategory)?.label ?? DRAWER_TITLES.elements)
+                    : DRAWER_TITLES[drawer]}
               </Tick>
               <button
                 type="button"
@@ -450,6 +523,56 @@ export default function EditorRoot() {
                 onAdd={addFigure}
                 picked={part}
                 onPick={setPart}
+              />
+            )}
+            {drawer === "elements" && (
+              <ElementDrawer
+                category={editorCategory}
+                elements={parts.elements}
+                links={parts.links}
+                frames={parts.frames}
+                onSelect={selectUnit}
+                onChange={changeElement}
+                onAdd={(type) => placeShape(type, centre())}
+                onRemove={(unit) => edit((elements) => removeUnits(elements, [unit]))}
+                onLink={(id, patch) =>
+                  edit((elements) => writeLink(elements, id, patch, editorCategory))
+                }
+                onLabelLink={(id, label) =>
+                  edit((elements) =>
+                    labelLink(elements, id, label, ink, style, editorCategory),
+                  )
+                }
+                onRemoveLink={(id) => {
+                  const mark = api
+                    ?.getSceneElements()
+                    .find((element) => element.id === id);
+                  const unit = mark ? unitOf(mark)?.unit : null;
+                  if (unit) {
+                    edit((elements) => removeUnits(elements, [unit]));
+                  }
+                }}
+                onFrame={(unit, patch) =>
+                  edit((elements) => renameFrame(elements, unit, patch.label ?? ""))
+                }
+                onAddFrame={() =>
+                  edit((elements) => addBoundary(elements, centre(), ink, style))
+                }
+                onRemoveFrame={(unit) => {
+                  const frame = parts.frames.find((entry) => entry.unit === unit);
+                  if (frame) {
+                    edit((elements) => removeFrame(elements, frame));
+                  }
+                }}
+                onAddLane={(frame) =>
+                  edit((elements) => addColumn(elements, frame, ink, style))
+                }
+                onRemoveLane={(frame) =>
+                  edit((elements) => removeColumn(elements, frame))
+                }
+                onRenameLane={(unit, label) =>
+                  edit((elements) => renameFrame(elements, unit, label))
+                }
               />
             )}
             {drawer === "shapes" && (
@@ -491,7 +614,9 @@ export default function EditorRoot() {
                 );
               }
             }}
-            onPoolEdit={edit}
+            onEdit={edit}
+            onParts={setParts}
+            onElementChange={changeElement}
             onEmptyChange={setEmpty}
             onFigure={setFigure}
             figure={figure}

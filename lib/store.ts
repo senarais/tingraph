@@ -9,8 +9,13 @@ import { DEFAULT_SHEET_STYLE, type SheetStyleId } from "@/lib/sheet";
 import { TEMPLATE_LABELS, TEMPLATES } from "@/lib/templates";
 import { DiagramCategory, LayoutDirection } from "@/lib/types";
 
-/** The rail's panels. Only one is ever out, and it can always be shut. */
-export type Drawer = "shapes" | "figure" | "source" | "style";
+/**
+ * The rail's panels. Only one is ever out, and it can always be shut.
+ *
+ * `figure` is the one a figure is set from; `elements` is its counterpart for
+ * the graphs whose elements carry a spec of their own — see `isSettable`.
+ */
+export type Drawer = "shapes" | "figure" | "elements" | "source" | "style";
 
 /** The canvas tools the rail drives, named the way Excalidraw names them. */
 export type CanvasTool =

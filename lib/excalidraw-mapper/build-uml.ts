@@ -63,6 +63,8 @@ function caption(
   at: { x: number; y: number },
   fontSize: number,
   align: "left" | "center" | "right" = "center",
+  /** which piece of the element's spec this caption carries, if it carries one */
+  part?: string,
 ): ExcalidrawElementSkeleton {
   return shape(piece, {
     type: "text",
@@ -75,7 +77,7 @@ function caption(
     fontFamily: piece.theme.fontFamily,
     textAlign: align,
     verticalAlign: "top",
-    ...marked({ unit: piece.unit, kind: "node", core: true }),
+    ...marked({ unit: piece.unit, kind: "node", core: true, ...(part ? { part } : {}) }),
   });
 }
 
@@ -114,7 +116,11 @@ function maker(unit: string, theme: Theme): Piece {
   return { unit, theme, id: (part) => `${unit}-${part}-${n++}` };
 }
 
-/** The same caption, but stamped as part of a lane or a boundary rather than a node. */
+/**
+ * The same caption, but stamped as part of a lane or a boundary rather than a
+ * node. It carries `part: "name"`, so the panel reads the frame's name off the
+ * drawing and a rename writes to this one piece.
+ */
 function chromeCaption(
   piece: Piece,
   kind: "lane" | "frame",
@@ -124,7 +130,7 @@ function chromeCaption(
 ): ExcalidrawElementSkeleton {
   return {
     ...caption(piece, lines, at, fontSize),
-    ...marked({ unit: piece.unit, kind, core: true }),
+    ...marked({ unit: piece.unit, kind, core: true, part: "name" }),
   } as ExcalidrawElementSkeleton;
 }
 
@@ -156,7 +162,7 @@ export function usecaseNodeSkeletons(
         width: node.width,
         height: node.height,
         strokeWidth: CHROME_STROKE_WIDTH,
-        ...marked({ unit, kind: "node", core: true }),
+        ...marked({ unit, kind: "node", core: true, part: "name" }),
         label: {
           text: wrapByWidth(node.label, node.width - 34, USECASE_FONT_SIZE).join("\n"),
           fontSize: USECASE_FONT_SIZE,
@@ -211,6 +217,8 @@ export function usecaseNodeSkeletons(
       wrapByWidth(node.label, node.width + 30, USECASE_FONT_SIZE),
       { x: cx, y: node.y + ACTOR_ICON + 6 },
       USECASE_FONT_SIZE,
+      "center",
+      "name",
     ),
   ];
 }
@@ -366,6 +374,7 @@ export function activityNodeSkeletons(
             unit,
             kind: "node",
             core: true,
+            part: "name",
             ...(node.type === "object" ? { soft: true } : {}),
           }),
           label: {
@@ -386,6 +395,8 @@ export function activityNodeSkeletons(
         lines,
         { x: cx, y: node.y + node.height + 6 },
         ACTIVITY_LABEL_FONT_SIZE,
+        "center",
+        "name",
       ),
     );
   }
@@ -433,29 +444,45 @@ export function activityChromeSkeletons(
   }
 
   pool.lanes.forEach((lane: PositionedLane, index: number) => {
-    const laneUnit = `lane-${lane.id}`;
-    const piece = maker(laneUnit, theme);
-    if (index > 0) {
-      out.push(
-        stroke(
-          piece,
-          [
-            [lane.x, lane.y],
-            [lane.x, lane.y + lane.height],
-          ],
-          { mark: "lane" },
-        ),
-      );
-    }
-    if (lane.label) {
-      out.push(
-        chromeCaption(piece, "lane", [lane.label], {
-          x: lane.x + lane.width / 2,
-          y: lane.y + (band - ACTIVITY_LINE_HEIGHT) / 2,
-        }, ACTIVITY_FONT_SIZE),
-      );
-    }
+    out.push(...activityColumnSkeletons(lane, theme, index > 0));
   });
+  return out;
+}
+
+/**
+ * One partition: the rule down its left side and the name above it. The
+ * leftmost column is ruled by the frame itself, so it is drawn without one;
+ * everything else in the sheet is the same whether the column came from the
+ * source or was added on the canvas.
+ */
+export function activityColumnSkeletons(
+  lane: PositionedLane,
+  theme: Theme,
+  rule: boolean,
+): ExcalidrawElementSkeleton[] {
+  const out: ExcalidrawElementSkeleton[] = [];
+  const piece = maker(`lane-${lane.id}`, theme);
+  const band = lane.headerHeight ?? 0;
+  if (rule) {
+    out.push(
+      stroke(
+        piece,
+        [
+          [lane.x, lane.y],
+          [lane.x, lane.y + lane.height],
+        ],
+        { mark: "lane" },
+      ),
+    );
+  }
+  if (lane.label) {
+    out.push(
+      chromeCaption(piece, "lane", [lane.label], {
+        x: lane.x + lane.width / 2,
+        y: lane.y + (band - ACTIVITY_LINE_HEIGHT) / 2,
+      }, ACTIVITY_FONT_SIZE),
+    );
+  }
   return out;
 }
 
@@ -494,7 +521,9 @@ export function erdNodeSkeletons(
       height: box.headerHeight,
       backgroundColor: theme.tint,
       strokeWidth: CHROME_STROKE_WIDTH,
-      ...marked({ unit, kind: "node", core: true, wash: true }),
+      // the band holds the table's name, so it is the piece the panel reads
+      // that name back off when the reader edits it on the sheet
+      ...marked({ unit, kind: "node", core: true, wash: true, part: "name" }),
       label: {
         text: node.label,
         fontSize: ERD_NAME_FONT_SIZE,
@@ -554,6 +583,7 @@ export function erdNodeSkeletons(
         { x: node.x + box.gutter + ERD_PAD_X, y: top },
         ERD_ROW_FONT_SIZE,
         "left",
+        `field:${index}:name`,
       ),
     );
     if (row.type) {
@@ -564,6 +594,7 @@ export function erdNodeSkeletons(
           { x: node.x + node.width - ERD_PAD_X, y: top },
           ERD_ROW_FONT_SIZE,
           "right",
+          `field:${index}:type`,
         ),
       );
     }

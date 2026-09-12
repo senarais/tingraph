@@ -226,6 +226,14 @@ const ERD_SECTIONS: GuideSection[] = [
       row("ends", "one, many, one-or-many, zero-or-one"),
     ],
   },
+  {
+    title: "Which columns it joins",
+    rows: [
+      row("A.id -> B.a_id", "leaves that key and meets that one"),
+      row("left out", "the keys are paired up on their names"),
+      row("panel", "or set it in Tables, beside the relation"),
+    ],
+  },
 ];
 
 const SEQUENCE_SECTIONS: GuideSection[] = [
@@ -564,7 +572,7 @@ export const GUIDE_INTRO: Record<DiagramCategory, string> = {
   org: "Declare every role once, then draw the reporting lines. Levels, spacing and the bus routing are worked out for you.",
   usecase: "Declare the actors, then the use cases inside a system block, then join them. Actors that start something stand on the left, actors that only answer stand on the right.",
   activity: "Declare a partition, then the nodes inside it, then wire them. Partitions are drawn as columns and the flow reads down the page.",
-  erd: "Declare every entity with its attributes, then the relations between them. The crow's foot at each end says how many.",
+  erd: "Declare every entity with its attributes, then the relations between them. The crow's foot at each end says how many, and a relation runs from the key it names to the key it names.",
   sequence: "Declare the participants across the top, then the messages in the order they are sent. The execution bars are read off the messages, so there is nothing to place.",
   bar: "Write the readings one to a line, then any settings you want. Everything here is also a control in the Chart panel, and the two always agree.",
   line: "Name the readings along the axis, then one series per line you want drawn. Everything here is also a control in the Chart panel.",
@@ -635,6 +643,7 @@ const RULES: Record<DiagramCategory, string[]> = {
     "An attribute is `\"name\" \"type\"`, optionally opened with `pk`, `fk` or `pfk` and closed with `unique` or `null`.",
     "A relation is `A one -> many B`; leaving both ends out means one to many.",
     "The ends are `one`, `many`, `one-or-many` and `zero-or-one`. A dashed arrow is non-identifying.",
+    "Either end may name the column it joins: `PASSENGER.id one -> many BOOKING.passenger_id`. Left out, the primary key is paired with the foreign key named after it.",
   ],
   sequence: [
     'The file is one `sequence "Title" { ... }` block.',

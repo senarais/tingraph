@@ -12,7 +12,7 @@ import { promptFor, GUIDE_SECTIONS } from "../lib/guide";
 import { customInk, inkFor, washFor } from "../lib/ink";
 import { styleFor } from "../lib/sheet";
 import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE } from "../lib/templates";
-import type { DiagramCategory } from "../lib/types";
+import { isSettable, type DiagramCategory, type DSLNode } from "../lib/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 
 type Skel = Record<string, unknown> & { id?: string; type: string };
@@ -39,8 +39,12 @@ loader._load = function (request: string, parent: unknown, main: boolean) {
   }
   return loadModule.call(this, request, parent, main);
 };
-const scene = createRequire(__filename)("../lib/canvas/scene") as typeof import("../lib/canvas/scene");
+const require_ = createRequire(__filename);
+const scene = require_("../lib/canvas/scene") as typeof import("../lib/canvas/scene");
 const { normalizeUnits, removeLane } = scene;
+const elements = require_("../lib/canvas/elements") as typeof import("../lib/canvas/elements");
+const erd = require_("../lib/canvas/erd") as typeof import("../lib/canvas/erd");
+const frames = require_("../lib/canvas/frames") as typeof import("../lib/canvas/frames");
 
 const byId = (skeletons: unknown[]) =>
   new Map(skeletons.map((s) => [String((s as Skel).id ?? ""), s as Skel]));
@@ -431,6 +435,203 @@ async function checkPdf(): Promise<void> {
     undefined,
     "a pool never loses its last lane",
   );
+}
+
+// ----------------------------------------------------- the settable graphs
+
+{
+  // the panel is offered to exactly the notations whose elements carry a spec
+  for (const category of ["usecase", "activity", "erd"] as DiagramCategory[]) {
+    assert.ok(isSettable(category), `${category} is set from a panel`);
+  }
+  for (const category of ["flow", "bpmn", "org", "bar", "mind"] as DiagramCategory[]) {
+    assert.equal(isSettable(category), false, `${category} is not`);
+  }
+
+  // --- one table's columns, rewritten
+  const table: DSLNode = {
+    id: "T",
+    type: "entity",
+    label: "orders",
+    fields: [
+      { name: "id", type: "bigint", key: "pk" },
+      { name: "status", type: "varchar(20)" },
+    ],
+  };
+  assert.equal(erd.nextKey(undefined), "pk", "a column with no marker takes one");
+  assert.equal(erd.nextKey("pfk"), undefined, "and comes back round to none");
+  const grown = erd.addField(table, 0);
+  assert.equal(grown.fields!.length, 3);
+  assert.equal(grown.fields![1].name, "column_3", "a fresh column is named apart");
+  assert.equal(grown.fields![2].name, "status", "and is put in where it was asked for");
+  assert.equal(erd.removeField(grown, 1).fields!.length, 2, "and can be taken out again");
+  assert.equal(
+    erd.removeField({ ...table, fields: [table.fields![0]] }, 0).fields!.length,
+    1,
+    "a table keeps its last column",
+  );
+  assert.equal(erd.moveField(table, 1, -1).fields![0].name, "status", "a column moves");
+  assert.equal(
+    erd.setField(table, 1, { key: "fk" }).fields![1].key,
+    "fk",
+    "and takes a key marker",
+  );
+  assert.equal(
+    "unique" in erd.setField(table, 1, { unique: false }).fields![1],
+    false,
+    "a flag that is off is not written at all",
+  );
+
+  // --- a caption edited on the sheet is what the panel reads back
+  const shape = fake(
+    "rectangle",
+    { unit: "erd-T", kind: "node", core: true, spec: table },
+    { id: "box", x: 10, y: 20, width: 180, height: 72 },
+  );
+  const band = fake(
+    "rectangle",
+    { unit: "erd-T", kind: "node", core: true, part: "name" },
+    { id: "band", x: 10, y: 20, width: 180, height: 28 },
+  );
+  const name = fake(
+    "text",
+    { unit: "erd-T", kind: "node", core: true },
+    { id: "name", containerId: "band", text: "purchase\norders", originalText: "purchase orders" },
+  );
+  const row = fake(
+    "text",
+    { unit: "erd-T", kind: "node", core: true, part: "field:1:name" },
+    { id: "row", text: "state" },
+  );
+  const [read] = elements.elementsOn([shape, band, name, row]);
+  assert.equal(read.unit, "erd-T");
+  assert.equal(read.spec.label, "purchase orders", "the table's name comes off the sheet");
+  assert.equal(read.spec.fields![1].name, "state", "and so does a renamed column");
+  assert.deepEqual(
+    read.box,
+    { x: 10, y: 20, width: 180, height: 72 },
+    "the box is the element's own outline, not the spec's idea of it",
+  );
+  const [port] = [...(erd.portsOf([shape, band, name, row]).get("erd-T") ?? [])].slice(1);
+  assert.equal(port[0], "state", "a port is named by the column as it now reads");
+  assert.equal(port[1], 20 + 28 + 22 + 11, "and sits in the middle of its own row");
+
+  // --- drawn again from the spec, in the same place
+  const redrawn = elements.redrawElement(
+    [shape, band, name, row],
+    "erd-T",
+    erd.addField(table),
+    { x: 10, y: 20 },
+    "erd",
+    inkFor("mono"),
+    styleFor("formal"),
+  ) as unknown as Skel[];
+  assert.equal(
+    redrawn.some((piece) => piece.id === "name"),
+    false,
+    "a bound caption goes with the shape it was bound to",
+  );
+  const outline = redrawn.find(
+    (piece) => piece.type === "rectangle" && (piece as { height?: number }).height === 94,
+  );
+  assert.ok(outline, "the table is one row taller");
+  assert.equal((outline as unknown as { x: number }).x, 10, "and has not moved");
+  for (const piece of redrawn) {
+    const mark = (piece.customData as { tingraph?: { unit: string } })?.tingraph;
+    if (mark) {
+      assert.equal(mark.unit, "erd-T", "every fresh piece answers to the same name");
+    }
+  }
+
+  // --- an activity's partitions are columns, so the sheet opens to the right
+  const frameBox = fake(
+    "rectangle",
+    { unit: "frame-P", kind: "frame", core: true },
+    { id: "frame", x: 0, y: 0, width: 400, height: 300 },
+  );
+  const rule = fake(
+    "line",
+    { unit: "lane-L2", kind: "lane" },
+    { id: "rule", x: 200, y: 0, width: 0, height: 300 },
+  );
+  const beyond = fake("rectangle", undefined, { id: "beyond", x: 500, y: 10, width: 20, height: 20 });
+  const read2 = frames.partitionFrames([frameBox, rule, beyond]);
+  assert.equal(read2.length, 1, "one frame");
+  assert.equal(read2[0].lanes.length, 2, "ruled into two columns");
+  assert.equal(read2[0].lanes[1].x, 200, "the second starting at the rule");
+  const wider = frames.addColumn(
+    [frameBox, rule, beyond],
+    read2[0],
+    inkFor("mono"),
+    styleFor("formal"),
+  ) as unknown as Skel[];
+  assert.equal(
+    (wider.find((piece) => piece.id === "frame") as unknown as { width: number }).width,
+    400 + frames.COLUMN_WIDTH,
+    "the frame widens by exactly one column",
+  );
+  assert.equal(
+    (wider.find((piece) => piece.id === "beyond") as unknown as { x: number }).x,
+    500 + frames.COLUMN_WIDTH,
+    "and the sheet to the right of it moves over by the same",
+  );
+}
+
+// ------------------------------------------------------------- connectors
+
+{
+  const arrow = fake(
+    "arrow",
+    {
+      unit: "flow-0",
+      kind: "edge",
+      core: true,
+      link: {
+        line: "erd-one-to-many",
+        from: { unit: "erd-A", port: "id" },
+        to: { unit: "erd-B" },
+      },
+    },
+    { id: "rel", x: 0, y: 0, width: 100, height: 40 },
+  );
+
+  // a change of line carries the heads it is drawn with
+  const [turned] = scene.writeLink([arrow], "rel", { line: "erd-one-to-one" }, "erd") as
+    unknown as Skel[];
+  assert.equal(turned.endArrowhead, "crowfoot_one", "the far head follows the line");
+  assert.equal(
+    (turned.customData as { tingraph: { link: { at: string } } }).tingraph.link.at,
+    "recut",
+    "and the route is asked for again",
+  );
+
+  // a caption is written onto a line that has none, and taken off again
+  const named = scene.labelLink(
+    [arrow],
+    "rel",
+    "places",
+    inkFor("mono"),
+    styleFor("formal"),
+    "erd",
+  ) as unknown as Skel[];
+  assert.equal(named.length, 2, "a fresh caption is added beside the line");
+  const caption = named[1];
+  assert.equal(caption.type, "text");
+  assert.equal(caption.text, "places");
+  assert.equal(
+    (caption.customData as { tingraph: { unit: string } }).tingraph.unit,
+    "flow-0",
+    "and answers to the same name, so it copies and moves with the line",
+  );
+  const bare = scene.labelLink(
+    named as unknown as ExcalidrawElement[],
+    "rel",
+    "   ",
+    inkFor("mono"),
+    styleFor("formal"),
+    "erd",
+  ) as unknown as Skel[];
+  assert.equal(bare[1].isDeleted, true, "and an empty name takes the caption off");
 }
 
 checkPdf().then(() => {

@@ -18,7 +18,7 @@ import {
   ERD_TEMPLATE,
   SEQUENCE_TEMPLATE,
 } from "@/lib/templates";
-import { erdBoxLayout } from "@/lib/layout/layout-erd";
+import { erdBoxLayout, erdPorts, pairPorts } from "@/lib/layout/layout-erd";
 import { planSequence, sequenceSize } from "@/lib/sequence/layout-sequence";
 import { messagesOf, type SequenceSpec } from "@/lib/sequence/spec";
 import { READY_DIAGRAMS } from "@/lib/diagrams";
@@ -1247,7 +1247,8 @@ assert.equal(
   0,
   "and a table with no keys rules no gutter",
 );
-for (const edge of computeLayout(erd, "down").edges) {
+const erdLaid = computeLayout(erd, "down");
+for (const edge of erdLaid.edges) {
   assert.ok(edge.points.length >= 2, "every relation is routed");
   for (let at = 1; at < edge.points.length; at += 1) {
     const a = edge.points[at - 1];
@@ -1258,6 +1259,82 @@ for (const edge of computeLayout(erd, "down").edges) {
     );
   }
 }
+
+// --- a relation joins two columns, not two boxes
+const booking = erd.nodes.find((node) => node.id === "BOOKING")!;
+const flight = erd.nodes.find((node) => node.id === "FLIGHT")!;
+const airline = erd.nodes.find((node) => node.id === "AIRLINE")!;
+assert.deepEqual(
+  pairPorts(passenger, booking),
+  { fromPort: "id", toPort: "passenger_id" },
+  "a foreign key named after the parent table is paired with its primary key",
+);
+assert.deepEqual(
+  pairPorts(flight, booking),
+  { fromPort: "flight_id", toPort: "flight_id" },
+  "and one named after the key itself is paired straight off",
+);
+assert.deepEqual(
+  pairPorts(flight, airline),
+  { fromPort: "airline_id", toPort: "airline_id" },
+  "a relation written child first is read the other way round",
+);
+assert.deepEqual(
+  pairPorts(passenger, airline),
+  {},
+  "two tables with no key in common leave the relation on the box",
+);
+const ports = erdPorts(booking);
+assert.equal(
+  ports.get("passenger_id"),
+  erdBoxLayout(booking).headerHeight + 1.5 * erdBoxLayout(booking).rowHeight,
+  "a column's port sits in the middle of its own row",
+);
+for (const edge of erdLaid.edges) {
+  assert.ok(edge.fromPort && edge.toPort, "every relation in the template pairs up");
+  const from = erdLaid.nodes.find((node) => node.id === edge.from)!;
+  const to = erdLaid.nodes.find((node) => node.id === edge.to)!;
+  const first = edge.points[0];
+  const last = edge.points[edge.points.length - 1];
+  assert.equal(
+    first.y,
+    Math.round(from.y + (erdPorts(from).get(edge.fromPort as string) as number)),
+    "a relation leaves the row it names",
+  );
+  assert.equal(
+    last.y,
+    Math.round(to.y + (erdPorts(to).get(edge.toPort as string) as number)),
+    "and meets the row it names",
+  );
+  for (const end of [first, last]) {
+    assert.ok(
+      Math.abs(end.x - from.x) < 1 ||
+        Math.abs(end.x - (from.x + from.width)) < 1 ||
+        Math.abs(end.x - to.x) < 1 ||
+        Math.abs(end.x - (to.x + to.width)) < 1,
+      "and both ends sit on a side, because a row is only reachable from one",
+    );
+  }
+}
+
+// --- a port end may also be written outright
+const written = parseDSL(
+  'erd "x" { entity A "a" { pk "ref" "int" } entity B "b" { fk "a_ref" "int" } A.ref one -> many B.a_ref }',
+);
+assert.equal(written.edges[0].fromPort, "ref", "the source may name the column");
+assert.equal(written.edges[0].toPort, "a_ref");
+assert.equal(written.edges[0].from, "A", "and the table is still the endpoint");
+
+// --- two tables standing above each other leave by the same side
+const stacked = routeBetween(
+  { x: 0, y: 0, width: 200, height: 100 },
+  { x: 20, y: 200, width: 200, height: 100 },
+  { category: "erd", direction: "down", fromAt: 40, toAt: 250 },
+);
+assert.equal(stacked[0].x, 200, "the line leaves the right of the upper table");
+assert.equal(stacked[0].y, 40, "at the height of its own row");
+assert.equal(stacked[stacked.length - 1].x, 220, "and meets the right of the lower one");
+assert.equal(stacked[stacked.length - 1].y, 250);
 
 // ------------------------------------------------------------------ sequence
 

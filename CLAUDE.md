@@ -21,8 +21,11 @@ are read off them rather than placed — is a figure, because there is no
 element for the reader to drag that would mean anything on its own.
 
 `isGraph()`, `isFigure()` and `isChart()` in `lib/types.ts` are what tell them
-apart, and almost everything in the editor asks one of them. The architecture
-is built so the next notation is a folder and a row, not a new subsystem.
+apart, and almost everything in the editor asks one of them. A fourth,
+`isSettable()`, marks the three graphs whose elements carry a spec of their
+own and are set from a panel as well as drawn — see **A settable graph**. The
+architecture is built so the next notation is a folder and a row, not a new
+subsystem.
 
 **Keep this file current.** Anything that changes the rules below — a new
 notation, a new setting, a change to how connectors are routed or held,
@@ -251,7 +254,9 @@ side by side, the axis that separates them wins instead.
 - **activity** reads down the page like a flowchart. Its partitions run
   *across* it, which is the whole reason it is not a BPMN sheet turned round.
 - **erd** turns square like the rest, and its two ends carry crow's feet
-  rather than an arrowhead.
+  rather than an arrowhead. It reads *across* the page, like BPMN, because a
+  relation joins one table's key to another's; an end tied to one of those
+  keys is a port, and ports are their own rule — see **A settable graph**.
 - **org** reads down the page, so a line leaves the **bottom** of a box and
   meets the **top** of the one below. `railBetween` then puts the middle leg a
   fixed `ORG_RAIL` under the box it leaves, rather than half way. That is the
@@ -328,6 +333,103 @@ crow's feet. The ERD list is generated: four ends (`one`, `many`,
 `hidden` so the rail offers the five a reader actually reaches for while the
 source can write any of them. Excalidraw has a head for each end but none that
 rings a fork, so `many` stands for zero-or-many.
+
+## A settable graph: the element carries its own spec
+
+`erd`, `usecase` and `activity` are graphs — their elements go anywhere and
+join anything — but each has something a flowchart does not: an inside the
+reader cannot place by hand. A use case stands *inside* a boundary, an action
+stands *in* a partition, and an ERD table has columns with keys, in an order,
+each one a row whose height decides where a relation meets the box.
+
+So they borrow the figure's mechanism one level down: **one spec per element
+rather than one per diagram**. `UnitMark.spec` on the shape that carries an
+element's outline holds the `DSLNode` the source wrote, and `redrawElement` in
+`lib/canvas/elements.ts` cuts every piece again from it — the exact
+counterpart of `redrawFigure`. `isSettable()` in `lib/types.ts` is what tells
+them apart. `flow`, `bpmn` and `org` deliberately carry no spec, because what
+one of their boxes *is* can be read straight off the drawing, and a panel
+would only repeat the sheet.
+
+Everything else falls out of that one property:
+
+- `elementsOn` reads the sheet, so the panel is never a copy of the drawing.
+  Press a table and the panel shows that table; add a column in the panel and
+  the sheet has it. There is one state with two hands on it.
+- a redrawn element has a different box, so `syncConnectors` re-cuts every
+  connector touching it with no extra work.
+- `redrawElement` keeps the top-left, and keeps any width the reader pulled
+  out. It also takes away Excalidraw's bound captions along with the shapes
+  they hang off: `bindTextToContainer` copies no `customData`, so a bound
+  caption carries no mark of its own and would otherwise be left behind, one
+  per redraw.
+
+**The captions are not in the spec.** A name the reader types straight onto
+the sheet has to survive the next redraw, so every caption that stands for
+something in the spec is stamped with `UnitMark.part` — `"name"`, or
+`"field:2:name"` — and `elementsOn` reads it back before handing the spec
+over. That is why a table renamed with Excalidraw's own caption editor is the
+name the panel shows. A notation that draws a caption and does not mark it has
+a rename that the next edit throws away.
+
+### Ports: a connector may name a row rather than a box
+
+`LinkEnd.port` names a point on an element instead of the element. Only the
+ERD has any: a relation joins a primary key to the foreign key that copies it,
+so it leaves *that row* and meets *that row*. `portsOf` in `lib/canvas/erd.ts`
+publishes them from each table's spec and its drawn box, and `routeBetween`
+takes `fromAt` / `toAt`, the height each end meets its box at.
+
+An end that names a port always leaves by the left or the right, because a row
+is only reachable from the side of its table. Two tables standing above each
+other therefore leave by the **same** side and the route runs past them both,
+which is the three-legged line an ERD is normally drawn with rather than the
+wrap-around a facing pair would be given.
+
+The source may write the pair — `PASSENGER.id one -> many BOOKING.passenger_id`
+— and `pairPorts` in `lib/layout/layout-erd.ts` works it out when it does not:
+the foreign key with the same name as the primary key, else the one named
+after the parent table (`passengers` → `passenger_id`), else the child's only
+foreign key. Nothing matched leaves that relation on the box, where it was.
+
+**An ERD ranks across the page whatever the direction setting says**, the way
+a BPMN sheet does. A relation between two keys is a run across the page, and a
+key can only be met on the side of its box, so related tables belong side by
+side.
+
+### The panel and the handles
+
+`components/editor/element-drawer.tsx` and `element-controls.tsx` are the two
+dispatchers, built exactly like `figure-drawer.tsx` and `figure-controls.tsx`
+and holding nothing but the switch. The rail's fourth panel (`elements` in
+`lib/store.ts`) is offered only where `elementPanel()` has a row.
+
+- **erd** — the panel lists every table, its columns, and the relations
+  between them: the two columns each joins, the crow's foot at each end, and
+  what it is called. On the sheet the picked table shows a hit box per row, a
+  bar of what that row can do beside it, and a `+`/`−` pair under the last
+  row. While a connector is held a table shows a dot per row, so a relation
+  drawn or re-tied by hand lands on a key rather than on the whole box.
+
+A connector's caption is a text element sharing its unit, so it copies, moves
+and is deleted along with the line. `labelLink` writes one onto a connector
+that has none and takes it away when the name is cleared, which is what lets a
+relation be named from the panel as well as by typing on the sheet.
+- **usecase** — the boundary, which had nowhere to be set from at all: named,
+  added and deleted from the panel and from its own rail beside the box.
+  Deleting a boundary leaves what was drawn inside it. A boundary says where
+  the system ends; the use cases in it are elements of their own.
+- **activity** — the partitions, added along the **right-hand** edge.
+  `addColumn` in `lib/canvas/frames.ts` is `addLane`'s sideways twin, because
+  an activity reads down the page while its partitions run across it.
+
+A `frame` is still not a `pool`: `frameBoxes` finds the frames and `poolBoxes`
+the pools, and the two rails offer different keys because a boundary has no
+lanes and a partition is not a row.
+
+Which boundary a use case is in, and which partition a step stands in, stay a
+matter of where the thing is drawn. That is the graph family's own rule, and a
+setting for it would only fight the reader's hand.
 
 ## Figures: one object, drawn
 
@@ -502,13 +604,19 @@ and that is the thing to fix.
 ## Checks
 
 `npm run self-check` runs three assert-based scripts under `tsx`:
-`scripts/self-check.ts` (parser, layout, connector geometry, copies, and every
-figure's own geometry — a Venn region really falls inside the right rings, a
-fishbone's causes really meet their bone, a sequence reply really closes the
-execution its sender was running),
+`scripts/self-check.ts` (parser, layout, connector geometry, copies, the ERD's
+port pairing, and every figure's own geometry — a Venn region really falls
+inside the right rings, a fishbone's causes really meet their bone, a sequence
+reply really closes the execution its sender was running),
 `scripts/mapper-check.ts` (skeletons) and `scripts/editor-check.ts` (styles,
-inspector, export). No test framework. Anything that can be answered without a
-browser should be asserted there rather than clicked through.
+inspector, export, and the settable graphs: column edits, reading a caption
+back off the sheet, redrawing an element in place, widening a frame by a
+column). No test framework. Anything that can be answered without a browser
+should be asserted there rather than clicked through.
+
+`editor-check.ts` stands in for `@excalidraw/excalidraw` with two identity
+functions, which is what lets it import the canvas modules at all; add a
+canvas rule there rather than clicking it.
 
 `npm run typecheck` and `npm run lint` both have to stay clean; the lint config
 is strict about React hooks, including reading a ref during render.

@@ -25,12 +25,24 @@ import {
   type FigureOnSheet,
   type PoolBox,
 } from "@/lib/canvas/scene";
+import { elementsOn, linksOn, type ElementOnSheet, type LinkOnSheet } from "@/lib/canvas/elements";
+import {
+  addColumn,
+  frameBoxes,
+  partitionFrames,
+  removeColumn,
+  removeFrame,
+  renameFrame,
+  type FrameBox,
+} from "@/lib/canvas/frames";
+import { portsOf, syncTables } from "@/lib/canvas/erd";
 import { held, selection } from "@/lib/canvas/inspect";
 import { unitOf } from "@/lib/canvas/units";
 import type { Rules } from "@/lib/canvas/connect";
 import type { ConnectorStyle } from "@/lib/excalidraw-mapper/build-skeletons";
 import { SHAPE_DRAG_TYPE, paletteShapeSize, type PaletteItem } from "@/lib/palette";
-import { DiagramCategory } from "@/lib/types";
+import { DiagramCategory, DSLNode, isSettable } from "@/lib/types";
+import ElementControls from "@/components/editor/element-controls";
 import FigureControls from "@/components/editor/figure-controls";
 import ConnectLayer from "@/components/editor/connect-layer";
 import type { FigureSpec } from "@/lib/figures/spec";
@@ -52,9 +64,14 @@ interface CanvasProps {
   onSelection: (picked: ExcalidrawElement[]) => void;
   /** a shape card let go over the sheet, in viewport coordinates */
   onDropShape: (type: string, clientX: number, clientY: number) => void;
-  onPoolEdit: (
+  /** one rewrite of the whole sheet, with a step in the history */
+  onEdit: (
     rewrite: (elements: readonly ExcalidrawElement[]) => ExcalidrawElement[],
   ) => void;
+  /** everything the settable notations put in their panel, read off the sheet */
+  onParts: (parts: SheetParts) => void;
+  /** one element drawn again from its spec, keeping hold of what was picked */
+  onElementChange: (unit: string, spec: DSLNode) => void;
   /** whether there is anything left to fit or to export */
   onEmptyChange: (empty: boolean) => void;
   /** the figure the settings panel is looking at, or null when there is none */
@@ -66,6 +83,22 @@ interface CanvasProps {
   part: string | null;
   onPart: (id: string | null) => void;
 }
+
+/** What a settable notation's panel and handles are looking at. */
+export interface SheetParts {
+  elements: ElementOnSheet[];
+  links: LinkOnSheet[];
+  frames: FrameBox[];
+  /** the element the reader has hold of, when exactly one is held */
+  held: string | null;
+}
+
+export const NO_PARTS: SheetParts = {
+  elements: [],
+  links: [],
+  frames: [],
+  held: null,
+};
 
 const NO_VIEW: CanvasView = {
   scrollX: 0,
@@ -94,7 +127,9 @@ export default function Canvas({
   onApi,
   onSelection,
   onDropShape,
-  onPoolEdit,
+  onEdit,
+  onParts,
+  onElementChange,
   onEmptyChange,
   onFigure,
   figure,
@@ -114,6 +149,7 @@ export default function Canvas({
   const [empty, setEmpty] = useState(false);
   const [view, setView] = useState<CanvasView>(NO_VIEW);
   const [line, setLine] = useState<ExcalidrawElement | null>(null);
+  const [parts, setParts] = useState<SheetParts>(NO_PARTS);
   /** whether the figure on the sheet is the thing currently picked */
   const [chartHeld, setChartHeld] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -123,6 +159,7 @@ export default function Canvas({
   const toolRef = useRef<CanvasTool>(tool);
   const lineRef = useRef("");
   const chartRef = useRef("");
+  const partsRef = useRef("");
   const rulesRef = useRef(rules);
   useEffect(() => {
     rulesRef.current = rules;
@@ -201,6 +238,24 @@ export default function Canvas({
     }
   }, []);
 
+  // The first drawing is fitted to the window once the canvas knows how big it
+  // is: Excalidraw's own `scrollToContent` centres the sheet without sizing it,
+  // so a tall drawing used to open running off the bottom of the page.
+  // `fitToContent` only ever zooms *out*, which is what a first view wants — a
+  // small figure opens at its own size rather than blown up to fill the screen.
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+    const frame = requestAnimationFrame(() =>
+      api.scrollToContent(api.getSceneElements(), {
+        fitToContent: true,
+        viewportZoomFactor: 0.85,
+      }),
+    );
+    return () => cancelAnimationFrame(frame);
+  }, [api]);
+
   // the rail is the only place a tool is chosen, so it drives the canvas
   useEffect(() => {
     if (toolRef.current === tool) {
@@ -218,11 +273,21 @@ export default function Canvas({
       // a connector the reader has hold of is left alone until the pointer is
       // up: one being dragged by its box, one being resized with its shapes
       const busy = held(state);
-      const cut = syncConnectors(fix?.elements ?? elements, rulesRef.current, busy);
+      const erd = rulesRef.current.category === "erd";
+      const base = fix?.elements ?? elements;
+      // a table is exactly its band plus its rows, so one that was stretched
+      // is cut again before anything is routed against it
+      const tables = erd ? syncTables(base, ink, sheet, busy) : null;
+      const cut = syncConnectors(
+        tables ?? base,
+        rulesRef.current,
+        busy,
+        erd ? portsOf(tables ?? base) : undefined,
+      );
       // a chart the reader has stretched is drawn again at the size they
       // dragged it to, rather than left as scaled shapes
-      const drawn = syncFigures(cut ?? fix?.elements ?? elements, ink, sheet, busy);
-      const next = drawn ?? cut ?? fix?.elements;
+      const drawn = syncFigures(cut ?? tables ?? base, ink, sheet, busy);
+      const next = drawn ?? cut ?? tables ?? fix?.elements;
       // Excalidraw offers its own point editor for any line it is shown, and
       // its handles fight the routing; a Tingraph connector carries its own
       // handles instead, so the editor is put away the moment it opens
@@ -304,6 +369,41 @@ export default function Canvas({
         onFigure(current);
       }
 
+      // --- what a settable notation's panel and handles are looking at: the
+      // elements that carry a spec, the connectors between them, and the
+      // frames drawn round them, all read straight off the sheet
+      if (isSettable(rulesRef.current.category)) {
+        const mine = elementsOn(scene);
+        const heldUnits = new Set(
+          picked.map((element) => unitOf(element)?.unit).filter(Boolean),
+        );
+        const next: SheetParts = {
+          elements: mine,
+          links: linksOn(scene),
+          frames:
+            rulesRef.current.category === "activity"
+              ? partitionFrames(scene)
+              : frameBoxes(scene),
+          held:
+            heldUnits.size === 1
+              ? (mine.find((entry) => heldUnits.has(entry.unit))?.unit ?? null)
+              : null,
+        };
+        const stamp = JSON.stringify(next.elements.map((e) => [e.unit, e.spec, e.box]))
+          + JSON.stringify(next.links)
+          + JSON.stringify(next.frames)
+          + next.held;
+        if (stamp !== partsRef.current) {
+          partsRef.current = stamp;
+          setParts(next);
+          onParts(next);
+        }
+      } else if (partsRef.current !== "") {
+        partsRef.current = "";
+        setParts(NO_PARTS);
+        onParts(NO_PARTS);
+      }
+
       // --- the canvas can put a tool back itself, so the rail follows it
       const active = state.activeTool.type;
       if (!RAIL_TOOLS.has(active)) {
@@ -336,7 +436,7 @@ export default function Canvas({
         height: state.height,
       });
     },
-    [ink, sheet, onFigure, onEmptyChange, onSelection, setTool],
+    [ink, sheet, onFigure, onParts, onEmptyChange, onSelection, setTool],
   );
 
   return (
@@ -438,6 +538,24 @@ export default function Canvas({
         view={view}
         picked={line}
       />
+      <ElementControls
+        category={category}
+        elements={parts.elements}
+        frames={parts.frames}
+        held={parts.held}
+        picked={part}
+        onPick={onPart}
+        view={view}
+        onChange={onElementChange}
+        onRenameFrame={(unit, label) =>
+          onEdit((elements) => renameFrame(elements, unit, label))
+        }
+        onRemoveFrame={(frame) => onEdit((elements) => removeFrame(elements, frame))}
+        onAddLane={(frame) =>
+          onEdit((elements) => addColumn(elements, frame, ink, sheet))
+        }
+        onRemoveLane={(frame) => onEdit((elements) => removeColumn(elements, frame))}
+      />
       {dragging && (
         <div
           ref={ghostRef}
@@ -465,12 +583,12 @@ export default function Canvas({
       <PoolControls
         pools={pools}
         view={view}
-        onAddLane={(pool) => onPoolEdit((elements) => addLane(elements, pool, ink))}
-        onRemoveLane={(pool) => onPoolEdit((elements) => removeLane(elements, pool))}
+        onAddLane={(pool) => onEdit((elements) => addLane(elements, pool, ink))}
+        onRemoveLane={(pool) => onEdit((elements) => removeLane(elements, pool))}
         onAddPool={(pool) =>
-          onPoolEdit((elements) => addPoolBelow(elements, pool, ink))
+          onEdit((elements) => addPoolBelow(elements, pool, ink))
         }
-        onRemove={(pool) => onPoolEdit((elements) => removePool(elements, pool))}
+        onRemove={(pool) => onEdit((elements) => removePool(elements, pool))}
       />
     </div>
   );

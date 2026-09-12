@@ -24,9 +24,9 @@ import {
   type Point,
 } from "@/lib/layout/graph";
 
-import { computeUseCaseLayout } from "@/lib/layout/layout-usecase";
-import { computeActivityLayout } from "@/lib/layout/layout-activity";
-import { computeErdLayout } from "@/lib/layout/layout-erd";
+import { computeUseCaseLayout, usecaseNodeSize } from "@/lib/layout/layout-usecase";
+import { computeActivityLayout, activityShapeSize } from "@/lib/layout/layout-activity";
+import { computeErdLayout, erdShapeSize } from "@/lib/layout/layout-erd";
 
 export { textWidth, wrapByWidth } from "@/lib/layout/text";
 
@@ -134,6 +134,35 @@ export function shapeFamily(
     return "diamond";
   }
   return bpmnHasExternalLabel(type as NodeType) ? "ellipse" : "task";
+}
+
+/**
+ * How big one node is drawn, whichever notation it belongs to. The layouts
+ * each work this out for themselves; this is the one door for everything that
+ * needs it without laying a whole drawing out — the shape drawn under the
+ * pointer during a drag, and an element drawn again after the panel has
+ * changed what it is.
+ */
+export function nodeSize(
+  category: DiagramCategory,
+  node: DSLNode,
+): { width: number; height: number } {
+  switch (category) {
+    case "org": {
+      const box = orgBoxLayout(node);
+      return { width: box.width, height: box.height };
+    }
+    case "flow":
+      return flowDimensions(node.type as NodeType, node.label);
+    case "usecase":
+      return usecaseNodeSize(node.type, node.label);
+    case "activity":
+      return activityShapeSize(node.type, node.label);
+    case "erd":
+      return erdShapeSize(node);
+    default:
+      return bpmnShapeSize(node.type as NodeType, node.label);
+  }
 }
 
 export function bpmnShapeSize(

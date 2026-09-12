@@ -3,6 +3,7 @@ import { routeBetween } from "@/lib/canvas/connect";
 import { textWidth } from "@/lib/layout/text";
 import type {
   AST,
+  DSLField,
   DSLNode,
   LayoutDirection,
   PositionedAST,
@@ -92,15 +93,102 @@ export function erdShapeSize(node: DSLNode): { width: number; height: number } {
   return { width: box.width, height: box.height };
 }
 
+// ---------------------------------------------------------------------- ports
+
+/**
+ * The height of every attribute in a table, measured from the top of its box.
+ *
+ * A relation is between two *columns* — a primary key and the foreign key that
+ * copies it — so the line has to leave one row and meet another rather than
+ * the middle of a side. These are the points it uses; the sheet reads them
+ * back off the drawn box through `portsOf` in `lib/canvas/elements.ts`, so a
+ * table that is dragged, resized or given another column carries its relations
+ * with it.
+ */
+export function erdPorts(node: DSLNode): Map<string, number> {
+  const ports = new Map<string, number>();
+  (node.fields ?? []).forEach((field, at) => {
+    ports.set(field.name, ERD_HEADER_HEIGHT + at * ERD_ROW_HEIGHT + ERD_ROW_HEIGHT / 2);
+  });
+  return ports;
+}
+
+/** `passengers` names a passenger; `people` names a people. Close enough. */
+function singular(word: string): string {
+  const lower = word.trim().toLowerCase().replace(/[^\w]+/g, "_");
+  return lower.length > 3 && lower.endsWith("s") ? lower.slice(0, -1) : lower;
+}
+
+function keyed(node: DSLNode, want: "pk" | "fk"): DSLField[] {
+  return (node.fields ?? []).filter(
+    (field) => field.key === want || field.key === "pfk",
+  );
+}
+
+/**
+ * Which two attributes a relation joins, when the source does not say.
+ *
+ * A relation almost always copies one table's primary key into another as a
+ * foreign key, and the copy is nearly always named after it — `flight_id` in
+ * `booking`, or `passenger_id` for the `id` of `passengers`. So: the foreign
+ * key with the same name as the primary key, else the one named after the
+ * table the key comes from, else the only foreign key the child has. Nothing
+ * matched leaves the relation on the box, where it was before.
+ *
+ * The written order is tried first, then the other way round, because a
+ * relation may be written child-first (`BOOKING many -> one FLIGHT`).
+ */
+export function pairPorts(
+  from: DSLNode,
+  to: DSLNode,
+): { fromPort?: string; toPort?: string } {
+  const one = match(from, to);
+  if (one) {
+    return { fromPort: one.parent, toPort: one.child };
+  }
+  const other = match(to, from);
+  return other ? { fromPort: other.child, toPort: other.parent } : {};
+}
+
+function match(
+  parent: DSLNode,
+  child: DSLNode,
+): { parent: string; child: string } | null {
+  const keys = keyed(parent, "pk");
+  const foreign = keyed(child, "fk");
+  if (keys.length === 0 || foreign.length === 0) {
+    return null;
+  }
+  const named = [singular(parent.label), singular(parent.id)];
+  for (const key of keys) {
+    const same = foreign.find((field) => field.name === key.name);
+    if (same) {
+      return { parent: key.name, child: same.name };
+    }
+    const after = foreign.find((field) =>
+      named.some(
+        (name) => field.name === `${name}_${key.name}` || field.name === `${name}_id`,
+      ),
+    );
+    if (after) {
+      return { parent: key.name, child: after.name };
+    }
+  }
+  return foreign.length === 1 ? { parent: keys[0].name, child: foreign[0].name } : null;
+}
+
 export function computeErdLayout(
   ast: AST,
   direction: LayoutDirection = "down",
 ): PositionedAST {
   const graph = new dagre.graphlib.Graph({ multigraph: true });
+  // an ERD always ranks across the page, whichever way the reader set: a
+  // relation joins one table's key to another's, and a key can only be met on
+  // the side of its box, so tables that are related belong side by side
   graph.setGraph({
-    rankdir: direction === "right" ? "LR" : "TB",
-    nodesep: 64,
-    ranksep: 96,
+    rankdir: "LR",
+    nodesep: 56,
+    ranksep: 130,
     marginx: MARGIN,
     marginy: MARGIN,
   });
@@ -134,12 +222,22 @@ export function computeErdLayout(
     if (!from || !to) {
       return { ...edge, points: [] };
     }
+    // the two attributes this relation joins: what the source wrote, or the
+    // pair the keys themselves say
+    const written = edge.fromPort || edge.toPort ? edge : { ...edge, ...pairPorts(from, to) };
+    const fromAt = erdPorts(from).get(written.fromPort ?? "");
+    const toAt = erdPorts(to).get(written.toPort ?? "");
     return {
-      ...edge,
+      ...written,
       points: routeBetween(
         { x: from.x, y: from.y, width: from.width, height: from.height },
         { x: to.x, y: to.y, width: to.width, height: to.height },
-        { category: "erd", direction },
+        {
+          category: "erd",
+          direction,
+          ...(fromAt === undefined ? {} : { fromAt: from.y + fromAt }),
+          ...(toAt === undefined ? {} : { toAt: to.y + toAt }),
+        },
       ),
     };
   });

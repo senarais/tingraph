@@ -95,11 +95,15 @@ function shared(aStart: number, aSize: number, bStart: number, bSize: number): n
  * a task and the one beside it — are joined by one straight rule even when one
  * of them is the taller.
  */
-export function sideAnchor(box: Box, side: Side, other?: Box): Point {
+export function sideAnchor(box: Box, side: Side, other?: Box, at?: number): Point {
   if (UPRIGHT[side]) {
     return { x: Math.round(box.x + box.width / 2), y: edgeOf(box, side) };
   }
+  // a port names the height the line meets this box at: an ERD row, so the
+  // relation leaves the key it belongs to rather than the middle of the side.
+  // Only a side that faces across the page can reach one
   const y =
+    at ??
     (other ? shared(box.y, box.height, other.y, other.height) : null) ??
     box.y + box.height / 2;
   return { x: edgeOf(box, side), y: Math.round(y) };
@@ -112,7 +116,13 @@ function gap(aStart: number, aSize: number, bStart: number, bSize: number): numb
 
 /** The axis a notation reads along: a BPMN sheet runs across, a chart down. */
 function readsUpright(rules: Rules): boolean {
-  if (rules.category === "bpmn" || rules.category === "usecase") {
+  // an ERD relation joins a key to a key, which is a run across the page, so
+  // an ERD reads across the way a BPMN sheet does rather than down
+  if (
+    rules.category === "bpmn" ||
+    rules.category === "usecase" ||
+    rules.category === "erd"
+  ) {
     return false;
   }
   return rules.direction !== "right";
@@ -225,8 +235,38 @@ function railBetween(leave: number, meet: number, category: DiagramCategory): nu
 interface RouteOptions extends Rules {
   fromSide?: Side;
   toSide?: Side;
+  /**
+   * The height each end meets its box at, when that end is tied to a port
+   * rather than to the box as a whole. A port is only reachable from a side
+   * that faces across the page, so an end that names one leaves left or right
+   * whatever the notation's own axis would have chosen.
+   */
+  fromAt?: number;
+  toAt?: number;
   /** where the reader dragged the middle leg to, on its own axis */
   bend?: number | null;
+}
+
+/** The side of `box` that faces `other`: the only pair a port can be met on. */
+function acrossSide(box: Box, other: Box): Side {
+  return other.x + other.width / 2 >= box.x + box.width / 2 ? "right" : "left";
+}
+
+/**
+ * The one side two boxes standing above each other both leave by.
+ *
+ * A relation tied to a row can only be met from the left or the right, so two
+ * tables in the same column have no room to face each other: the line leaves
+ * both on whichever side has the shorter way out, and runs down past them.
+ * That is the three-legged route an entity relationship diagram is normally
+ * drawn with, rather than the wrap-around a facing pair would be given.
+ */
+function sameSide(from: Box, to: Box): Side {
+  const left = Math.min(from.x, to.x);
+  const right = Math.max(from.x + from.width, to.x + to.width);
+  const out = right - (from.x + from.width) + (right - (to.x + to.width));
+  const back = from.x - left + (to.x - left);
+  return out <= back ? "right" : "left";
 }
 
 /**
@@ -243,11 +283,18 @@ export function routeBetween(from: Box, to: Box, options: RouteOptions): Point[]
       directAnchor(to, here, options.toSide),
     ];
   }
-  const auto = sidesFor(from, to, options);
+  // an end tied to a port leaves across the page whatever the notation's own
+  // axis says, because a row can only be reached from the side of its box
+  const ported = options.fromAt !== undefined || options.toAt !== undefined;
+  const auto: [Side, Side] = ported
+    ? gap(from.x, from.width, to.x, to.width) > 2 * MIN_GAP
+      ? [acrossSide(from, to), acrossSide(to, from)]
+      : [sameSide(from, to), sameSide(from, to)]
+    : sidesFor(from, to, options);
   const fromSide = options.fromSide ?? auto[0];
   const toSide = options.toSide ?? auto[1];
-  const a = sideAnchor(from, fromSide, to);
-  const b = sideAnchor(to, toSide, from);
+  const a = sideAnchor(from, fromSide, to, options.fromAt);
+  const b = sideAnchor(to, toSide, from, options.toAt);
   const upright = UPRIGHT[fromSide];
 
   // the route is cut in "along the leg" and "across it" coordinates, so one
@@ -439,6 +486,9 @@ export function linkSignature(
     from: { side?: Side };
     to: { side?: Side };
     bend?: number | null;
+    /** the two port heights the route was cut against, when it has any */
+    fromAt?: number;
+    toAt?: number;
   },
   origin: { x: number; y: number },
 ): string {
@@ -448,6 +498,8 @@ export function linkSignature(
     link.from.side ?? "",
     link.to.side ?? "",
     link.bend ?? "",
+    link.fromAt ?? "",
+    link.toAt ?? "",
     `${Math.round(origin.x)},${Math.round(origin.y)}`,
   ].join("|");
 }

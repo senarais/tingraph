@@ -8,7 +8,7 @@
  */
 
 import type { Side } from "@/lib/canvas/connect";
-import type { DiagramCategory } from "@/lib/types";
+import type { DiagramCategory, DSLNode } from "@/lib/types";
 import type { FigureSpec } from "@/lib/figures/spec";
 
 export type UnitKind = "node" | "edge" | "pool" | "lane" | "figure" | "frame";
@@ -19,6 +19,14 @@ export interface LinkEnd {
   unit: string;
   /** set only when the reader chose the side themselves */
   side?: Side;
+  /**
+   * A named point on that element rather than the element as a whole: an ERD
+   * row, so a relation leaves the primary key it comes from and meets the
+   * foreign key it lands on. The element publishes its ports through
+   * `portsOf` in `lib/canvas/elements.ts`; an end naming one the element no
+   * longer has falls back to the box.
+   */
+  port?: string;
 }
 
 /**
@@ -47,6 +55,13 @@ export interface UnitMark {
   core?: true;
   /** a piece filled with the ink's wash, so re-inking can find it by name */
   wash?: true;
+  /**
+   * Which piece of the element's own spec this one carries: `"name"`, or
+   * `"field:2:name"` / `"field:2:type"` for one ERD row. A caption the reader
+   * edits on the sheet is read back through this, so the panel and the sheet
+   * never disagree about what a table is called.
+   */
+  part?: string;
   /** a box whose corners the notation leaves free, so a style may round them */
   soft?: true;
   /** pool only: width of its own header band */
@@ -62,6 +77,13 @@ export interface UnitMark {
    * again. See `lib/figures/spec.ts`.
    */
   figure?: FigureSpec;
+  /**
+   * node only, and only on its core shape: what this element *is*, apart from
+   * where it sits. A notation whose element has an inside the reader cannot
+   * place by hand — an ERD table's columns — is drawn from this rather than
+   * edited piece by piece, the way a figure is. See `lib/canvas/elements.ts`.
+   */
+  spec?: DSLNode;
 }
 
 /**

@@ -2,14 +2,16 @@ import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/tran
 import type { Arrowhead } from "@excalidraw/excalidraw/element/types";
 import {
   DiagramCategory,
+  DSLNode,
   NodeType,
   PositionedAST,
   PositionedEdge,
   PositionedLane,
   PositionedNode,
   PositionedPool,
+  isSettable,
 } from "@/lib/types";
-import { marked, nodeUnit, type UnitMark } from "@/lib/canvas/units";
+import { marked, nodeUnit, unitOf, type UnitMark } from "@/lib/canvas/units";
 
 export { nodeUnit };
 import { connectorInk, connectorKind, defaultConnector } from "@/lib/connectors";
@@ -45,6 +47,7 @@ import {
 
 import {
   activityChromeSkeletons,
+  activityColumnSkeletons,
   activityNodeSkeletons,
   erdNodeSkeletons,
   usecaseNodeSkeletons,
@@ -460,8 +463,14 @@ function edgeSkeleton(
       core: true,
       link: {
         line,
-        from: { unit: nodeUnit(category, edge.from) },
-        to: { unit: nodeUnit(category, edge.to) },
+        from: {
+          unit: nodeUnit(category, edge.from),
+          ...(edge.fromPort ? { port: edge.fromPort } : {}),
+        },
+        to: {
+          unit: nodeUnit(category, edge.to),
+          ...(edge.toPort ? { port: edge.toPort } : {}),
+        },
       },
     }),
     ...ACADEMIC_MONOCHROME_THEME,
@@ -837,8 +846,44 @@ function poolLaneSkeletons(
   return out;
 }
 
+/**
+ * What an element *is*, apart from where it sits: the node as the source wrote
+ * it, with the geometry the layout worked out left off. A settable notation
+ * stamps this on the shape that carries the element's outline, so the panel
+ * and the handles can read the sheet and write it back. See `isSettable`.
+ */
+function specOf(node: PositionedNode): DSLNode {
+  return {
+    id: node.id,
+    type: node.type,
+    label: node.label,
+    ...(node.lane ? { lane: node.lane } : {}),
+    ...(node.name ? { name: node.name } : {}),
+    ...(node.entries ? { entries: node.entries } : {}),
+    ...(node.fields ? { fields: node.fields } : {}),
+    ...(node.side ? { side: node.side } : {}),
+  };
+}
+
+/** The element's own shape, stamped with what the element is. */
+function withSpec(
+  skeletons: ExcalidrawElementSkeleton[],
+  node: PositionedNode,
+): ExcalidrawElementSkeleton[] {
+  const spec = specOf(node);
+  let stamped = false;
+  return skeletons.map((skeleton) => {
+    const mark = unitOf(skeleton as { customData?: Record<string, unknown> });
+    if (stamped || !mark || (skeleton as { id?: string }).id !== node.id) {
+      return skeleton;
+    }
+    stamped = true;
+    return { ...skeleton, ...marked({ ...mark, spec }) } as ExcalidrawElementSkeleton;
+  });
+}
+
 /** Whatever shape the notation draws this node as. */
-function nodeSkeletons(
+function drawNode(
   category: DiagramCategory,
   node: PositionedNode,
   theme: Theme,
@@ -857,6 +902,15 @@ function nodeSkeletons(
     default:
       return flowNodeSkeletons(node, theme);
   }
+}
+
+function nodeSkeletons(
+  category: DiagramCategory,
+  node: PositionedNode,
+  theme: Theme,
+): ExcalidrawElementSkeleton[] {
+  const drawn = drawNode(category, node, theme);
+  return isSettable(category) ? withSpec(drawn, node) : drawn;
 }
 
 /** One free-standing shape of any notation, dropped straight onto the sheet. */
@@ -931,6 +985,25 @@ export function buildPoolSkeletons(
   style: SheetStyle = FORMAL,
 ): ExcalidrawElementSkeleton[] {
   return poolSkeletons(pool, themeFor(ink, "bpmn", style));
+}
+
+/** One use case boundary, for drawing one straight onto the canvas. */
+export function buildBoundarySkeletons(
+  pool: PositionedPool,
+  ink: Ink = MONOCHROME,
+  style: SheetStyle = FORMAL,
+): ExcalidrawElementSkeleton[] {
+  return usecaseSystemSkeletons(pool, themeFor(ink, "usecase", style));
+}
+
+/** One activity partition, for adding a column to a frame already on the sheet. */
+export function buildColumnSkeletons(
+  lane: PositionedLane,
+  rule: boolean,
+  ink: Ink = MONOCHROME,
+  style: SheetStyle = FORMAL,
+): ExcalidrawElementSkeleton[] {
+  return activityColumnSkeletons(lane, themeFor(ink, "activity", style), rule);
 }
 
 /** One lane rule set, for splitting a pool that is already on the canvas. */

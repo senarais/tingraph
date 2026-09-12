@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { CaptureUpdateAction, newElementWith } from "@excalidraw/excalidraw";
+import { CaptureUpdateAction } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import {
@@ -11,13 +11,13 @@ import {
   routeBetween,
   sideAnchor,
   sidesFor,
-  RECUT,
   SIDES,
   type Box,
   type Point,
   type Rules,
 } from "@/lib/canvas/connect";
-import { linkTargets, newConnector } from "@/lib/canvas/scene";
+import { linkTargets, newConnector, writeLink, type Ports } from "@/lib/canvas/scene";
+import { portsOf } from "@/lib/canvas/erd";
 import { unitOf, type LinkEnd, type LinkMark } from "@/lib/canvas/units";
 import { connectorInk, connectorKind } from "@/lib/connectors";
 import type { ConnectorStyle } from "@/lib/excalidraw-mapper/build-skeletons";
@@ -47,12 +47,32 @@ interface ConnectLayerProps {
   picked: ExcalidrawElement | null;
 }
 
+/** A table's rows, as points a connector may tie itself to. */
+type PortList = Array<[string, number]>;
+
+interface Hover {
+  unit: string;
+  box: Box;
+  /** the rows this element publishes, empty for everything but a table */
+  ports: PortList;
+}
+
 type Drag =
-  | { mode: "draw"; from: LinkEnd; box: Box; at: Point }
+  | {
+      mode: "draw";
+      from: LinkEnd;
+      box: Box;
+      at: Point;
+      /** the height the line leaves at, when it leaves a row */
+      fromAt?: number;
+    }
   | { mode: "leg"; id: string; at: Point }
   | { mode: "end"; id: string; which: "from" | "to"; at: Point };
 
 const ACCENT = "#6b46ff";
+
+/** How far from a row's middle the pointer still reads as being on that row. */
+const PORT_REACH = 11;
 
 /**
  * The element under the pointer: the one on top wins, as on the sheet. The
@@ -99,8 +119,9 @@ export default function ConnectLayer({
 }: ConnectLayerProps) {
   const panning = useTingraphStore((s) => s.panning);
   const [drag, setDrag] = useState<Drag | null>(null);
-  const [hover, setHover] = useState<{ unit: string; box: Box } | null>(null);
+  const [hover, setHover] = useState<Hover | null>(null);
   const targetsRef = useRef<Map<string, Box>>(new Map());
+  const portsRef = useRef<Ports>(new Map());
   const svgRef = useRef<SVGSVGElement>(null);
 
   const link = picked ? unitOf(picked)?.link ?? null : null;
@@ -122,26 +143,46 @@ export default function ConnectLayer({
   };
 
   const readTargets = () => {
-    targetsRef.current = linkTargets(api.getSceneElements());
+    const scene = api.getSceneElements();
+    targetsRef.current = linkTargets(scene);
+    // an ERD table publishes a point per column, so a relation drawn by hand
+    // lands on the key it was dragged from rather than on the whole box
+    portsRef.current = rules.category === "erd" ? portsOf(scene) : new Map();
     return targetsRef.current;
+  };
+
+  /** The row of a table the pointer is over, when the table has rows at all. */
+  const gripPort = (unit: string, point: Point): string | undefined => {
+    for (const [name, y] of portsRef.current.get(unit) ?? []) {
+      if (Math.abs(point.y - y) <= PORT_REACH) {
+        return name;
+      }
+    }
+    return undefined;
+  };
+
+  /** One end as it should be tied: to a row when there is one under the hand. */
+  const endAt = (found: { unit: string; box: Box }, point: Point): LinkEnd => {
+    const port = gripPort(found.unit, point);
+    if (port) {
+      return { unit: found.unit, port };
+    }
+    const side = grip(found.box, point);
+    return { unit: found.unit, ...(side ? { side } : {}) };
+  };
+
+  /** What is under the pointer, with the rows it offers, for the overlay. */
+  const hoverAt = (point: Point, targets: Map<string, Box>): Hover | null => {
+    const found = targetAt(targets, point, reach());
+    return found
+      ? { ...found, ports: [...(portsRef.current.get(found.unit) ?? [])] }
+      : null;
   };
 
   /** Writes one connector back, re-cutting its route from the new setting. */
   const write = (id: string, patch: Partial<LinkMark>, settled: boolean) => {
-    const elements = api.getSceneElements().map((element) => {
-      const mark = element.id === id ? unitOf(element) : null;
-      if (!mark?.link) {
-        return element;
-      }
-      return newElementWith(element, {
-        customData: {
-          ...element.customData,
-          tingraph: { ...mark, link: { ...mark.link, ...patch, at: RECUT } },
-        },
-      });
-    });
     api.updateScene({
-      elements,
+      elements: writeLink(api.getSceneElements(), id, patch, rules.category),
       // a leg still under the hand waits for the hand to come off before it
       // reaches the history, so one drag is one step back
       captureUpdate: settled
@@ -164,21 +205,24 @@ export default function ConnectLayer({
       return;
     }
     capture(event);
-    const side = grip(found.box, point);
+    const from = endAt(found, point);
+    const fromAt = from.port
+      ? portsRef.current.get(from.unit)?.get(from.port)
+      : undefined;
     setDrag({
       mode: "draw",
-      from: { unit: found.unit, ...(side ? { side } : {}) },
+      from,
       box: found.box,
       at: point,
+      ...(fromAt === undefined ? {} : { fromAt }),
     });
   };
 
   const moveDraw = (event: React.PointerEvent) => {
     const point = sceneAt(event);
-    const found = targetAt(held ? targetsRef.current : readTargets(), point, reach());
-    setHover(found);
+    setHover(hoverAt(point, held ? targetsRef.current : readTargets()));
     if (held?.mode === "draw") {
-      setDrag({ mode: "draw", from: held.from, box: held.box, at: point });
+      setDrag({ ...held, at: point });
     }
   };
 
@@ -190,16 +234,18 @@ export default function ConnectLayer({
       return;
     }
     const kind = connectorKind(holding, rules.category);
-    const side = grip(found.box, point);
     const mark: LinkMark = {
       line: kind.id,
       from: held.from,
-      to: { unit: found.unit, ...(side ? { side } : {}) },
+      to: endAt(found, point),
     };
-    const next = newConnector(api.getSceneElements(), mark, rules, {
-      ...style,
-      ...connectorInk(kind),
-    });
+    const next = newConnector(
+      api.getSceneElements(),
+      mark,
+      rules,
+      { ...style, ...connectorInk(kind) },
+      portsRef.current,
+    );
     if (!next) {
       return;
     }
@@ -233,7 +279,7 @@ export default function ConnectLayer({
       return;
     }
     if (held.mode === "end") {
-      setHover(targetAt(targetsRef.current, point, reach()));
+      setHover(hoverAt(point, targetsRef.current));
     }
   };
 
@@ -259,8 +305,7 @@ export default function ConnectLayer({
     if (found.unit === other) {
       return;
     }
-    const side = grip(found.box, point);
-    const end: LinkEnd = { unit: found.unit, ...(side ? { side } : {}) };
+    const end = endAt(found, point);
     write(
       held.id,
       held.which === "from" ? { from: end, bend: null } : { to: end, bend: null },
@@ -277,8 +322,17 @@ export default function ConnectLayer({
       return null;
     }
     const from = held.box;
+    const fromAt = held.fromAt;
     if (hover && hover.unit !== held.from.unit) {
-      return routeBetween(from, hover.box, { ...rules, fromSide: held.from.side });
+      const toAt = hover.ports.find(
+        ([, y]) => Math.abs(held.at.y - y) <= PORT_REACH,
+      )?.[1];
+      return routeBetween(from, hover.box, {
+        ...rules,
+        fromSide: held.from.side,
+        ...(fromAt === undefined ? {} : { fromAt }),
+        ...(toAt === undefined ? {} : { toAt }),
+      });
     }
     // nothing under the pointer yet: the line leaves the side it would leave
     // by, and follows the hand from there
@@ -346,21 +400,49 @@ export default function ConnectLayer({
               strokeWidth={1.5}
               vectorEffect="non-scaling-stroke"
             />
-            {SIDES.map((side) => {
-              const dot = sideAnchor(hover.box, side);
-              return (
-                <circle
-                  key={side}
-                  cx={dot.x}
-                  cy={dot.y}
-                  r={size(3.5)}
-                  fill={ACCENT}
-                  stroke="#ffffff"
+            {hover.ports.map(([name, y]) => (
+              <g key={`port-${name}`}>
+                <line
+                  x1={hover.box.x}
+                  y1={y}
+                  x2={hover.box.x + hover.box.width}
+                  y2={y}
+                  stroke={ACCENT}
                   strokeWidth={1}
+                  strokeDasharray="3 3"
+                  opacity={0.45}
                   vectorEffect="non-scaling-stroke"
                 />
-              );
-            })}
+                {[hover.box.x, hover.box.x + hover.box.width].map((x) => (
+                  <circle
+                    key={x}
+                    cx={x}
+                    cy={y}
+                    r={size(3)}
+                    fill={ACCENT}
+                    stroke="#ffffff"
+                    strokeWidth={1}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+              </g>
+            ))}
+            {hover.ports.length === 0 &&
+              SIDES.map((side) => {
+                const dot = sideAnchor(hover.box, side);
+                return (
+                  <circle
+                    key={side}
+                    cx={dot.x}
+                    cy={dot.y}
+                    r={size(3.5)}
+                    fill={ACCENT}
+                    stroke="#ffffff"
+                    strokeWidth={1}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                );
+              })}
           </>
         )}
         {preview && (

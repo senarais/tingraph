@@ -14,6 +14,7 @@ import {
   Palette,
   Pencil,
   Shapes,
+  Table2,
   Type,
   Wand2,
   Waypoints,
@@ -23,6 +24,7 @@ import {
 import { useTingraphStore, type CanvasTool, type Drawer } from "@/lib/store";
 import { CONNECTORS, defaultConnector, type ConnectorKind } from "@/lib/connectors";
 import { figureDef } from "@/lib/figures/registry";
+import { elementPanel } from "@/components/editor/element-drawer";
 import { isFigure, type DiagramCategory } from "@/lib/types";
 
 /**
@@ -49,7 +51,7 @@ interface Entry {
   /** the connector instrument, which opens its own list */
   lines?: true;
   /** left out of the column when the notation has no use for it */
-  only?: "graph" | "figure";
+  only?: "graph" | "figure" | "settable";
 }
 
 const INSTRUMENTS: Entry[] = [
@@ -74,6 +76,13 @@ const INSTRUMENTS: Entry[] = [
     hint: "Everything this diagram is made of",
     drawer: "figure",
     only: "figure",
+  },
+  {
+    icon: Table2,
+    label: "Elements",
+    hint: "Everything this diagram is made of",
+    drawer: "elements",
+    only: "settable",
   },
   { icon: Type, label: "Text", hint: "Write on the sheet", tool: "text" },
   { icon: ImageIcon, label: "Image", hint: "Place a picture", tool: "image" },
@@ -115,19 +124,34 @@ const FIGURE_ICONS: Partial<Record<DiagramCategory, LucideIcon>> = {
  * sheet that holds none.
  */
 function instrumentsFor(category: DiagramCategory): Entry[] {
-  const wants = isFigure(category) ? "figure" : "graph";
+  const figure = isFigure(category);
   const def = figureDef(category);
-  return INSTRUMENTS.filter((entry) => !entry.only || entry.only === wants).map(
-    (entry) =>
-      entry.drawer === "figure" && def
-        ? {
-            ...entry,
-            label: def.label,
-            icon: FIGURE_ICONS[category] ?? entry.icon,
-            hint: `Everything this ${def.label.toLowerCase()} is made of`,
-          }
-        : entry,
-  );
+  const panel = elementPanel(category);
+  return INSTRUMENTS.filter((entry) => {
+    if (!entry.only) {
+      return true;
+    }
+    if (entry.only === "figure") {
+      return figure;
+    }
+    if (entry.only === "settable") {
+      return panel !== null;
+    }
+    return !figure;
+  }).map((entry) => {
+    if (entry.drawer === "figure" && def) {
+      return {
+        ...entry,
+        label: def.label,
+        icon: FIGURE_ICONS[category] ?? entry.icon,
+        hint: `Everything this ${def.label.toLowerCase()} is made of`,
+      };
+    }
+    if (entry.drawer === "elements" && panel) {
+      return { ...entry, label: panel.label, icon: panel.icon, hint: panel.hint };
+    }
+    return entry;
+  });
 }
 
 /**
