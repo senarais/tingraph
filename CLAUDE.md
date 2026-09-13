@@ -91,6 +91,15 @@ has to guess where one ends and the other begins.
   description the Syntax guide draws itself from, and the same one
   `promptFor` folds into the copy-paste tutorial. A keyword the guide gains is
   a keyword the chatbot gains, and there is no second place to update.
+- **The guide sends a reader here first.** Its "Writing it with an assistant"
+  card leads with Ask Tingraph AI, and only then offers the tutorial for a
+  chat of the reader's own. The ChatGPT, Gemini and Claude buttons copy
+  `promptFor` and open a fresh chat to paste it into, rather than handing the
+  prompt over in the address: Gemini takes none that way, the others are not
+  documented to, and one that did would send the tutorial before the reader
+  had described anything. The copy is awaited before the tab opens, because a
+  new tab takes the focus and Chrome will not write the clipboard for a page
+  that has lost it.
 - **The reply is checked before the reader sees it.** `app/api/ai/route.ts`
   runs every `source` through `parseDSL` and `computeLayout` — the editor's
   own pipeline — and hands a failure back to the model once, with the parser's
@@ -656,6 +665,62 @@ export — already asks `isFigure()` and needs no change. If you find yourself
 editing the rail or the canvas to add a notation, the abstraction has slipped
 and that is the thing to fix.
 
+## Accounts are Supabase's, and only accounts
+
+A reader can sign up, sign in with a password or with Google, reset a
+forgotten password and keep a profile. Nothing they draw is stored: the
+account holds who they are, not their diagrams. The editor still runs with no
+Supabase project configured — `accountsReady` in `lib/supabase/client.ts` and
+the guard at the top of `proxy.ts` make the account pieces step aside rather
+than take the site down with them.
+
+- **One client per place.** `lib/supabase/client.ts` for the browser,
+  `lib/supabase/server.ts` for Server Components, Server Actions and Route
+  Handlers, and `proxy.ts` — Next 16's name for middleware — whose only job is
+  to refresh the session with `getClaims()` before anything renders. The
+  project signs its tokens with ES256, so that check needs no request.
+- **The proxy is not the guard.** Every page and every action that needs an
+  account asks for the session itself: `getClaims()`, or `getUser()` where the
+  full record is wanted. A Server Action is a POST anyone can send without the
+  form, and a cookie is whatever the browser says it is.
+- **Everything goes through Next.** `app/auth/actions.ts` signs in and out and
+  handles passwords; `app/profile/actions.ts` writes the profile and the
+  picture; `app/auth/callback/route.ts` takes every link that comes back from
+  Supabase — Google's `code`, and an email's `token_hash` (or its `code`, if
+  the template was left as it ships). The one read made from the browser is
+  `AccountButton` fetching its own row, for the face in the bar.
+- **The database is the validation.** The browser holds the publishable key,
+  so the Data API can be reached without passing through an action.
+  `supabase/migrations/*_profiles.sql` therefore carries every limit as a
+  check constraint, RLS keeps a row to its owner, and column grants say which
+  fields of it may be written at all. `lib/auth.ts` repeats the limits only to
+  say them in words; change one and change the other.
+- **The profile row is made by a trigger**, `handle_new_user`. A trigger that
+  fails fails the sign-up with it, so it copies only what the provider handed
+  over and drops anything a constraint would refuse. A username is chosen by
+  the reader later, never generated.
+- **A sign-in only ever comes back to this site.** `safeNext` parses `next`
+  rather than prefix-checking it, because `//host`, `/\host` and a path with a
+  tab in it are all another host to a browser.
+- **A picture is cut down before it is sent** — to a 256px square, in the
+  browser, since a Server Action accepts 1MB at most. It is stored at
+  `avatars/<user id>/<timestamp>`, a new name every time because the old
+  address is cached for a year, and the pictures it replaces are deleted.
+- **`AccountButton` asks the browser, not the server.** `/` and `/build` are
+  prerendered, and reading a cookie in `SiteNav` would render them per request.
+  In the editor it opens the account in a new tab (`detached`): the drawing
+  lives in memory, and following a link in the same tab throws it away.
+- `lib/supabase/database.types.ts` is generated from the project. Regenerate
+  it after every migration.
+
+What the code cannot set: `NEXT_PUBLIC_SUPABASE_URL` and
+`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.local`; the Site URL and
+`<site>/auth/callback` on Supabase's redirect list; the Google provider and its
+OAuth client; a custom SMTP sender, because the built-in one only mails the
+project's own team; and the Confirm signup and Reset password templates
+pointed at `/auth/callback?token_hash=…`, so a link opened in another browser
+still works.
+
 ## Checks
 
 `npm run self-check` runs three assert-based scripts under `tsx`:
@@ -671,7 +736,10 @@ should be asserted there rather than clicked through.
 
 `editor-check.ts` also covers Tingraph AI without calling anything: the
 chatbot's briefing carries every syntax row of its notation, and every
-template passes the readiness check the server holds replies to.
+template passes the readiness check the server holds replies to. It holds the
+account rules in `lib/auth.ts` the same way: `safeNext` refusing every
+spelling of another host, and a profile form read into exactly what the table
+will take.
 
 `editor-check.ts` stands in for `@excalidraw/excalidraw` with two identity
 functions, which is what lets it import the canvas modules at all; add a

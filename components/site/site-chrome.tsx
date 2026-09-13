@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AccountButton from "@/components/account/account-button";
 import { Mark } from "@/components/site/diagram-art";
 import { READY_DIAGRAMS } from "@/lib/diagrams";
 
@@ -13,7 +14,7 @@ const SECTIONS = [
 export function SiteNav() {
   return (
     <header className="sticky top-0 z-30 border-b-2 border-edge bg-bone">
-      <nav className="mx-auto flex h-14 max-w-6xl items-center gap-6 px-4 sm:px-6">
+      <nav className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6 md:gap-6">
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2 font-mono text-[15px] font-semibold tracking-tight text-ink"
@@ -49,6 +50,7 @@ export function SiteNav() {
             <span className="sm:hidden">Editor</span>
             <span className="hidden sm:inline">Open editor</span>
           </Link>
+          <AccountButton />
         </div>
       </nav>
     </header>

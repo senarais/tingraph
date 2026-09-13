@@ -10,6 +10,7 @@ import type { PoolBox } from "../lib/canvas/scene";
 import { jpegToPdf } from "../lib/export/pdf";
 import { promptFor, GUIDE_SECTIONS } from "../lib/guide";
 import { refuses, systemPrompt, unfence } from "../lib/ai/chat";
+import { avatarProblem, otpType, readProfile, safeNext } from "../lib/auth";
 import { customInk, inkFor, washFor } from "../lib/ink";
 import { styleFor } from "../lib/sheet";
 import {
@@ -688,6 +689,43 @@ async function checkPdf(): Promise<void> {
   ) as unknown as Skel[];
   assert.equal(bare[1].isDeleted, true, "and an empty name takes the caption off");
 }
+
+// --------------------------------------------------------------- accounts
+
+// a sign-in only ever comes back to a page on this site
+assert.equal(safeNext("/editor?type=flow#top"), "/editor?type=flow#top");
+assert.equal(safeNext("//evil.example"), "/profile", "a second slash is another host");
+assert.equal(safeNext("/\\evil.example"), "/profile", "and so is a backslash");
+assert.equal(safeNext("/\t/evil.example"), "/profile", "and so is a tab the browser strips");
+assert.equal(safeNext("https://evil.example"), "/profile");
+assert.equal(safeNext(["/a", "/b"]), "/profile", "a repeated parameter is not a path");
+assert.equal(otpType("recovery"), "recovery");
+assert.equal(otpType("__proto__"), null, "an email link names one of Supabase's own kinds");
+
+const profileForm = (fields: Record<string, string>) => {
+  const form = new FormData();
+  Object.entries(fields).forEach(([name, value]) => form.set(name, value));
+  return form;
+};
+const readBack = readProfile(
+  profileForm({ full_name: " Ada ", username: "@Ada_L", website: "ada.dev", bio: "   " }),
+);
+assert.ok("profile" in readBack);
+assert.equal(readBack.profile.full_name, "Ada");
+assert.equal(readBack.profile.username, "ada_l", "a username is kept without its @, in lower case");
+assert.equal(readBack.profile.website, "https://ada.dev/", "a bare domain is read as https");
+assert.equal(readBack.profile.bio, null, "an empty field is cleared rather than stored blank");
+assert.equal(readBack.profile.location, null, "and so is one the form did not send");
+assert.ok(
+  "error" in readProfile(profileForm({ website: "javascript:alert(1)" })),
+  "a website is only ever a web address",
+);
+assert.ok("error" in readProfile(profileForm({ username: "ab" })), "a username has three characters");
+assert.ok("error" in readProfile(profileForm({ username: "a-b-c" })), "and no dashes");
+assert.ok("error" in readProfile(profileForm({ bio: "x".repeat(281) })), "a bio stops at 280");
+assert.equal(avatarProblem({ type: "image/webp", size: 30_000 }), null);
+assert.ok(avatarProblem({ type: "image/gif", size: 30_000 }), "a picture is PNG, JPEG or WebP");
+assert.ok(avatarProblem({ type: "image/png", size: 2_000_000 }), "and small enough to send");
 
 checkPdf().then(() => {
   console.log("editor self-check: all assertions passed");

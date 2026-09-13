@@ -5,6 +5,7 @@ import { Download, Repeat2 } from "lucide-react";
 import { TEMPLATE_LABELS, useTingraphStore } from "@/lib/store";
 import { DiagramCategory } from "@/lib/types";
 import { Tick } from "@/components/editor/ui";
+import AccountButton from "@/components/account/account-button";
 
 /**
  * The bar over the sheet. It reports rather than commands: what is being
@@ -93,7 +94,7 @@ export default function TopBar({
         {errorMessage ? "Syntax error" : "Parsed"}
       </Cell>
 
-      <div className="ml-auto flex items-center px-4">
+      <div className="ml-auto flex items-center gap-3 px-4">
         <button
           type="button"
           onClick={() => setExportOpen(true)}
@@ -103,6 +104,8 @@ export default function TopBar({
           <Download size={14} />
           Export
         </button>
+        {/* in a tab of its own: the drawing lives in memory, and leaving would lose it */}
+        <AccountButton detached />
       </div>
     </header>
   );
