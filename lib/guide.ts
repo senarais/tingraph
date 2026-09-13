@@ -679,7 +679,7 @@ const RULES: Record<DiagramCategory, string[]> = {
   ],
 };
 
-const KEYWORD: Record<DiagramCategory, string> = {
+export const KEYWORD: Record<DiagramCategory, string> = {
   flow: "flow",
   bpmn: "bpmn",
   org: "org",
@@ -715,7 +715,7 @@ const EXAMPLE: Record<DiagramCategory, string> = {
   fishbone: FISHBONE_TEMPLATE,
 };
 
-const NOTATION_NAME: Record<DiagramCategory, string> = {
+export const NOTATION_NAME: Record<DiagramCategory, string> = {
   flow: "flowchart",
   bpmn: "BPMN 2.0 diagram",
   org: "organisational chart",
@@ -734,11 +734,13 @@ const NOTATION_NAME: Record<DiagramCategory, string> = {
 };
 
 /**
- * The whole tutorial as one block of plain text, written as a briefing for an
- * assistant: every keyword, every rule, and a worked example, ending with the
- * output contract so what comes back can be pasted straight into the editor.
+ * Everything an assistant has to know about one notation, in plain text: every
+ * keyword, every rule, and a worked example. What it is then *asked for* is
+ * the caller's business — the tutorial prompt asks for a fenced block, the
+ * chatbot asks for a JSON object — so both compose this and part company after
+ * it, and neither describes the language twice.
  */
-export function promptFor(category: DiagramCategory): string {
+export function briefingFor(category: DiagramCategory): string {
   const sections = GUIDE_SECTIONS[category]
     .map(
       (section) =>
@@ -750,8 +752,6 @@ export function promptFor(category: DiagramCategory): string {
     .join("\n\n");
 
   return [
-    `You are writing Tingraph source. Tingraph is a small text language that draws a ${NOTATION_NAME[category]}. Answer with Tingraph source only.`,
-    "",
     "SYNTAX",
     sections,
     "",
@@ -760,6 +760,19 @@ export function promptFor(category: DiagramCategory): string {
     "",
     "WORKED EXAMPLE",
     EXAMPLE[category].trimEnd(),
+  ].join("\n");
+}
+
+/**
+ * The whole tutorial as one block of plain text, written as a briefing for an
+ * assistant, ending with the output contract so what comes back can be pasted
+ * straight into the editor.
+ */
+export function promptFor(category: DiagramCategory): string {
+  return [
+    `You are writing Tingraph source. Tingraph is a small text language that draws a ${NOTATION_NAME[category]}. Answer with Tingraph source only.`,
+    "",
+    briefingFor(category),
     "",
     "OUTPUT",
     `- Reply with one fenced code block and nothing else.`,

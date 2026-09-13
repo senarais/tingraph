@@ -9,9 +9,15 @@ import { createRequire } from "node:module";
 import type { PoolBox } from "../lib/canvas/scene";
 import { jpegToPdf } from "../lib/export/pdf";
 import { promptFor, GUIDE_SECTIONS } from "../lib/guide";
+import { refuses, systemPrompt, unfence } from "../lib/ai/chat";
 import { customInk, inkFor, washFor } from "../lib/ink";
 import { styleFor } from "../lib/sheet";
-import { FLOWCHART_TEMPLATE, BPMN_TEMPLATE, ORG_TEMPLATE } from "../lib/templates";
+import {
+  FLOWCHART_TEMPLATE,
+  BPMN_TEMPLATE,
+  ORG_TEMPLATE,
+  TEMPLATES,
+} from "../lib/templates";
 import { isSettable, type DiagramCategory, type DSLNode } from "../lib/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 
@@ -235,6 +241,55 @@ for (const category of ["flow", "bpmn", "org"] as DiagramCategory[]) {
   assert.equal(ast.category, category, `${category} prompt example parses`);
   assert.ok(ast.nodes.length > 1, `${category} prompt example draws something`);
 }
+
+// ----------------------------------------------------------- Tingraph AI
+
+/**
+ * The chatbot is briefed from the same description of the language the guide
+ * draws its tables from, and every answer it gives is run through the editor's
+ * own parse and layout before the reader sees it. Both are asserted here: a
+ * briefing that has lost a keyword, or a readiness check that has drifted from
+ * the pipeline, would only show up as a chatbot writing source that will not
+ * draw.
+ */
+for (const category of Object.keys(TEMPLATES) as DiagramCategory[]) {
+  const system = systemPrompt(category, TEMPLATES[category]);
+  for (const section of GUIDE_SECTIONS[category]) {
+    for (const entry of section.rows) {
+      assert.ok(
+        system.includes(entry.syntax),
+        `${category} chat briefing carries \`${entry.syntax}\``,
+      );
+    }
+  }
+  // the reader's own sheet goes into the briefing, so a change is a change to it
+  assert.ok(
+    system.includes(TEMPLATES[category].trim()),
+    `${category} chat briefing carries the source on the sheet`,
+  );
+  assert.ok(
+    system.includes("`message`") && system.includes("`source`"),
+    `${category} chat briefing asks for both fields`,
+  );
+
+  // what the editor will draw is exactly what the server lets through
+  assert.equal(
+    refuses(TEMPLATES[category], "down"),
+    null,
+    `${category} template is ready to generate`,
+  );
+}
+
+assert.ok(
+  refuses('flow "Half" {\n  start A "A"', "down"),
+  "an unclosed diagram is refused",
+);
+assert.ok(refuses("draw me a flowchart", "down"), "prose is refused");
+
+// the model is told not to fence its source; it sometimes does anyway
+assert.equal(unfence('```\nflow "A" {}\n```'), 'flow "A" {}');
+assert.equal(unfence('```tingraph\nflow "A" {}\n```'), 'flow "A" {}');
+assert.equal(unfence('flow "A" {}'), 'flow "A" {}');
 
 // ------------------------------------------------ one description of a shape
 

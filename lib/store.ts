@@ -14,8 +14,24 @@ import { DiagramCategory, LayoutDirection } from "@/lib/types";
  *
  * `figure` is the one a figure is set from; `elements` is its counterpart for
  * the graphs whose elements carry a spec of their own — see `isSettable`.
+ * `ai` is the chatbot, which writes source rather than drawing anything.
  */
-export type Drawer = "shapes" | "figure" | "elements" | "source" | "style";
+export type Drawer = "shapes" | "figure" | "elements" | "source" | "style" | "ai";
+
+/**
+ * One line of the conversation with Tingraph AI.
+ *
+ * It is kept here rather than in the panel because the panel is unmounted
+ * every time the reader shuts it, and an answer that took a few seconds to
+ * come back must still be there when they open it again — including one that
+ * arrives after they have shut it.
+ */
+export interface ChatTurn {
+  role: "you" | "ai";
+  text: string;
+  /** the diagram that came back with it: parsed, laid out, ready to generate */
+  source?: string;
+}
 
 /** The canvas tools the rail drives, named the way Excalidraw names them. */
 export type CanvasTool =
@@ -48,6 +64,9 @@ interface TingraphState {
   /** space is down, so the sheet is being panned whatever else is held */
   panning: boolean;
   exportOpen: boolean;
+  chat: ChatTurn[];
+  /** a question is out with Tingraph AI and has not come back */
+  thinking: boolean;
   setCode: (code: string) => void;
   setCategory: (category: DiagramCategory) => void;
   setDirection: (direction: LayoutDirection) => void;
@@ -61,6 +80,9 @@ interface TingraphState {
   setConnector: (connector: string | null) => void;
   setPanning: (panning: boolean) => void;
   setExportOpen: (open: boolean) => void;
+  say: (turn: ChatTurn) => void;
+  setThinking: (thinking: boolean) => void;
+  clearChat: () => void;
 }
 
 export const useTingraphStore = create<TingraphState>((set) => ({
@@ -76,8 +98,13 @@ export const useTingraphStore = create<TingraphState>((set) => ({
   connector: null,
   panning: false,
   exportOpen: false,
+  chat: [],
+  thinking: false,
   setCode: (code) => set({ code }),
-  setCategory: (category) => set({ category, code: TEMPLATES[category] }),
+  // another notation is another sheet, and the conversation was about the old
+  // one: the chatbot writes in one notation at a time, like the editor
+  setCategory: (category) =>
+    set({ category, code: TEMPLATES[category], chat: [], thinking: false }),
   setDirection: (direction) => set({ direction }),
   setInk: (ink) => set({ ink }),
   mix: (color) => set({ ink: customInk(color), mixed: color }),
@@ -92,6 +119,9 @@ export const useTingraphStore = create<TingraphState>((set) => ({
   setConnector: (connector) => set({ connector, tool: "selection" }),
   setPanning: (panning) => set({ panning }),
   setExportOpen: (exportOpen) => set({ exportOpen }),
+  say: (turn) => set((state) => ({ chat: [...state.chat, turn] })),
+  setThinking: (thinking) => set({ thinking }),
+  clearChat: () => set({ chat: [] }),
 }));
 
 if (typeof window !== "undefined") {

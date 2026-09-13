@@ -67,10 +67,57 @@ and an activity diagram share. `build-skeletons.ts` does the same on the way
 out — `lib/excalidraw-mapper/theme.ts` is what every notation draws with, and
 `build-uml.ts` is the three UML graphs' own shapes.
 
-The pipeline runs once, when the reader presses Generate in the source drawer
-(`generate()` in `components/editor/editor-root.tsx`). It is the only moment
-the code writes over the sheet. Everything after it is the reader's, which is
-why nothing else may re-derive the drawing from the source.
+The pipeline runs once, when the reader presses Generate — in the source
+drawer, or on an answer from Tingraph AI (`generate()` in
+`components/editor/editor-root.tsx`, and it is the only caller either of them
+has). It is the only moment the code writes over the sheet. Everything after
+it is the reader's, which is why nothing else may re-derive the drawing from
+the source.
+
+## Tingraph AI writes source, and only source
+
+The rail's second panel is a chatbot. It exists because the language is the
+hard part of the editor for a newcomer, not the sheet — so the reader
+describes the drawing and gets it written, in the notation the sheet is
+already in.
+
+**It answers twice over.** `message` is the sentence shown in the panel;
+`source` is the whole diagram. Nothing else comes back, and the two are
+separate fields rather than prose with a code block in it, so the panel never
+has to guess where one ends and the other begins.
+
+- **It is briefed from the guide.** `briefingFor` in `lib/guide.ts` is the
+  syntax tables, the rules and the worked example as plain text — the same
+  description the Syntax guide draws itself from, and the same one
+  `promptFor` folds into the copy-paste tutorial. A keyword the guide gains is
+  a keyword the chatbot gains, and there is no second place to update.
+- **The reply is checked before the reader sees it.** `app/api/ai/route.ts`
+  runs every `source` through `parseDSL` and `computeLayout` — the editor's
+  own pipeline — and hands a failure back to the model once, with the parser's
+  own complaint. What arrives with a `source` on it is ready to generate; what
+  could not be written is a message with no block under it. `refuses()` in
+  `lib/ai/chat.ts` is that check, and `scripts/editor-check.ts` asserts it
+  against every notation's template.
+- **It still does not touch the sheet.** The reply carries a Generate button
+  and the reader presses it. The rule holds: the code writes over the sheet at
+  exactly one moment, and an assistant is not entitled to that moment either.
+- **The source on the sheet goes into the system prompt, not the
+  conversation** — it is whatever the reader has *now*, which a turn from three
+  messages ago would misreport, and nearly every follow-up is a change to it.
+  A turn of the model's own is replayed as the JSON it emitted, so a diagram it
+  wrote but the reader has not drawn yet is still there to be changed.
+- **The conversation lives in `lib/store.ts`**, not in the panel, because the
+  panel is unmounted every time it is shut and an answer must survive that —
+  including one that arrives after it.
+- The model is `gemini-3.5-flash-lite`, the cheapest one Google still opens to
+  new keys, thinking at `minimal` by default. This is a small, thoroughly
+  briefed writing job with a schema on the end of it; a larger model would buy
+  nothing. `GEMINI_MODEL` overrides it, because Google gates a Flash-Lite for
+  new keys about as often as it ships one — 2.5 went that way within months,
+  and the API says so in the error rather than at the door.
+- The key is read once, server-side, from `GEMINI_API_KEY`. Put it in
+  `.env.local` (gitignored) and restart the dev server. Without it the panel
+  says so rather than failing silently.
 
 ## The canvas is a renderer, not an interface
 
@@ -105,6 +152,14 @@ Consequences worth knowing before touching the canvas:
 - Holding space still pans, because Excalidraw does that itself. The rail only
   records it (`panning` in `lib/store.ts`) so the Hand button can light up and
   the connector layer can step out of the way.
+- **The sheet fits itself whenever the room it is drawn in changes size** — on
+  the first paint, and every time a panel slides out beside it or is put away.
+  A panel is 352px of the window, so leaving the view alone would push half the
+  drawing off the side. `fit()` in `canvas.tsx` is one function doing this and
+  the Fit button both, or the two would frame the sheet differently. The size
+  is read from Excalidraw's own `appState` through `onChange` rather than from
+  the DOM: measuring the wrapper would race Excalidraw's own resize observer
+  and fit against a width it did not have yet.
 - `window.__tingraphStore` and `window.__excalidrawAPI` are exposed on purpose,
   for driving the editor from a console or a browser agent.
 
@@ -613,6 +668,10 @@ inspector, export, and the settable graphs: column edits, reading a caption
 back off the sheet, redrawing an element in place, widening a frame by a
 column). No test framework. Anything that can be answered without a browser
 should be asserted there rather than clicked through.
+
+`editor-check.ts` also covers Tingraph AI without calling anything: the
+chatbot's briefing carries every syntax row of its notation, and every
+template passes the readiness check the server holds replies to.
 
 `editor-check.ts` stands in for `@excalidraw/excalidraw` with two identity
 functions, which is what lets it import the canvas modules at all; add a

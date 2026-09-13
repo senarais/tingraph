@@ -14,6 +14,7 @@ import {
   Palette,
   Pencil,
   Shapes,
+  Sparkles,
   Table2,
   Type,
   Wand2,
@@ -103,6 +104,12 @@ const PANELS: Entry[] = [
     label: "Generate",
     hint: "Write the diagram as source",
     drawer: "source",
+  },
+  {
+    icon: Sparkles,
+    label: "Tingraph AI",
+    hint: "Describe the diagram and have it written",
+    drawer: "ai",
   },
   { icon: Palette, label: "Style", hint: "Ink and drawing style", drawer: "style" },
 ];

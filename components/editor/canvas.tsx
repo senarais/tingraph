@@ -160,6 +160,8 @@ export default function Canvas({
   const lineRef = useRef("");
   const chartRef = useRef("");
   const partsRef = useRef("");
+  /** the size of the sheet last fitted against, so it is fitted again when it changes */
+  const roomRef = useRef("");
   const rulesRef = useRef(rules);
   useEffect(() => {
     rulesRef.current = rules;
@@ -228,33 +230,22 @@ export default function Canvas({
     return () => document.removeEventListener("keydown", onKey);
   }, [history]);
 
+  /**
+   * The whole drawing, sized to the room it has. This is the Fit button, and
+   * it is also what the sheet does to itself when that room changes — the two
+   * must stay one function, or a panel opening would frame the sheet
+   * differently from the button beside it.
+   */
   const fit = useCallback(() => {
     const api = apiRef.current;
-    if (api) {
-      api.scrollToContent(api.getSceneElements(), {
+    const elements = api?.getSceneElements();
+    if (api && elements && elements.length > 0) {
+      api.scrollToContent(elements, {
         fitToViewport: true,
         viewportZoomFactor: 0.85,
       });
     }
   }, []);
-
-  // The first drawing is fitted to the window once the canvas knows how big it
-  // is: Excalidraw's own `scrollToContent` centres the sheet without sizing it,
-  // so a tall drawing used to open running off the bottom of the page.
-  // `fitToContent` only ever zooms *out*, which is what a first view wants — a
-  // small figure opens at its own size rather than blown up to fill the screen.
-  useEffect(() => {
-    if (!api) {
-      return;
-    }
-    const frame = requestAnimationFrame(() =>
-      api.scrollToContent(api.getSceneElements(), {
-        fitToContent: true,
-        viewportZoomFactor: 0.85,
-      }),
-    );
-    return () => cancelAnimationFrame(frame);
-  }, [api]);
 
   // the rail is the only place a tool is chosen, so it drives the canvas
   useEffect(() => {
@@ -419,6 +410,18 @@ export default function Canvas({
       setEmpty(blank);
       onEmptyChange(blank);
 
+      // --- the sheet fits itself whenever the room it is drawn in changes
+      // size: on the first paint, and every time a panel slides out beside it
+      // or is put away. The size is read from Excalidraw's own appState rather
+      // than from the DOM, so by the time this runs the canvas has already
+      // resized itself — measuring the wrapper would race its resize observer.
+      // Deferred a frame for the same reason the scene patch above is.
+      const room = `${state.width}x${state.height}`;
+      if (state.width > 0 && room !== roomRef.current) {
+        roomRef.current = room;
+        requestAnimationFrame(fit);
+      }
+
       const boxes = poolBoxes(scene);
       const overlay =
         boxes.map((p) => `${p.unit}@${p.x},${p.y},${p.width},${p.height}`).join("|") +
@@ -436,7 +439,7 @@ export default function Canvas({
         height: state.height,
       });
     },
-    [ink, sheet, onFigure, onParts, onEmptyChange, onSelection, setTool],
+    [ink, sheet, fit, onFigure, onParts, onEmptyChange, onSelection, setTool],
   );
 
   return (

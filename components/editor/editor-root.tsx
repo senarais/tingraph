@@ -55,6 +55,7 @@ import { unitOf } from "@/lib/canvas/units";
 import { summarise } from "@/lib/summary";
 import type { Ink } from "@/lib/ink";
 import { DSLError, DiagramCategory, DSLNode, LayoutDirection } from "@/lib/types";
+import AiDrawer from "@/components/editor/ai-drawer";
 import Canvas, { NO_PARTS, type SheetParts } from "@/components/editor/canvas";
 import ExportDialog from "@/components/editor/export-dialog";
 import Inspector from "@/components/editor/inspector";
@@ -130,6 +131,7 @@ const DRAWER_TITLES: Record<Drawer, string> = {
   elements: "Elements",
   source: "Generate",
   style: "Style",
+  ai: "Tingraph AI",
 };
 
 export default function EditorRoot() {
@@ -591,6 +593,15 @@ export default function EditorRoot() {
                 onGenerate={() => generate()}
                 onReset={() => generate(TEMPLATES[editorCategory])}
                 onEditorMount={handleEditorMount}
+              />
+            )}
+            {drawer === "ai" && (
+              <AiDrawer
+                category={editorCategory}
+                onGenerate={(source) => {
+                  setCode(source);
+                  generate(source);
+                }}
               />
             )}
             {drawer === "style" && <StyleDrawer category={editorCategory} />}
