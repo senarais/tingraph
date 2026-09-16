@@ -4,6 +4,7 @@ import { HEX, Reader } from "@/lib/parser/reader";
 import {
   MATRIX_STYLES,
   defaultMatrixOptions,
+  fitMatrixRow,
   type MatrixSpec,
 } from "@/lib/matrix/spec";
 import { VENN_STYLES, defaultVennOptions, type VennSpec } from "@/lib/venn/spec";
@@ -18,19 +19,13 @@ import {
  * The matrix, the Venn diagram and the fishbone, written down.
  *
  * Three small grammars rather than one general one, because the three say
- * genuinely different things: a matrix names two axes and four corners, a Venn
- * names its sets and what falls in each region between them, and a fishbone is
- * a nest of causes. What they share is `lib/parser/reader.ts`, and nothing else.
+ * genuinely different things: a matrix names rows, columns and their cells, a
+ * Venn names its sets and what falls in each region between them, and a
+ * fishbone is a nest of causes. What they share is `lib/parser/reader.ts`, and
+ * nothing else.
  */
 
 // ------------------------------------------------------------------- matrix
-
-const CORNERS: Record<string, number> = {
-  "top-left": 0,
-  "top-right": 1,
-  "bottom-left": 2,
-  "bottom-right": 3,
-};
 
 class MatrixParser extends Reader {
   parse(): MatrixSpec {
@@ -39,15 +34,9 @@ class MatrixParser extends Reader {
     const spec: MatrixSpec = {
       kind: "matrix",
       title,
-      x: { label: "", low: "", high: "" },
-      y: { label: "", low: "", high: "" },
-      quadrants: [
-        { label: "", note: "" },
-        { label: "", note: "" },
-        { label: "", note: "" },
-        { label: "", note: "" },
-      ],
-      items: [],
+      corner: "",
+      columns: [],
+      rows: [],
       options,
     };
 
@@ -58,46 +47,73 @@ class MatrixParser extends Reader {
       const tok = this.advance();
       if (tok.kind !== "id") {
         throw new DSLError(
-          `Expected a setting such as "top-left" or "x", got "${tok.value}"`,
+          `Expected "column", "row", "corner", or a setting, got "${tok.value}"`,
           tok.line,
         );
       }
       const name = tok.value;
-      if (name === "x" || name === "y") {
-        const axis = {
-          label: this.eat("string", `"${name}" takes a name, e.g. ${name} "Value" "Low" "High"`)
+      if (name === "column") {
+        const column = {
+          label: this.eat("string", 'A column is written column "Name" "Optional group"')
             .value,
-          low: this.eat("string", `"${name}" takes its two ends as well`).value,
-          high: this.eat("string", `"${name}" takes its two ends as well`).value,
+          group: "",
+          color: undefined as string | undefined,
         };
-        spec[name] = axis;
+        if (this.peekIs("string")) {
+          const next = this.advance();
+          if (HEX.test(next.value)) column.color = next.value.toLowerCase();
+          else column.group = next.value;
+        }
+        if (this.peekIs("string") && HEX.test(this.peek()!.value)) {
+          column.color = this.advance().value.toLowerCase();
+        }
+        spec.columns.push(column);
         continue;
       }
-      if (name in CORNERS) {
-        const index = CORNERS[name];
-        spec.quadrants[index] = {
-          label: this.eat("string", `"${name}" takes a name in quotes`).value,
-          note: this.peekIs("string") && !HEX.test(this.peek()!.value)
-            ? this.advance().value
-            : "",
-          ...(this.peekIs("string") && HEX.test(this.peek()!.value)
-            ? { color: this.advance().value.toLowerCase() }
-            : {}),
+      if (name === "row") {
+        const row = {
+          label: this.eat("string", 'A row is written row "Name" { ... }').value,
+          color: undefined as string | undefined,
+          cells: [] as Array<{ value: string; color?: string }>,
         };
+        if (this.peekIs("lbrace")) {
+          const opened = this.advance().line;
+          while (!this.peekIs("rbrace")) {
+            if (this.pos >= this.tokens.length) {
+              throw new DSLError(`Missing "}" for row "${row.label}"`, opened);
+            }
+            const part = this.eat(
+              "id",
+              `A row contains cell "value" lines and an optional color setting`,
+            );
+            if (part.value === "color") {
+              row.color = this.colour("color", part.line);
+            } else if (part.value === "cell") {
+              const value = this.eat("string", 'A cell is written cell "anything"').value;
+              const color = this.peekIs("string") && HEX.test(this.peek()!.value)
+                ? this.advance().value.toLowerCase()
+                : undefined;
+              row.cells.push({ value, ...(color ? { color } : {}) });
+            } else {
+              throw new DSLError(
+                `"${part.value}" is not a row setting; use cell "value" or color "#rrggbb"`,
+                part.line,
+              );
+            }
+          }
+          this.advance();
+        } else {
+          while (this.peekIs("string")) {
+            row.cells.push({ value: this.advance().value });
+          }
+        }
+        spec.rows.push(row);
         continue;
       }
       switch (name) {
-        case "item": {
-          const label = this.eat("string", 'An item is written item "Name" 70 30').value;
-          const x = this.amount(tok, "item", -1000, 1000);
-          const y = this.amount(tok, "item", -1000, 1000);
-          spec.items.push({
-            label,
-            x: Math.min(1, Math.max(0, x / 100)),
-            y: Math.min(1, Math.max(0, y / 100)),
-          });
+        case "corner":
+          spec.corner = this.eat("string", '"corner" takes a caption in quotes').value;
           break;
-        }
         case "style":
           options.style = this.word(
             tok,
@@ -105,42 +121,75 @@ class MatrixParser extends Reader {
             MATRIX_STYLES.map((entry) => entry.id),
           ) as MatrixSpec["options"]["style"];
           break;
-        case "axis":
-          options.axis = this.word(tok, "axis", [
-            "cross",
-            "arrows",
-            "tabs",
-            "none",
-          ]) as MatrixSpec["options"]["axis"];
+        case "header":
+          options.headerDirection = this.word(tok, "header", [
+            "horizontal",
+            "vertical",
+          ]) as MatrixSpec["options"]["headerDirection"];
           break;
-        case "labels":
-          options.labels = this.word(tok, "labels", [
-            "inside",
-            "corner",
-          ]) as MatrixSpec["options"]["labels"];
+        case "align":
+          options.align = this.word(tok, "align", [
+            "left",
+            "center",
+            "right",
+          ]) as MatrixSpec["options"]["align"];
           break;
-        case "colors":
-        case "colours": {
-          const picked = this.palette(tok);
-          options.palette = picked.palette as MatrixSpec["options"]["palette"];
-          if (picked.color) {
-            options.color = picked.color;
-          }
+        case "header-color":
+          options.headerColor = this.colour(name, tok.line);
           break;
-        }
+        case "row-color":
+          options.rowHeaderColor = this.colour(name, tok.line);
+          break;
+        case "cell-color":
+          options.cellColor = this.colour(name, tok.line);
+          break;
+        case "grid-color":
+          options.gridColor = this.colour(name, tok.line);
+          break;
+        case "border":
+          options.borderWidth = this.amount(tok, "border", 0.5, 6);
+          break;
+        case "row-header":
+          options.rowHeaderWidth = this.amount(tok, "row-header", 48, 800);
+          break;
+        case "header-height":
+          options.headerHeight = this.amount(tok, "header-height", 28, 500);
+          break;
         case "text":
           options.fontSize = this.amount(tok, "text", 8, 32);
           break;
         case "size":
-          options.width = this.amount(tok, "size", 200, 2400);
-          options.height = this.amount(tok, "size", 160, 2400);
+          options.width = this.amount(tok, "size", 240, 2400);
+          options.height = this.amount(tok, "size", 180, 2400);
           break;
         default:
           throw new DSLError(`"${name}" is not a matrix setting`, tok.line);
       }
     }
     this.close(line);
+    if (spec.columns.length === 0) {
+      spec.columns.push({ label: "Column 1", group: "" });
+    }
+    if (spec.rows.length === 0) {
+      spec.rows.push({ label: "Row 1", cells: [] });
+    }
+    const tooWide = spec.rows.find((row) => row.cells.length > spec.columns.length);
+    if (tooWide) {
+      throw new DSLError(
+        `Row "${tooWide.label}" has ${tooWide.cells.length} cells but the matrix has ${spec.columns.length} columns`,
+        line,
+      );
+    }
+    spec.rows = spec.rows.map((row) => fitMatrixRow(row, spec.columns.length));
     return spec;
+  }
+
+  private colour(name: string, line: number): string {
+    const value = this.eat("string", `"${name}" takes a quoted hex colour`).value;
+    if (!HEX.test(value)) {
+      throw new DSLError(`"${name}" takes a hex colour such as "#2a78d6"`, line);
+    }
+    return value.toLowerCase();
   }
 }
 

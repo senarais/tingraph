@@ -198,14 +198,27 @@ export const MIND_SAMPLE = `mind "Web Design" {
 }
 `;
 
-export const MATRIX_SAMPLE = `matrix "Priorities" {
-  x "Value" "Low value" "High value"
-  y "Effort" "High effort" "Low effort"
+export const MATRIX_SAMPLE = `matrix "Team skill matrix" {
+  corner "Name / Skill"
+  column "3-GEN" "GENBA KAIZEN"
+  column "3-MU" "GENBA KAIZEN"
+  column "7 Wastes" "GENBA KAIZEN"
+  column "KAIZEN" "GENBA KAIZEN"
+  column "Sort" "5S"
+  column "Set in order" "5S"
+  column "Shine" "5S"
+  column "Standardise" "5S"
+  column "Sustain" "5S"
 
-  top-left "Do later"
-  top-right "Do now"
-  bottom-left "Don't do"
-  bottom-right "Do next"
+  row "Amir" "x" "" "x" "" "1" "" "" "" ""
+  row "Budi" "" "x" "" "x" "2" "" "" "" ""
+  row "Hasan" "x" "x" "" "" "" "1" "" "" ""
+  row "Tuti" "" "" "x" "" "" "" "x" "" ""
+
+  header vertical
+  header-height 112
+  row-header 140
+  size 900 540
 }
 `;
 
@@ -374,12 +387,12 @@ export const READY_DIAGRAMS: DiagramKind[] = [
   },
   {
     id: "matrix",
-    name: "2×2 matrix",
+    name: "Matrix table",
     family: "Thinking",
     keyword: "matrix",
     summary:
-      "Two things weighed against each other, the four cases named, and the work dropped into the field where it belongs.",
-    parts: ["Two axes", "Four quadrants", "Items in the field", "Four styles"],
+      "Rows and columns compared in one editable grid, with grouped headings, free-form cells and colour when meaning needs it.",
+    parts: ["Grouped columns", "Free-form cells", "Horizontal or vertical headings", "Four styles"],
     accent: "oxblood",
     sample: MATRIX_SAMPLE,
   },

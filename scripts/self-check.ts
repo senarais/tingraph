@@ -34,8 +34,8 @@ import { layoutChart, niceScale, readValue, tickLabel } from "@/lib/chart/layout
 import { legendFor } from "@/lib/chart/spec";
 import { rewriteMind, walkMind, type MindSpec } from "@/lib/mind/spec";
 import { layoutMind, pinAt } from "@/lib/mind/layout-mind";
-import type { MatrixSpec } from "@/lib/matrix/spec";
-import { itemAt, matrixField, matrixQuadrants } from "@/lib/matrix/build-matrix";
+import { moveMatrixColumn, type MatrixSpec } from "@/lib/matrix/spec";
+import { planMatrix } from "@/lib/matrix/build-matrix";
 import type { VennSpec } from "@/lib/venn/spec";
 import { planVenn } from "@/lib/venn/build-venn";
 import type { FishboneSpec } from "@/lib/fishbone/spec";
@@ -1082,19 +1082,47 @@ assert.equal(
 
 const grid = parseDSL(MATRIX_TEMPLATE).figure as MatrixSpec;
 assert.equal(grid.kind, "matrix");
-assert.equal(grid.x.label, "Value");
-assert.equal(grid.y.high, "Low effort", "the high end of the up axis is the top");
-assert.equal(grid.quadrants[1].label, "Do now", "top-right is the second quadrant");
-const field = matrixField(grid, { x: 0, y: 0, width: 560, height: 480 });
-assert.ok(field.width > 60 && field.height > 60, "the field has room left in it");
-const quads = matrixQuadrants(grid, { x: 0, y: 0, width: 560, height: 480 });
-assert.equal(quads.length, 4);
-assert.ok(quads[0].x < quads[1].x && quads[0].y < quads[2].y, "in reading order");
-const placed = itemAt(grid, { x: 0, y: 0, width: 560, height: 480 }, { x: 1, y: 1 });
-assert.ok(
-  placed.x > field.x + field.width - 1 && placed.y < field.y + 1,
-  "all the way across and all the way up is the top right corner",
+assert.equal(grid.corner, "Name / Skill");
+assert.equal(grid.columns.length, 9);
+assert.equal(grid.rows.length, 4);
+assert.equal(grid.rows[0].cells[0].value, "x", "a cell is arbitrary text");
+assert.equal(grid.rows[0].cells[1].value, "", "an empty cell stays present");
+const matrixPlan = planMatrix(grid, { x: 0, y: 0, width: 900, height: 540 });
+assert.equal(matrixPlan.groups.length, 2);
+assert.deepEqual(
+  [matrixPlan.groups[0].start, matrixPlan.groups[0].end],
+  [0, 3],
+  "adjacent columns with one group receive one spanning heading",
 );
+assert.deepEqual(
+  [matrixPlan.groups[1].start, matrixPlan.groups[1].end],
+  [4, 8],
+  "the next group spans only its own columns",
+);
+assert.equal(matrixPlan.columns.length, grid.columns.length);
+assert.equal(matrixPlan.cells.length, grid.rows.length);
+assert.equal(matrixPlan.cells[0].length, grid.columns.length);
+assert.equal(matrixPlan.cells[0][0].x, matrixPlan.columns[0].x);
+assert.equal(matrixPlan.cells[0][0].y, matrixPlan.rowHeaders[0].y);
+const movedMatrixColumn = moveMatrixColumn(grid, 0, 1);
+assert.equal(movedMatrixColumn.columns[1].label, "3-GEN");
+assert.equal(
+  movedMatrixColumn.rows[0].cells[1].value,
+  "x",
+  "moving a column takes the corresponding cell in every row with it",
+);
+
+const colouredMatrix = parseDSL(`matrix "Risk" {
+  column "Rare"
+  row "Frequent" {
+    color "#eeeeee"
+    cell "x" "#ff0000"
+  }
+  style heatmap
+}`).figure as MatrixSpec;
+assert.equal(colouredMatrix.rows[0].color, "#eeeeee");
+assert.equal(colouredMatrix.rows[0].cells[0].color, "#ff0000");
+assert.equal(colouredMatrix.rows[0].cells[0].value, "x");
 
 const rings = parseDSL(VENN_TEMPLATE).figure as VennSpec;
 assert.equal(rings.sets.length, 3);

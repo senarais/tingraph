@@ -20,7 +20,7 @@ export function summarise(ast: AST): string {
     return `${count} ${count === 1 ? "branch" : "branches"}`;
   }
   if (figure.kind === "matrix") {
-    return `4 quadrants · ${figure.items.length} items`;
+    return `${figure.rows.length} rows · ${figure.columns.length} columns`;
   }
   if (figure.kind === "venn") {
     const named = Object.values(figure.regions).filter(Boolean).length;

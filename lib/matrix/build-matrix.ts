@@ -1,21 +1,12 @@
 import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/transform";
 import { marked } from "@/lib/canvas/units";
+import { readableOn } from "@/lib/chart/spec";
 import { MONOCHROME, type Ink } from "@/lib/ink";
+import { wrapByWidth } from "@/lib/layout/compute-layout";
 import { FORMAL, type SheetStyle } from "@/lib/sheet";
-import { markColor, readableOn, type PaletteId } from "@/lib/chart/spec";
-import { textWidth, wrapByWidth } from "@/lib/layout/compute-layout";
-import { matrixStyle, type MatrixSpec } from "@/lib/matrix/spec";
+import type { MatrixSpec } from "@/lib/matrix/spec";
 
-/**
- * A 2×2 matrix, laid out and drawn in one pass.
- *
- * A matrix has no scale to work out and no marks to place against one, so its
- * geometry is four rectangles and two rules, and splitting that across two
- * files would only spread four lines of arithmetic over two. What it does have
- * is a lot of writing round the outside, and most of the work here is leaving
- * room for it.
- */
-
+/** Geometry handed both to the renderer and to the canvas handles. */
 export interface Rect {
   x: number;
   y: number;
@@ -23,9 +14,21 @@ export interface Rect {
   height: number;
 }
 
-interface Pt {
-  x: number;
-  y: number;
+export interface MatrixGroupBox {
+  label: string;
+  start: number;
+  end: number;
+  box: Rect;
+}
+
+export interface MatrixPlan {
+  title: Rect;
+  table: Rect;
+  corner: Rect;
+  groups: MatrixGroupBox[];
+  columns: Rect[];
+  rowHeaders: Rect[];
+  cells: Rect[][];
 }
 
 const BASE = {
@@ -37,26 +40,134 @@ const BASE = {
 } as const;
 
 const PAD = 16;
-const TITLE = 17;
-const POLE = 12;
-const GAP = 10;
+const TITLE_GAP = 8;
+const MIN_COLUMN = 28;
+const MIN_ROW_HEADER = 54;
+const MIN_HEADER = 28;
 
-function toPaper(hex: string, amount: number): string {
-  if (amount <= 0) {
-    return hex;
-  }
+function clamp(value: number, low: number, high: number): number {
+  return Math.max(low, Math.min(high, value));
+}
+
+export function toMatrixPaper(hex: string, amount: number): string {
+  if (amount <= 0) return hex;
   const value = hex.replace("#", "");
-  const full =
-    value.length === 3 ? value.split("").map((c) => c + c).join("") : value;
+  const full = value.length === 3
+    ? value.split("").map((part) => part + part).join("")
+    : value;
   return `#${[0, 2, 4]
-    .map((at) => parseInt(full.slice(at, at + 2), 16))
+    .map((at) => Number.parseInt(full.slice(at, at + 2), 16))
     .map((channel) => Math.round(channel + (255 - channel) * amount))
     .map((channel) => channel.toString(16).padStart(2, "0"))
     .join("")}`;
 }
 
+/**
+ * Lay the matrix out without drawing it.
+ *
+ * Rows and columns always divide the same table rectangle, so adding content
+ * never shifts an unrelated caption. A group is only a run of consecutive
+ * columns with the same name; repeating a group later starts a new span.
+ */
+export function planMatrix(spec: MatrixSpec, at: Rect): MatrixPlan {
+  const columnCount = Math.max(1, spec.columns.length);
+  const rowCount = Math.max(1, spec.rows.length);
+  const titleHeight = spec.title ? Math.max(26, spec.options.fontSize * 1.8) : 0;
+  const table: Rect = {
+    x: at.x + PAD,
+    y: at.y + PAD + titleHeight + (titleHeight ? TITLE_GAP : 0),
+    width: Math.max(120, at.width - PAD * 2),
+    height: Math.max(90, at.height - PAD * 2 - titleHeight - (titleHeight ? TITLE_GAP : 0)),
+  };
+  const hasGroups = spec.columns.some((column) => column.group.trim() !== "");
+  const groupHeight = hasGroups ? Math.max(24, spec.options.fontSize * 1.65) : 0;
+  const maxHeader = Math.max(MIN_HEADER, table.height * 0.48 - groupHeight);
+  const headerHeight = clamp(spec.options.headerHeight, MIN_HEADER, maxHeader);
+  const bodyHeight = Math.max(24, table.height - groupHeight - headerHeight);
+  const maxRowHeader = Math.max(
+    MIN_ROW_HEADER,
+    table.width - columnCount * MIN_COLUMN,
+  );
+  const rowHeaderWidth = clamp(
+    spec.options.rowHeaderWidth,
+    MIN_ROW_HEADER,
+    maxRowHeader,
+  );
+  const bodyWidth = Math.max(MIN_COLUMN, table.width - rowHeaderWidth);
+  const columnWidth = bodyWidth / columnCount;
+  const rowHeight = bodyHeight / rowCount;
+  const headingHeight = groupHeight + headerHeight;
+  const corner: Rect = {
+    x: table.x,
+    y: table.y,
+    width: rowHeaderWidth,
+    height: headingHeight,
+  };
+  const columns = Array.from({ length: columnCount }, (_, index): Rect => ({
+    x: table.x + rowHeaderWidth + columnWidth * index,
+    y: table.y + groupHeight,
+    width: columnWidth,
+    height: headerHeight,
+  }));
+  const bodyY = table.y + headingHeight;
+  const rowHeaders = Array.from({ length: rowCount }, (_, index): Rect => ({
+    x: table.x,
+    y: bodyY + rowHeight * index,
+    width: rowHeaderWidth,
+    height: rowHeight,
+  }));
+  const cells = Array.from({ length: rowCount }, (_, row) =>
+    Array.from({ length: columnCount }, (_, column): Rect => ({
+      x: table.x + rowHeaderWidth + columnWidth * column,
+      y: bodyY + rowHeight * row,
+      width: columnWidth,
+      height: rowHeight,
+    })),
+  );
+
+  const groups: MatrixGroupBox[] = [];
+  if (hasGroups) {
+    let start = 0;
+    while (start < columnCount) {
+      const label = spec.columns[start]?.group ?? "";
+      let end = start;
+      if (label.trim()) {
+        while (end + 1 < columnCount && spec.columns[end + 1]?.group === label) {
+          end += 1;
+        }
+      }
+      groups.push({
+        label,
+        start,
+        end,
+        box: {
+          x: table.x + rowHeaderWidth + columnWidth * start,
+          y: table.y,
+          width: columnWidth * (end - start + 1),
+          height: groupHeight,
+        },
+      });
+      start = end + 1;
+    }
+  }
+
+  return {
+    title: {
+      x: at.x + PAD,
+      y: at.y + PAD,
+      width: Math.max(1, at.width - PAD * 2),
+      height: titleHeight,
+    },
+    table,
+    corner,
+    groups,
+    columns,
+    rowHeaders,
+    cells,
+  };
+}
+
 interface Paper {
-  ink: string;
   font: number;
   lineHeight: number;
   roughness: number;
@@ -64,44 +175,12 @@ interface Paper {
   id: (part: string) => string;
 }
 
-function text(
-  paper: Paper,
-  content: string,
-  at: Pt,
-  options: {
-    size: number;
-    align?: "left" | "center" | "right";
-    middle?: boolean;
-    color?: string;
-    turned?: boolean;
-  },
-): ExcalidrawElementSkeleton {
-  return {
-    type: "text",
-    id: paper.id("text"),
-    text: content,
-    x: Math.round(at.x),
-    y: Math.round(at.y),
-    ...BASE,
-    strokeColor: options.color ?? paper.ink,
-    backgroundColor: "transparent",
-    strokeWidth: 1,
-    roughness: paper.roughness,
-    fontFamily: paper.font,
-    fontSize: options.size,
-    lineHeight: paper.lineHeight,
-    textAlign: options.align ?? "center",
-    verticalAlign: options.middle ? "middle" : "top",
-    ...(options.turned ? { angle: -Math.PI / 2 } : {}),
-    groupIds: [paper.unit],
-    ...marked({ unit: paper.unit, kind: "figure" }),
-  } as unknown as ExcalidrawElementSkeleton;
-}
-
 function box(
   paper: Paper,
   rect: Rect,
-  options: { stroke: string; fill: string; width: number; round?: number },
+  fill: string,
+  stroke: string,
+  width: number,
 ): ExcalidrawElementSkeleton {
   return {
     type: "rectangle",
@@ -111,10 +190,9 @@ function box(
     width: Math.max(1, Math.round(rect.width)),
     height: Math.max(1, Math.round(rect.height)),
     ...BASE,
-    strokeColor: options.stroke,
-    backgroundColor: options.fill,
-    strokeWidth: options.width,
-    roundness: options.round ? { type: 3, value: options.round } : null,
+    strokeColor: stroke,
+    backgroundColor: fill,
+    strokeWidth: width,
     roughness: paper.roughness,
     groupIds: [paper.unit],
     ...marked({ unit: paper.unit, kind: "figure" }),
@@ -123,121 +201,154 @@ function box(
 
 function rule(
   paper: Paper,
-  from: Pt,
-  to: Pt,
-  options: { stroke: string; width: number; arrow?: boolean },
+  from: { x: number; y: number },
+  to: { x: number; y: number },
+  stroke: string,
+  width: number,
 ): ExcalidrawElementSkeleton {
   return {
-    type: options.arrow ? "arrow" : "line",
+    type: "line",
     id: paper.id("rule"),
     x: Math.round(from.x),
     y: Math.round(from.y),
-    width: Math.abs(to.x - from.x),
-    height: Math.abs(to.y - from.y),
+    width: Math.abs(Math.round(to.x - from.x)),
+    height: Math.abs(Math.round(to.y - from.y)),
     points: [
       [0, 0],
       [Math.round(to.x - from.x), Math.round(to.y - from.y)],
     ],
     ...BASE,
-    strokeColor: options.stroke,
-    strokeWidth: options.width,
+    strokeColor: stroke,
+    backgroundColor: "transparent",
+    strokeWidth: width,
     roughness: paper.roughness,
-    ...(options.arrow
-      ? { startArrowhead: "triangle", endArrowhead: "triangle" }
-      : { startArrowhead: null, endArrowhead: null }),
+    startArrowhead: null,
+    endArrowhead: null,
     groupIds: [paper.unit],
     ...marked({ unit: paper.unit, kind: "figure" }),
   } as unknown as ExcalidrawElementSkeleton;
 }
 
-/**
- * Where the four quadrants sit.
- *
- * Every side keeps back exactly the room the writing on it needs: the ends of
- * the across rule are written beside the field, the axis's own name goes
- * outside those, and the title takes a band off the top. Guessing a fraction
- * of the width instead is what makes an axis name land on a pole label.
- */
-export function matrixField(spec: MatrixSpec, at: Rect): Rect {
-  const poles = spec.options.axis !== "none";
-  const pole = (text: string) => textWidth(text, POLE);
-  const left =
-    PAD +
-    (spec.y.label ? POLE + 14 : 0) +
-    (poles ? pole(spec.x.low) + GAP + 10 : 0);
-  const right = PAD + (poles ? pole(spec.x.high) + GAP + 10 : 0);
-  const top = PAD + (spec.title ? TITLE + 14 : 0) + (poles ? POLE + GAP + 8 : 0);
-  const bottom =
-    PAD + (poles ? POLE + GAP + 8 : 0) + (spec.x.label ? POLE + 16 : 0);
-  return {
-    x: at.x + left,
-    y: at.y + top,
-    width: Math.max(60, at.width - left - right),
-    height: Math.max(60, at.height - top - bottom),
-  };
+function fitted(
+  content: string,
+  width: number,
+  height: number,
+  wanted: number,
+): { lines: string; size: number } {
+  if (!content) return { lines: "", size: wanted };
+  for (let size = wanted; size >= 8; size -= 1) {
+    const lines = wrapByWidth(content, Math.max(8, width), size);
+    if (lines.length * size * 1.28 <= height) {
+      return { lines: lines.join("\n"), size };
+    }
+  }
+  const lines = wrapByWidth(content, Math.max(8, width), 8);
+  const count = Math.max(1, Math.floor(height / (8 * 1.28)));
+  if (lines.length > count) {
+    const last = lines[count - 1] ?? "";
+    lines[count - 1] = `${last.slice(0, Math.max(0, last.length - 1))}…`;
+  }
+  return { lines: lines.slice(0, count).join("\n"), size: 8 };
 }
 
-/** The box the title is written in, which is what a reader points at to rename it. */
-export function matrixTitle(at: Rect): Rect {
-  const middle = at.y + PAD - 6;
+function caption(
+  paper: Paper,
+  content: string,
+  rect: Rect,
+  options: {
+    size: number;
+    color: string;
+    align?: "left" | "center" | "right";
+    vertical?: boolean;
+  },
+): ExcalidrawElementSkeleton | null {
+  if (!content) return null;
+  const vertical = Boolean(options.vertical);
+  const fit = fitted(
+    content,
+    (vertical ? rect.height : rect.width) - 12,
+    (vertical ? rect.width : rect.height) - 8,
+    options.size,
+  );
+  const align = vertical ? "center" : (options.align ?? "center");
+  const x = vertical || align === "center"
+    ? rect.x + rect.width / 2
+    : align === "left"
+      ? rect.x + 7
+      : rect.x + rect.width - 7;
   return {
-    x: at.x + at.width / 2 - 110,
-    y: middle - (TITLE + 6) / 2,
-    width: 220,
-    height: TITLE + 6,
-  };
+    type: "text",
+    id: paper.id("text"),
+    text: fit.lines,
+    x: Math.round(x),
+    y: Math.round(rect.y + rect.height / 2),
+    ...BASE,
+    ...(vertical ? { angle: -Math.PI / 2 } : {}),
+    strokeColor: options.color,
+    backgroundColor: "transparent",
+    strokeWidth: 1,
+    roughness: paper.roughness,
+    fontFamily: paper.font,
+    fontSize: fit.size,
+    lineHeight: paper.lineHeight,
+    textAlign: align,
+    verticalAlign: "middle",
+    groupIds: [paper.unit],
+    ...marked({ unit: paper.unit, kind: "figure" }),
+  } as unknown as ExcalidrawElementSkeleton;
 }
 
-/** The four quadrant rectangles, in the order the spec lists them. */
-export function matrixQuadrants(spec: MatrixSpec, at: Rect): Rect[] {
-  const field = matrixField(spec, at);
-  const style = matrixStyle(spec.options.style);
-  const half = style.gap / 2;
-  const w = (field.width - style.gap) / 2;
-  const h = (field.height - style.gap) / 2;
-  const left = field.x;
-  const right = field.x + field.width / 2 + half;
-  const top = field.y;
-  const low = field.y + field.height / 2 + half;
-  return [
-    { x: left, y: top, width: w, height: h },
-    { x: right, y: top, width: w, height: h },
-    { x: left, y: low, width: w, height: h },
-    { x: right, y: low, width: w, height: h },
-  ];
+function headerFill(spec: MatrixSpec, color: string): string {
+  switch (spec.options.style) {
+    case "plain":
+    case "heatmap":
+      return "#ffffff";
+    case "headers":
+      return toMatrixPaper(color, 0.72);
+    default:
+      return color;
+  }
 }
 
-/** Where one item sits in the field, from its share across and up. */
-export function itemAt(spec: MatrixSpec, at: Rect, item: { x: number; y: number }): Pt {
-  const field = matrixField(spec, at);
-  return {
-    x: Math.round(field.x + Math.min(1, Math.max(0, item.x)) * field.width),
-    y: Math.round(field.y + (1 - Math.min(1, Math.max(0, item.y))) * field.height),
-  };
+function rowFill(spec: MatrixSpec, color: string): string {
+  switch (spec.options.style) {
+    case "plain":
+    case "heatmap":
+      return "#ffffff";
+    case "headers":
+      return toMatrixPaper(color, 0.72);
+    default:
+      return color;
+  }
+}
+
+function cellFill(spec: MatrixSpec, row: number, own?: string): string {
+  if (own) return own;
+  if (spec.options.style === "heatmap") return spec.options.cellColor;
+  if (spec.options.style === "banded" && row % 2 === 1) {
+    return toMatrixPaper(spec.options.cellColor, 0.78);
+  }
+  return "#ffffff";
 }
 
 export function buildMatrixSkeletons(
   spec: MatrixSpec,
   at: Rect,
-  ink: Ink = MONOCHROME,
+  _ink: Ink = MONOCHROME,
   sheet: SheetStyle = FORMAL,
   unit = "matrix-1",
 ): ExcalidrawElementSkeleton[] {
-  let n = 0;
+  void _ink;
+  let next = 0;
   const paper: Paper = {
-    ink: ink.color,
     font: sheet.fontFamily,
     lineHeight: sheet.lineHeight,
     roughness: sheet.roughness,
     unit,
-    id: (part) => `${unit}-${part}-${n++}`,
+    id: (part) => `${unit}-${part}-${next++}`,
   };
-  const style = matrixStyle(spec.options.style);
-  const palette = spec.options.palette as PaletteId;
-  const field = matrixField(spec, at);
-  const quads = matrixQuadrants(spec, at);
-  const size = spec.options.fontSize;
-
+  const plan = planMatrix(spec, at);
+  const { options } = spec;
   const out: ExcalidrawElementSkeleton[] = [
     {
       type: "rectangle",
@@ -255,155 +366,133 @@ export function buildMatrixSkeletons(
       ...marked({ unit, kind: "figure", core: true, figure: spec }),
     } as unknown as ExcalidrawElementSkeleton,
   ];
+  const putCaption = (
+    content: string,
+    rect: Rect,
+    fill: string,
+    config: {
+      size?: number;
+      align?: "left" | "center" | "right";
+      vertical?: boolean;
+    } = {},
+  ) => {
+    const element = caption(paper, content, rect, {
+      size: config.size ?? options.fontSize,
+      color: readableOn(fill),
+      align: config.align,
+      vertical: config.vertical,
+    });
+    if (element) out.push(element);
+  };
 
   if (spec.title) {
-    out.push(
-      text(paper, spec.title, { x: at.x + at.width / 2, y: at.y + PAD - 6 }, {
-        size: TITLE,
-      }),
-    );
+    const title = caption(paper, spec.title, plan.title, {
+      size: options.fontSize + 4,
+      color: options.gridColor,
+      align: "center",
+    });
+    if (title) out.push(title);
   }
 
-  // --- the four quadrants
-  spec.quadrants.forEach((quadrant, index) => {
-    const hue = markColor(palette, spec.options, index, quadrant.color);
-    const fill = style.fill ? toPaper(hue, style.wash) : "transparent";
-    out.push(
-      box(paper, quads[index], {
-        stroke: style.fill && style.wash > 0.5 ? hue : style.fill ? "transparent" : paper.ink,
-        fill,
-        width: style.fill && style.wash > 0.5 ? 1 : style.fill ? 0.5 : 1.5,
-      }),
-    );
-    if (spec.options.labels !== "inside" || !quadrant.label) {
-      return;
-    }
-    const rect = quads[index];
-    const lines = wrapByWidth(quadrant.label, rect.width - 20, size + 2);
-    const note = quadrant.note ? wrapByWidth(quadrant.note, rect.width - 24, size - 1) : [];
-    const colour =
-      style.fill && style.wash < 0.5 ? readableOn(fill) : paper.ink;
-    const block = lines.length * (size + 2) * 1.25 + (note.length ? note.length * size * 1.3 + 6 : 0);
-    out.push(
-      text(
-        paper,
-        lines.join("\n"),
-        { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 - block / 2 },
-        { size: size + 2, color: colour },
-      ),
-    );
-    if (note.length) {
-      out.push(
-        text(
-          paper,
-          note.join("\n"),
-          {
-            x: rect.x + rect.width / 2,
-            y: rect.y + rect.height / 2 - block / 2 + lines.length * (size + 2) * 1.25 + 6,
-          },
-          { size: size - 1, color: colour },
-        ),
-      );
-    }
+  const cornerFill = headerFill(spec, options.headerColor);
+  out.push(box(paper, plan.corner, cornerFill, "transparent", 0.5));
+  putCaption(spec.corner, plan.corner, cornerFill, { align: "center" });
+
+  for (const group of plan.groups) {
+    const own = spec.columns[group.start]?.color;
+    const fill = headerFill(spec, own ?? options.headerColor);
+    out.push(box(paper, group.box, fill, "transparent", 0.5));
+    putCaption(group.label, group.box, fill, { size: options.fontSize + 1 });
+  }
+
+  plan.columns.forEach((rect, index) => {
+    const column = spec.columns[index];
+    const fill = column?.color
+      ? column.color
+      : headerFill(spec, options.headerColor);
+    out.push(box(paper, rect, fill, "transparent", 0.5));
+    putCaption(column?.label ?? "", rect, fill, {
+      vertical: options.headerDirection === "vertical",
+    });
   });
 
-  // --- the quadrant names written outside, when that is what was asked for
-  if (spec.options.labels === "corner") {
-    const corners: Array<[number, Pt, "left" | "right"]> = [
-      [0, { x: field.x - 8, y: field.y + 4 }, "right"],
-      [1, { x: field.x + field.width + 8, y: field.y + 4 }, "left"],
-      [2, { x: field.x - 8, y: field.y + field.height - size - 4 }, "right"],
-      [3, { x: field.x + field.width + 8, y: field.y + field.height - size - 4 }, "left"],
-    ];
-    for (const [index, where, align] of corners) {
-      if (spec.quadrants[index].label) {
-        out.push(text(paper, spec.quadrants[index].label, where, { size, align }));
-      }
-    }
+  plan.rowHeaders.forEach((rect, rowIndex) => {
+    const row = spec.rows[rowIndex];
+    const fill = row?.color ? row.color : rowFill(spec, options.rowHeaderColor);
+    out.push(box(paper, rect, fill, "transparent", 0.5));
+    putCaption(row?.label ?? "", rect, fill, { align: "left" });
+    plan.cells[rowIndex].forEach((cellRect, columnIndex) => {
+      const cell = row?.cells[columnIndex];
+      const cellColour = cellFill(spec, rowIndex, cell?.color);
+      out.push(box(paper, cellRect, cellColour, "transparent", 0.5));
+      putCaption(cell?.value ?? "", cellRect, cellColour, { align: options.align });
+    });
+  });
+
+  // Draw the grid once. Giving every cell an outline would stack two or three
+  // strokes at a group boundary and make the selected border weight uneven.
+  out.push(
+    box(paper, plan.table, "transparent", options.gridColor, options.borderWidth),
+    rule(
+      paper,
+      { x: plan.corner.x + plan.corner.width, y: plan.table.y },
+      {
+        x: plan.corner.x + plan.corner.width,
+        y: plan.table.y + plan.table.height,
+      },
+      options.gridColor,
+      options.borderWidth,
+    ),
+  );
+  const groupHeight = plan.columns[0].y - plan.table.y;
+  for (let index = 1; index < plan.columns.length; index += 1) {
+    const before = spec.columns[index - 1]?.group ?? "";
+    const after = spec.columns[index]?.group ?? "";
+    const sameNamedGroup = before.trim() !== "" && before === after;
+    const x = plan.columns[index].x;
+    out.push(rule(
+      paper,
+      {
+        x,
+        y: sameNamedGroup ? plan.table.y + groupHeight : plan.table.y,
+      },
+      { x, y: plan.table.y + plan.table.height },
+      options.gridColor,
+      options.borderWidth,
+    ));
   }
-
-  // --- the two rules, and the names at their ends
-  if (spec.options.axis !== "none") {
-    const middleY = field.y + field.height / 2;
-    const middleX = field.x + field.width / 2;
-    const arrows = spec.options.axis === "arrows";
-    out.push(
-      rule(
-        paper,
-        { x: field.x - GAP, y: middleY },
-        { x: field.x + field.width + GAP, y: middleY },
-        { stroke: paper.ink, width: style.axisWidth, arrow: arrows },
-      ),
-      rule(
-        paper,
-        { x: middleX, y: field.y - GAP },
-        { x: middleX, y: field.y + field.height + GAP },
-        { stroke: paper.ink, width: style.axisWidth, arrow: arrows },
-      ),
-    );
-
-    const tab = (content: string, where: Pt, turned?: boolean) => {
-      if (spec.options.axis === "tabs") {
-        const wide = textWidth(content, POLE) + 16;
-        out.push(
-          box(
-            paper,
-            turned
-              ? { x: where.x - POLE - 6, y: where.y - wide / 2, width: POLE + 12, height: wide }
-              : { x: where.x - wide / 2, y: where.y - POLE / 2 - 6, width: wide, height: POLE + 12 },
-            { stroke: paper.ink, fill: "#ffffff", width: 1.5 },
-          ),
-        );
-      }
-      out.push(
-        text(paper, content, where, { size: POLE, middle: true, turned }),
-      );
-    };
-
-    // the ends of each rule, each in its own lane outside the field
-    out.push(
-      text(paper, spec.x.low, { x: field.x - GAP - 8, y: middleY }, {
-        size: POLE,
-        align: "right",
-        middle: true,
-      }),
-      text(paper, spec.x.high, { x: field.x + field.width + GAP + 8, y: middleY }, {
-        size: POLE,
-        align: "left",
-        middle: true,
-      }),
-      text(paper, spec.y.high, { x: middleX, y: field.y - GAP - POLE - 4 }, {
-        size: POLE,
-      }),
-      text(paper, spec.y.low, { x: middleX, y: field.y + field.height + GAP + 4 }, {
-        size: POLE,
-      }),
-    );
-    // and the axis names further out again, clear of both
-    if (spec.x.label) {
-      tab(spec.x.label, {
-        x: middleX,
-        y: field.y + field.height + GAP + POLE + 16,
-      });
-    }
-    if (spec.y.label) {
-      tab(spec.y.label, { x: at.x + PAD + POLE / 2 + 2, y: middleY }, true);
-    }
+  if (groupHeight > 0) {
+    out.push(rule(
+      paper,
+      {
+        x: plan.corner.x + plan.corner.width,
+        y: plan.table.y + groupHeight,
+      },
+      {
+        x: plan.table.x + plan.table.width,
+        y: plan.table.y + groupHeight,
+      },
+      options.gridColor,
+      options.borderWidth,
+    ));
   }
-
-  // --- anything the reader has dropped into the field
-  for (const item of spec.items) {
-    const where = itemAt(spec, at, item);
-    const wide = Math.max(54, textWidth(item.label, size - 1) + 18);
-    const tall = size * 1.3 + 14;
-    out.push(
-      box(
-        paper,
-        { x: where.x - wide / 2, y: where.y - tall / 2, width: wide, height: tall },
-        { stroke: paper.ink, fill: "#ffffff", width: 1.5, round: 6 },
-      ),
-      text(paper, item.label, where, { size: size - 1, middle: true }),
-    );
+  const bodyTop = plan.rowHeaders[0].y;
+  out.push(rule(
+    paper,
+    { x: plan.table.x, y: bodyTop },
+    { x: plan.table.x + plan.table.width, y: bodyTop },
+    options.gridColor,
+    options.borderWidth,
+  ));
+  for (let index = 1; index < plan.rowHeaders.length; index += 1) {
+    const y = plan.rowHeaders[index].y;
+    out.push(rule(
+      paper,
+      { x: plan.table.x, y },
+      { x: plan.table.x + plan.table.width, y },
+      options.gridColor,
+      options.borderWidth,
+    ));
   }
 
   return out;

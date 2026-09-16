@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="x-apple-disable-message-reformatting">
+    <meta name="color-scheme" content="light only">
+    <meta name="supported-color-schemes" content="light only">
+    <title>Confirm your new Tingraph email</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#efede6;color:#14171a;">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;line-height:1px;font-size:1px;">Confirm the new email address for your Tingraph account.&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;&nbsp;&zwnj;</div>
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#efede6" style="width:100%;border-collapse:collapse;background-color:#efede6;">
+      <tr>
+        <td align="center" style="padding:36px 12px 44px 12px;">
+          <!--[if mso]>
+          <table role="presentation" width="608" cellspacing="0" cellpadding="0" border="0"><tr><td>
+          <![endif]-->
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#000000" style="width:100%;max-width:608px;border-collapse:separate;background-color:#000000;">
+            <tr>
+              <td style="padding:0 8px 8px 0;">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" bgcolor="#ffffff" style="width:100%;border:2px solid #000000;border-collapse:collapse;background-color:#ffffff;">
+                  <tr>
+                    <td bgcolor="#efede6" style="border-bottom:2px solid #000000;padding:14px 18px;">
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;border-collapse:collapse;">
+                        <tr>
+                          <td width="24" valign="middle" style="width:24px;">
+                            <table role="presentation" width="16" height="16" cellspacing="0" cellpadding="0" border="0" style="width:16px;height:16px;border:2px solid #000000;border-collapse:collapse;">
+                              <tr><td style="font-size:1px;line-height:1px;">&nbsp;</td></tr>
+                            </table>
+                          </td>
+                          <td valign="middle" style="font-family:'Courier New',Courier,monospace;font-size:15px;line-height:20px;font-weight:700;color:#14171a;">
+                            tingraph
+                          </td>
+                          <td align="right" valign="middle" style="font-family:'Courier New',Courier,monospace;font-size:10px;line-height:16px;letter-spacing:1.4px;text-transform:uppercase;color:#565d64;">
+                            AUTH / 05
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td style="padding:34px 28px 32px 28px;">
+                      <p style="margin:0 0 12px 0;font-family:'Courier New',Courier,monospace;font-size:10px;line-height:16px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:#8b929a;">Account message</p>
+                      <h1 style="margin:0 0 16px 0;font-family:'Courier New',Courier,monospace;font-size:28px;line-height:34px;letter-spacing:-1px;color:#14171a;">Confirm your new email.</h1>
+                      <p style="margin:0 0 26px 0;font-family:Arial,Helvetica,sans-serif;font-size:15px;line-height:24px;color:#565d64;">Confirm the change from {{ .Email }} to {{ .NewEmail }} for your Tingraph account.</p>
+
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                        <tr>
+                          <td align="left" style="padding:0 0 28px 0;">
+                            <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">
+                              <tr>
+                                <td bgcolor="#000000" style="border:2px solid #000000;box-shadow:4px 4px 0 #c8ccc5;">
+                                  <a href="{{ .ConfirmationURL }}" target="_blank" style="display:inline-block;padding:12px 18px;font-family:'Courier New',Courier,monospace;font-size:14px;line-height:20px;font-weight:700;color:#efede6;text-decoration:none;">Confirm new email &rarr;</a>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:0 0 8px 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#565d64;">
+                            Button not working? Copy and paste this address:
+                          </td>
+                        </tr>
+                        <tr>
+                          <td bgcolor="#f2f3f0" style="border:2px solid #000000;padding:12px;font-family:'Courier New',Courier,monospace;font-size:11px;line-height:17px;color:#14171a;word-break:break-all;overflow-wrap:anywhere;">
+                            <a href="{{ .ConfirmationURL }}" target="_blank" style="color:#14171a;text-decoration:underline;">{{ .ConfirmationURL }}</a>
+                          </td>
+                        </tr>
+                      </table>
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;border-collapse:collapse;">
+                        <tr>
+                          <td style="padding:26px 0 0 0;">
+                            <div style="border-top:2px solid #000000;font-size:1px;line-height:1px;">&nbsp;</div>
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:18px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px;color:#565d64;">
+                            If you did not request this change, do not use the link and keep your current sign-in details private.
+                          </td>
+                        </tr>
+                        <tr>
+                          <td style="padding:8px 0 0 0;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:19px;color:#8b929a;">
+                            This message concerns <span style="color:#565d64;">{{ .Email }}</span>.
+                          </td>
+                        </tr>
+                      </table>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+          </table>
+          <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;max-width:600px;border-collapse:collapse;">
+            <tr>
+              <td align="center" style="padding:22px 12px 0 12px;font-family:'Courier New',Courier,monospace;font-size:10px;line-height:17px;letter-spacing:.6px;color:#565d64;">
+                WRITE THE DIAGRAM. TINGRAPH DRAWS IT.<br>
+                <a href="{{ .SiteURL }}" target="_blank" style="color:#14171a;text-decoration:underline;">Open Tingraph</a>
+              </td>
+            </tr>
+          </table>
+          <!--[if mso]>
+          </td></tr></table>
+          <![endif]-->
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

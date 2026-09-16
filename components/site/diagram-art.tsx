@@ -694,24 +694,36 @@ export function MindArt({ accent = "navy", className }: ArtProps) {
 
 export function MatrixArt({ accent = "oxblood", className }: ArtProps) {
   const ink = ACCENTS[accent].stroke;
-  const cells = [
-    [70, 24, HUES[3]],
-    [166, 24, HUES[7] ?? HUES[1]],
-    [70, 96, "#8a8a8a"],
-    [166, 96, HUES[1]],
-  ] as const;
+  const fills = [
+    ["#ffffff", "#fff2cc", "#ffffff", "#d9ead3"],
+    ["#d9ead3", "#ffffff", "#f4cccc", "#ffffff"],
+    ["#fff2cc", "#d9ead3", "#ffffff", "#f4cccc"],
+  ];
   return (
     <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
-      {cells.map(([x, y, hue]) => (
-        <rect key={`${x}-${y}`} x={x} y={y} width={84} height={60} fill={hue} />
-      ))}
+      <rect x={42} y={22} width={236} height={136} fill="#ffffff" stroke={ink} strokeWidth={RULE} />
+      <rect x={42} y={22} width={70} height={52} fill="#e8eef5" />
+      <rect x={112} y={22} width={83} height={20} fill="#dce9f8" />
+      <rect x={195} y={22} width={83} height={20} fill="#dce9f8" />
+      {fills.flatMap((row, rowIndex) => row.map((fill, columnIndex) => (
+        <rect
+          key={`${rowIndex}-${columnIndex}`}
+          x={112 + columnIndex * 41.5}
+          y={74 + rowIndex * 28}
+          width={41.5}
+          height={28}
+          fill={fill}
+        />
+      )))}
       <path
-        d="M160 12v156M58 90h204"
+        d="M112 22v136M195 22v20M153.5 42v116M195 42v116M236.5 42v116M42 74h236M42 102h236M42 130h236M112 42h166"
         stroke={ink}
-        strokeWidth={3}
+        strokeWidth={CONNECTOR}
         pathLength={1}
         className="ink-path"
       />
+      <path d="M51 88h48M51 116h40M51 144h44" stroke={ink} strokeWidth={3} opacity={0.35} />
+      <path d="M126 87l6 6 11-13M209 87l6 6 11-13M168 115l6 6 11-13M251 143l6 6 11-13" stroke={ink} strokeWidth={2.5} />
     </svg>
   );
 }

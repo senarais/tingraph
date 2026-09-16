@@ -451,35 +451,46 @@ const MIND_SECTIONS: GuideSection[] = [
 const MATRIX_SECTIONS: GuideSection[] = [
   {
     title: "Matrix",
-    rows: [row('matrix "Title" {', "open a 2×2 matrix")],
+    rows: [row('matrix "Title" {', "open a matrix table")],
   },
   {
-    title: "Axes",
+    title: "Columns",
     rows: [
-      row('x "Value" "Low" "High"', "the across axis, and its two ends"),
-      row('y "Effort" "Low" "High"', "the up axis; low is the bottom end"),
-      row("axis cross", "cross, arrows, tabs, none"),
+      row('corner "Name / Skill"', "caption in the top-left corner"),
+      row('column "Safety"', "one column heading"),
+      row('column "3-GEN" "Kaizen"', "a column under a spanning group heading"),
+      row('column "Safety" "" "#2a78d6"', "a heading with its own fill"),
     ],
   },
   {
-    title: "Quadrants",
+    title: "Rows and cells",
     rows: [
-      row('top-left "Do later"', "name one corner"),
-      row('top-right "Do now" "note"', "a name and a second line"),
-      row('bottom-left "Don\'t do"', "the other two the same way"),
-      row("labels inside", "inside the quadrants, or at the corners"),
+      row('row "Amir" "x" "" "Trainer"', "one value per column; any text is valid"),
+      row('row "Budi" {', "open a row when cells need their own colours"),
+      row('cell "High" "#00a86b"', "one cell value and an optional fill"),
+      row('color "#fff2cc"', "the row heading's own fill, inside a row block"),
     ],
   },
   {
-    title: "Items",
-    rows: [row('item "Rewrite docs" 70 30', "a card, at a percentage across and up")],
+    title: "Arrangement",
+    rows: [
+      row("header vertical", "horizontal or vertical column labels"),
+      row("align center", "left, center, right"),
+      row("row-header 140", "width of the headings down the left"),
+      row("header-height 112", "height of the column labels"),
+    ],
   },
   {
     title: "Look",
     rows: [
-      row("style filled", "plain, filled, boxed, cards"),
-      row("colors colorful", "auto, single, colorful, warm, cool, ink"),
-      row("size 560 480", "how big the matrix is drawn"),
+      row("style headers", "plain, headers, banded, heatmap"),
+      row('header-color "#2a78d6"', "shared column-heading colour"),
+      row('row-color "#dce9f8"', "shared row-heading colour"),
+      row('cell-color "#fff2cc"', "body fill for bands or a heatmap"),
+      row('grid-color "#1f2933"', "lines and the title"),
+      row("border 1.5", "grid-line weight"),
+      row("text 13", "caption size"),
+      row("size 760 460", "how big the matrix is drawn"),
       row("# comment", "line comment (also //)"),
     ],
   },
@@ -579,7 +590,7 @@ export const GUIDE_INTRO: Record<DiagramCategory, string> = {
   pie: "Write one slice per line. Shares are worked out for you, so the numbers can be counts rather than percentages.",
   scatter: "Write the points as (across, up) pairs, grouped into series. Everything here is also a control in the Chart panel.",
   mind: "Write the branches as an outline: a caption, and a block under it for whatever hangs off it. Most of a mind map is built on the sheet instead — this is the quick way to start one.",
-  matrix: "Name the two axes and their ends, then the four corners. Items are dropped into the field and dragged where they belong on the sheet.",
+  matrix: "Declare the columns, then each row and its cell values. Cells are text on purpose: an x, a number, a status or a sentence all work, and every one can be edited again on the sheet.",
   venn: "Name the sets, then say what falls in each region between them. A region is named by the sets it is in: A, AB, ABC.",
   fishbone: "The title is the effect, in the head. Each bone is a category of cause, and what is written inside it are the causes themselves.",
 };
@@ -608,9 +619,10 @@ const RULES: Record<DiagramCategory, string[]> = {
     "A colour and a shape may follow a branch's caption, in that order, and apply to that branch alone.",
   ]),
   matrix: FIGURE_RULES("matrix", [
-    "`x` and `y` each take three captions: the axis name, the low end, the high end. On `y`, low is the bottom.",
-    "The four corners are `top-left`, `top-right`, `bottom-left` and `bottom-right`, each with a name and optionally a second line.",
-    "`item \"Name\" 70 30` places a card at a percentage across and up the field.",
+    "Declare columns first with `column \"Name\"`; an optional second caption groups consecutive columns under one spanning heading.",
+    "A compact row is `row \"Name\" \"cell 1\" \"cell 2\"`. It must not have more values than there are columns; omitted values are empty.",
+    "When cells need colours, open a row block and write each as `cell \"anything\" \"#rrggbb\"`. The colour is optional and the value remains text.",
+    "A row block may also contain `color \"#rrggbb\"` for the heading down the left.",
   ]),
   venn: FIGURE_RULES("venn", [
     "Declare two or three sets with `set A \"Name\"`, in order: A, then B, then C.",
@@ -728,7 +740,7 @@ export const NOTATION_NAME: Record<DiagramCategory, string> = {
   pie: "pie chart",
   scatter: "scatter plot",
   mind: "mind map",
-  matrix: "2×2 matrix",
+  matrix: "matrix table",
   venn: "Venn diagram",
   fishbone: "fishbone diagram",
 };

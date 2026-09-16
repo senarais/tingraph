@@ -5,9 +5,9 @@ import { PALETTES } from "@/lib/chart/spec";
 /**
  * The half of a figure's grammar that every figure's grammar shares.
  *
- * Each notation says something genuinely different — a matrix names two axes,
- * a Venn names its regions, a sequence diagram names who talks to whom — so
- * there is no general grammar to write. What they do share is how a block
+ * Each notation says something genuinely different — a matrix names rows and
+ * columns, a Venn names its regions, a sequence diagram names who talks to
+ * whom — so there is no general grammar to write. What they do share is how a block
  * opens and closes, how a setting reads, and what counts as a colour; keeping
  * that here is what stops the grammars drifting apart over it.
  */

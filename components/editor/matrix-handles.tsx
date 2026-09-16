@@ -2,35 +2,33 @@
 
 import { useRef, useState } from "react";
 import { Minus, Pencil, Plus, Trash2 } from "lucide-react";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import { itemAt, matrixField, matrixQuadrants, matrixTitle } from "@/lib/matrix/build-matrix";
-import { QUADRANT_NAMES, type MatrixSpec } from "@/lib/matrix/spec";
+import { planMatrix, type Rect } from "@/lib/matrix/build-matrix";
+import {
+  appendMatrixColumn,
+  appendMatrixRow,
+  removeMatrixColumn,
+  removeMatrixRow,
+  type MatrixSpec,
+} from "@/lib/matrix/spec";
 import type { CanvasView } from "@/components/editor/pool-controls";
 import {
-  ACCENT,
   BarKey,
   HandleLayer,
   HitBox,
   PartBar,
   Rename,
   SheetKey,
-  useSceneAt,
-  type Pt,
-  type Rect,
 } from "@/components/editor/figure-handles";
 
 /**
- * A 2×2 matrix on the sheet.
+ * Direct editing for the matrix table.
  *
- * The whole point of a matrix is *where a thing sits*, so the sheet is where
- * the items live: drag one and the two numbers behind it are written from
- * where it lands. The four quadrants are named in place, because a quadrant's
- * name is the reading of that corner and is easiest to judge against the
- * corner itself.
+ * Every visible label and every body cell is a hit target. Double-clicking it
+ * writes the same spec the sidebar writes; the small pairs below the table add
+ * and remove whole rows or columns while preserving its rectangular shape.
  */
 
 interface MatrixHandlesProps {
-  api: ExcalidrawImperativeAPI;
   spec: MatrixSpec;
   box: Rect;
   view: CanvasView;
@@ -39,8 +37,14 @@ interface MatrixHandlesProps {
   onChange: (spec: MatrixSpec, settled: boolean) => void;
 }
 
+interface Chosen {
+  box: Rect;
+  label: string;
+  rename: (value: string) => void;
+  remove?: () => void;
+}
+
 export default function MatrixHandles({
-  api,
   spec,
   box,
   view,
@@ -49,92 +53,118 @@ export default function MatrixHandles({
   onChange,
 }: MatrixHandlesProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [held, setHeld] = useState<number | null>(null);
   const [naming, setNaming] = useState<string | null>(null);
-  const sceneAt = useSceneAt(api, svgRef);
-  const field = matrixField(spec, box);
-  const quadrants = matrixQuadrants(spec, box);
-  const scale = view.zoom;
+  const plan = planMatrix(spec, box);
+  const parts = (picked ?? "").split(":");
+  const index = Number(parts[1]);
+  const second = Number(parts[2]);
 
-  const [kind, at] = (picked ?? "").split(":");
-  const index = Number(at);
+  const commit = (next: MatrixSpec) => onChange(next, true);
 
-  const place = (item: number, to: Pt, settled: boolean) => {
-    const x = Math.min(1, Math.max(0, (to.x - field.x) / Math.max(1, field.width)));
-    const y = Math.min(1, Math.max(0, 1 - (to.y - field.y) / Math.max(1, field.height)));
-    onChange(
-      {
-        ...spec,
-        items: spec.items.map((entry, i) =>
-          i === item
-            ? { ...entry, x: Math.round(x * 1000) / 1000, y: Math.round(y * 1000) / 1000 }
-            : entry,
-        ),
-      },
-      settled,
-    );
-  };
+  const addColumn = () => commit(appendMatrixColumn(spec, {
+    label: `Column ${spec.columns.length + 1}`,
+    group: spec.columns.at(-1)?.group ?? "",
+  }));
 
-  const writeItem = (item: number, label: string) =>
-    onChange(
-      {
-        ...spec,
-        items: spec.items.map((entry, i) => (i === item ? { ...entry, label } : entry)),
-      },
-      true,
-    );
-
-  const addItem = () => {
-    const next = spec.items.length;
-    onChange(
-      {
-        ...spec,
-        items: [...spec.items, { label: `Item ${next + 1}`, x: 0.5, y: 0.5 }],
-      },
-      true,
-    );
-    onPick(`item:${next}`);
-    setNaming(`item:${next}`);
-  };
-
-  const dropItem = (item: number) => {
-    onChange({ ...spec, items: spec.items.filter((_, i) => i !== item) }, true);
+  const dropColumn = (column: number) => {
+    const next = removeMatrixColumn(spec, column);
+    if (next === spec) return;
+    commit(next);
     onPick(null);
   };
 
-  /** What is being pointed at: the title, an item, or a quadrant's name. */
-  const chosen =
-    kind === "title"
-      ? {
-          box: matrixTitle(box),
-          label: spec.title,
-          rename: (value: string) => onChange({ ...spec, title: value }, true),
-        }
-      : kind === "item" && spec.items[index]
-      ? (() => {
-          const spot = itemAt(spec, box, spec.items[index]);
-          return {
-            box: { x: spot.x - 50, y: spot.y - 12, width: 100, height: 24 },
-            label: spec.items[index].label,
-            rename: (value: string) => writeItem(index, value),
-          };
-        })()
-      : kind === "quadrant" && quadrants[index]
-        ? {
-            box: quadrants[index],
-            label: spec.quadrants[index].label,
-            rename: (value: string) =>
-              onChange(
-                {
-                  ...spec,
-                  quadrants: spec.quadrants.map((entry, i) =>
-                    i === index ? { ...entry, label: value } : entry,
-                  ) as MatrixSpec["quadrants"],
-                },
-                true,
-              ),
-          }
-        : null;
+  const addRow = () => commit(
+    appendMatrixRow(spec, `Row ${spec.rows.length + 1}`),
+  );
+
+  const dropRow = (row: number) => {
+    const next = removeMatrixRow(spec, row);
+    if (next === spec) return;
+    commit(next);
+    onPick(null);
+  };
+
+  const choose = (id: string, startNaming = false) => {
+    onPick(id);
+    if (startNaming) setNaming(id);
+  };
+
+  const chosen: Chosen | null = (() => {
+    if (picked === "title") {
+      return {
+        box: plan.title,
+        label: spec.title,
+        rename: (title) => commit({ ...spec, title }),
+      };
+    }
+    if (picked === "corner") {
+      return {
+        box: plan.corner,
+        label: spec.corner,
+        rename: (corner) => commit({ ...spec, corner }),
+      };
+    }
+    if (parts[0] === "group") {
+      const group = plan.groups.find((entry) => entry.start === index && entry.end === second);
+      if (!group) return null;
+      return {
+        box: group.box,
+        label: group.label,
+        rename: (label) => commit({
+          ...spec,
+          columns: spec.columns.map((column, at) =>
+            at >= group.start && at <= group.end ? { ...column, group: label } : column,
+          ),
+        }),
+      };
+    }
+    if (parts[0] === "column" && spec.columns[index] && plan.columns[index]) {
+      return {
+        box: plan.columns[index],
+        label: spec.columns[index].label,
+        rename: (label) => commit({
+          ...spec,
+          columns: spec.columns.map((column, at) =>
+            at === index ? { ...column, label } : column,
+          ),
+        }),
+        remove: spec.columns.length > 1 ? () => dropColumn(index) : undefined,
+      };
+    }
+    if (parts[0] === "row" && spec.rows[index] && plan.rowHeaders[index]) {
+      return {
+        box: plan.rowHeaders[index],
+        label: spec.rows[index].label,
+        rename: (label) => commit({
+          ...spec,
+          rows: spec.rows.map((row, at) => at === index ? { ...row, label } : row),
+        }),
+        remove: spec.rows.length > 1 ? () => dropRow(index) : undefined,
+      };
+    }
+    if (
+      parts[0] === "cell" &&
+      spec.rows[index]?.cells[second] &&
+      plan.cells[index]?.[second]
+    ) {
+      return {
+        box: plan.cells[index][second],
+        label: spec.rows[index].cells[second].value,
+        rename: (value) => commit({
+          ...spec,
+          rows: spec.rows.map((row, rowAt) => rowAt === index
+            ? {
+                ...row,
+                cells: row.cells.map((cell, columnAt) =>
+                  columnAt === second ? { ...cell, value } : cell,
+                ),
+              }
+            : row),
+        }),
+      };
+    }
+    return null;
+  })();
 
   return (
     <>
@@ -143,111 +173,129 @@ export default function MatrixHandles({
         className="absolute inset-0 z-20 h-full w-full"
         style={{ pointerEvents: "none", touchAction: "none" }}
       >
-        <g transform={`translate(${view.scrollX * scale} ${view.scrollY * scale}) scale(${scale})`}>
-          <HitBox
-            box={matrixTitle(box)}
-            held={picked === "title"}
-            label={`Title: ${spec.title}`}
-            onPick={() => onPick("title")}
-            onRename={() => {
-              onPick("title");
-              setNaming("title");
-            }}
-          />
-          {quadrants.map((quadrant, at2) => (
+        <g
+          transform={`translate(${view.scrollX * view.zoom} ${view.scrollY * view.zoom}) scale(${view.zoom})`}
+        >
+          {spec.title && (
             <HitBox
-              key={`quadrant-${at2}`}
-              box={{
-                x: quadrant.x + quadrant.width / 2 - 60,
-                y:
-                  spec.options.labels === "inside"
-                    ? quadrant.y + 10
-                    : quadrant.y + quadrant.height / 2 - 12,
-                width: 120,
-                height: 26,
-              }}
-              held={picked === `quadrant:${at2}`}
-              label={`${QUADRANT_NAMES[at2]} quadrant: ${spec.quadrants[at2].label}`}
-              onPick={() => onPick(`quadrant:${at2}`)}
-              onRename={() => {
-                onPick(`quadrant:${at2}`);
-                setNaming(`quadrant:${at2}`);
-              }}
+              box={plan.title}
+              held={picked === "title"}
+              label={`Matrix title: ${spec.title}`}
+              onPick={() => choose("title")}
+              onRename={() => choose("title", true)}
             />
-          ))}
-          {spec.items.map((item, at2) => {
-            const where = itemAt(spec, box, item);
+          )}
+          <HitBox
+            box={plan.corner}
+            held={picked === "corner"}
+            label={`Corner heading: ${spec.corner || "empty"}`}
+            onPick={() => choose("corner")}
+            onRename={() => choose("corner", true)}
+          />
+          {plan.groups.map((group) => {
+            const id = `group:${group.start}:${group.end}`;
+            return group.label ? (
+              <HitBox
+                key={id}
+                box={group.box}
+                held={picked === id}
+                label={`Column group: ${group.label}`}
+                onPick={() => choose(id)}
+                onRename={() => choose(id, true)}
+              />
+            ) : null;
+          })}
+          {plan.columns.map((columnBox, column) => {
+            const id = `column:${column}`;
             return (
-              <circle
-                key={`item-${at2}`}
-                cx={where.x}
-                cy={where.y}
-                r={13 / scale}
-                fill="transparent"
-                stroke={picked === `item:${at2}` || held === at2 ? ACCENT : "transparent"}
-                strokeWidth={1.5}
-                vectorEffect="non-scaling-stroke"
-                style={{ pointerEvents: "auto", cursor: "grab" }}
-                onPointerDown={(event) => {
-                  event.stopPropagation();
-                  try {
-                    (event.target as Element).setPointerCapture(event.pointerId);
-                  } catch {
-                    // a pointer that has already gone; the drag still reads fine
-                  }
-                  onPick(`item:${at2}`);
-                  setHeld(at2);
-                }}
-                onPointerMove={(event) => {
-                  if (held === at2) {
-                    place(at2, sceneAt(event), false);
-                  }
-                }}
-                onPointerUp={(event) => {
-                  if (held === at2) {
-                    place(at2, sceneAt(event), true);
-                    setHeld(null);
-                  }
-                }}
-                onDoubleClick={() => {
-                  onPick(`item:${at2}`);
-                  setNaming(`item:${at2}`);
-                }}
+              <HitBox
+                key={id}
+                box={columnBox}
+                held={picked === id}
+                label={`Column ${column + 1}: ${spec.columns[column]?.label ?? "empty"}`}
+                onPick={() => choose(id)}
+                onRename={() => choose(id, true)}
               />
             );
           })}
+          {plan.rowHeaders.map((rowBox, row) => {
+            const id = `row:${row}`;
+            return (
+              <HitBox
+                key={id}
+                box={rowBox}
+                held={picked === id}
+                label={`Row ${row + 1}: ${spec.rows[row]?.label ?? "empty"}`}
+                onPick={() => choose(id)}
+                onRename={() => choose(id, true)}
+              />
+            );
+          })}
+          {plan.cells.flatMap((row, rowIndex) => row.map((cellBox, columnIndex) => {
+            const id = `cell:${rowIndex}:${columnIndex}`;
+            const value = spec.rows[rowIndex]?.cells[columnIndex]?.value ?? "";
+            return (
+              <HitBox
+                key={id}
+                box={cellBox}
+                held={picked === id}
+                label={`${spec.rows[rowIndex]?.label}, ${spec.columns[columnIndex]?.label}: ${value || "empty"}`}
+                onPick={() => choose(id)}
+                onRename={() => choose(id, true)}
+              />
+            );
+          }))}
         </g>
       </svg>
 
       <HandleLayer>
-        {/* the pair under the field puts work into it and takes it back out */}
         <SheetKey
           view={view}
-          at={{ x: field.x + field.width - 26, y: field.y + field.height + 16 }}
-          label="Place an item in the field"
-          onClick={addItem}
+          at={{ x: plan.table.x + 10, y: plan.table.y + plan.table.height + 15 }}
+          label="Add a row"
+          onClick={addRow}
         >
           <Plus size={12} />
         </SheetKey>
         <SheetKey
           view={view}
-          at={{ x: field.x + field.width - 2, y: field.y + field.height + 16 }}
-          label="Take the last item back out"
-          onClick={() => spec.items.length > 0 && dropItem(spec.items.length - 1)}
+          at={{ x: plan.table.x + 34, y: plan.table.y + plan.table.height + 15 }}
+          label="Remove the last row"
+          onClick={() => dropRow(spec.rows.length - 1)}
+        >
+          <Minus size={12} />
+        </SheetKey>
+        <SheetKey
+          view={view}
+          at={{ x: plan.table.x + plan.table.width - 34, y: plan.table.y + plan.table.height + 15 }}
+          label="Add a column"
+          onClick={addColumn}
+        >
+          <Plus size={12} />
+        </SheetKey>
+        <SheetKey
+          view={view}
+          at={{ x: plan.table.x + plan.table.width - 10, y: plan.table.y + plan.table.height + 15 }}
+          label="Remove the last column"
+          onClick={() => dropColumn(spec.columns.length - 1)}
         >
           <Minus size={12} />
         </SheetKey>
 
-        {chosen && !held && naming !== picked && (
+        {chosen && naming !== picked && (
           <PartBar
             view={view}
-            at={{ x: chosen.box.x + chosen.box.width / 2, y: chosen.box.y - 6 }}
+            at={{ x: chosen.box.x + chosen.box.width / 2, y: chosen.box.y - 5 }}
           >
-            <BarKey label="Rename this" onClick={() => setNaming(picked)} last={kind !== "item"}>
+            <BarKey
+              label="Edit this text"
+              onClick={() => setNaming(picked)}
+              last={!chosen.remove}
+            >
               <Pencil size={13} />
             </BarKey>
-            {kind === "item" && (
-              <BarKey label="Take this item out" danger last onClick={() => dropItem(index)}>
+            {chosen.remove && (
+              <BarKey label="Remove this" danger last onClick={chosen.remove}>
                 <Trash2 size={13} />
               </BarKey>
             )}

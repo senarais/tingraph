@@ -6,7 +6,7 @@ import {
   ChartColumn,
   Eraser,
   Fish,
-  Grid2x2,
+  Grid3x3,
   Hand,
   Image as ImageIcon,
   MousePointer2,
@@ -117,7 +117,7 @@ const PANELS: Entry[] = [
 /** The panel a figure opens under, said and drawn the way that figure is. */
 const FIGURE_ICONS: Partial<Record<DiagramCategory, LucideIcon>> = {
   mind: Waypoints,
-  matrix: Grid2x2,
+  matrix: Grid3x3,
   venn: Blend,
   fishbone: Fish,
   sequence: MessagesSquare,

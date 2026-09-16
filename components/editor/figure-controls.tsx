@@ -63,7 +63,6 @@ export default function FigureControls({
     case "matrix":
       return (
         <MatrixHandles
-          api={api}
           spec={spec}
           box={box}
           view={view}

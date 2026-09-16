@@ -8,7 +8,7 @@ import type { CanvasView } from "@/components/editor/pool-controls";
  * The hardware every figure's handles are built from.
  *
  * Not diagram logic: a button hung over a point on the sheet is a button hung
- * over a point on the sheet, whether the point is a bone, a quadrant or a
+ * over a point on the sheet, whether the point is a bone, a matrix cell or a
  * ring. What the handle *means* stays in the notation's own file — this is
  * only what it is made of, so the sheet feels the same whichever figure is on
  * it.
@@ -59,7 +59,7 @@ export function HandleLayer({ children }: { children: ReactNode }) {
 }
 
 /**
- * A part of a figure the pointer can reach: a bone, a quadrant, a ring's name.
+ * A part of a figure the pointer can reach: a bone, a matrix cell, a ring's name.
  * Nothing is drawn for it — the mark underneath is the drawing — so it only
  * takes the press and says which part was pressed.
  */

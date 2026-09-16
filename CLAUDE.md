@@ -11,7 +11,8 @@ theirs to edit by hand. Fifteen notations ship today, in two families:
   partitions) and `erd` (entity relationship): elements joined by connectors,
   edited one at a time.
 - **figures** — `bar`, `line`, `pie`, `scatter`, `mind` (mind map), `matrix`
-  (2×2), `venn`, `fishbone` and `sequence` (UML sequence): one object, drawn.
+  (matrix table), `venn`, `fishbone` and `sequence` (UML sequence): one object,
+  drawn.
 
 **Which family a notation belongs in is the first decision, and the only one
 that is hard to undo.** A notation whose elements can be anywhere on the sheet
@@ -578,7 +579,7 @@ stay different:
 |---|---|
 | charts | drag a bar's end, a line's dot, a scatter point, a pie's boundary |
 | `mind` | **this is where a mind map is built** — press a branch for its four actions, drag to pin it (its whole subtree follows), press the outward ring to grow a new one, double-click to rename, and swap the shape for a picture |
-| `matrix` | drag an item about the field; where it lands is what it means |
+| `matrix` | edit any heading or cell in place; add or remove whole rows and columns |
 | `venn` | drag a ring to set the overlap |
 | `fishbone` | press a bone to put a cause on it, a cause to put what is behind it |
 | `sequence` | drag a lifeline along the top to reorder the participants, press a message to move it up or down the order it is sent in |
@@ -591,7 +592,7 @@ Three things every figure has on the sheet, built from
   that can be added can be taken away from the same place.
 - **Parts that can be pointed at.** A `HitBox` sits over each caption the spec
   owns, at exactly the box the renderer drew it in — which is why the plans
-  (`planFishbone`, `planVenn`, `matrixTitle`) hand out those boxes rather than
+  (`planFishbone`, `planVenn`, `planMatrix`) hand out those boxes rather than
   letting the handles guess. Pressing one picks it and raises a small bar of
   what that part can do; double-clicking goes straight to renaming.
 - **Renaming in place.** `Rename` writes the spec and the figure is drawn
@@ -601,9 +602,17 @@ Two rules worth keeping when adding more:
 
 - **Formal is the default, everywhere.** Black outlines on white, colour
   carried by the lines rather than by fills. The washed fills a mind map is
-  usually drawn with, the solid quadrants a matrix is usually drawn with, the
-  tinted rings a Venn is usually drawn with: all of those are styles the reader
-  picks, never what they get. This is a tool for papers first.
+  usually drawn with, the coloured headings or heatmap cells a matrix is often
+  drawn with, the tinted rings a Venn is usually drawn with: all of those are
+  styles the reader picks, never what they get. This is a tool for papers first.
+
+The matrix is a table, not a numeric plot. Its body is deliberately a string
+grid: `x`, `7`, `High`, and a sentence are all the same kind of cell. Columns
+may share a spanning heading when adjacent `group` values match. Moving or
+deleting a column always moves or deletes the corresponding cell in every row,
+so the spec stays rectangular. The panel exposes every heading, cell, colour
+and layout setting; the sheet exposes every caption as an in-place edit and
+grows or shrinks the table by whole rows and columns.
 - **A pin never moves anything else.** A mind map works out its frame from the
   arrangement *before* any pin is applied, so dragging one branch does not
   shift the map under the reader's hand. Any figure that gains dragging needs
@@ -716,10 +725,21 @@ than take the site down with them.
 What the code cannot set: `NEXT_PUBLIC_SUPABASE_URL` and
 `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.local`; the Site URL and
 `<site>/auth/callback` on Supabase's redirect list; the Google provider and its
-OAuth client; a custom SMTP sender, because the built-in one only mails the
-project's own team; and the Confirm signup and Reset password templates
-pointed at `/auth/callback?token_hash=…`, so a link opened in another browser
-still works.
+OAuth client; and a custom SMTP sender, because the built-in one only mails the
+project's own team.
+
+**Auth email HTML lives in this repository.** `scripts/auth-email-templates.mjs`
+is the source for all six Supabase authentication templates and generates the
+standalone files in `supabase/templates`. The markup repeats its styles on
+purpose: email clients cannot share the site's stylesheet, and table layout
+plus inline styles are the reliable common language across them. Run
+`npm run auth-emails:build` after changing copy or layout and
+`npm run auth-emails:check` in review. `npm run auth-emails:push` publishes only
+the six subject/content pairs through Supabase's Management API; it requires a
+short-lived `SUPABASE_ACCESS_TOKEN` in the shell and leaves SMTP, providers and
+notification toggles untouched. Confirm signup and Reset password point their
+`token_hash` at the existing `/auth/callback`, rather than using Supabase's
+browser-bound PKCE link, so either email can be opened in another browser.
 
 ## Checks
 

@@ -1,11 +1,15 @@
 "use client";
 
-import { Plus, Trash2 } from "lucide-react";
-import { PALETTES } from "@/lib/chart/spec";
+import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
 import {
   MATRIX_STYLES,
-  QUADRANT_NAMES,
-  type MatrixAxis,
+  appendMatrixColumn,
+  appendMatrixRow,
+  moveMatrixColumn,
+  moveMatrixRow,
+  removeMatrixColumn,
+  removeMatrixRow,
+  type MatrixCell,
   type MatrixSpec,
 } from "@/lib/matrix/spec";
 import { Field, Segmented, SlabButton, Tick } from "@/components/editor/ui";
@@ -13,18 +17,17 @@ import {
   Choice,
   ColourDot,
   IconButton,
-  NumberField,
   SizeField,
   Slider,
   TextField,
 } from "@/components/editor/figure-fields";
 
 /**
- * A 2×2 matrix's settings.
+ * The whole matrix table, editable as data rather than as a picture.
  *
- * A matrix is mostly writing: two axes with a name and two ends each, and four
- * quadrants with a name and a note. All of it is here, and the things that
- * belong under the pointer — moving an item about the field — are on the sheet.
+ * A row owns exactly one cell per column. Column moves therefore move the same
+ * cell in every row, while row moves leave columns alone. That small invariant
+ * is what keeps sidebar edits, source input and on-sheet edits interchangeable.
  */
 
 interface MatrixDrawerProps {
@@ -32,45 +35,31 @@ interface MatrixDrawerProps {
   onChange: (spec: MatrixSpec) => void;
 }
 
-function AxisFields({
-  axis,
-  lowLabel,
-  highLabel,
+function OptionalColour({
+  value,
+  fallback,
+  title,
   onChange,
 }: {
-  axis: MatrixAxis;
-  lowLabel: string;
-  highLabel: string;
-  onChange: (axis: MatrixAxis) => void;
+  value?: string;
+  fallback: string;
+  title: string;
+  onChange: (value?: string) => void;
 }) {
   return (
-    <div className="space-y-1.5">
-      <TextField
-        value={axis.label}
-        placeholder="what the axis is called"
-        title="What the axis is called"
-        onCommit={(label) => onChange({ ...axis, label })}
-      />
-      <div className="flex items-center gap-1.5">
-        <span className="w-[46px] shrink-0 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
-          {lowLabel}
-        </span>
-        <TextField
-          value={axis.low}
-          title={`The ${lowLabel} end`}
-          onCommit={(low) => onChange({ ...axis, low })}
-        />
-      </div>
-      <div className="flex items-center gap-1.5">
-        <span className="w-[46px] shrink-0 font-mono text-[10.5px] uppercase tracking-[0.1em] text-ink-faint">
-          {highLabel}
-        </span>
-        <TextField
-          value={axis.high}
-          title={`The ${highLabel} end`}
-          onCommit={(high) => onChange({ ...axis, high })}
-        />
-      </div>
+    <div className="flex shrink-0 items-center gap-1">
+      <ColourDot colour={value ?? fallback} title={title} onPick={onChange} />
+      {value && (
+        <button
+          type="button"
+          title="Use the shared colour"
+          aria-label="Use the shared colour"
+          onClick={() => onChange(undefined)}
+          className="grid h-5 w-5 place-items-center border border-edge bg-white text-ink-faint hover:bg-bone hover:text-ink"
+        >
+          <X size={10} />
+        </button>
+      )}
     </div>
   );
 }
@@ -82,195 +71,241 @@ export default function MatrixDrawer({ spec, onChange }: MatrixDrawerProps) {
     value: MatrixSpec["options"][K],
   ) => onChange({ ...spec, options: { ...options, [key]: value } });
 
-  const writeQuadrant = (index: number, patch: Partial<MatrixSpec["quadrants"][number]>) =>
-    onChange({
-      ...spec,
-      quadrants: spec.quadrants.map((entry, at) =>
-        at === index ? { ...entry, ...patch } : entry,
-      ) as MatrixSpec["quadrants"],
-    });
+  const writeColumn = (
+    index: number,
+    patch: Partial<MatrixSpec["columns"][number]>,
+  ) => onChange({
+    ...spec,
+    columns: spec.columns.map((column, at) =>
+      at === index ? { ...column, ...patch } : column,
+    ),
+  });
+
+  const addColumn = () => {
+    const group = spec.columns.at(-1)?.group ?? "";
+    onChange(appendMatrixColumn(spec, {
+      label: `Column ${spec.columns.length + 1}`,
+      group,
+    }));
+  };
+
+  const writeRow = (
+    index: number,
+    patch: Partial<MatrixSpec["rows"][number]>,
+  ) => onChange({
+    ...spec,
+    rows: spec.rows.map((row, at) => at === index ? { ...row, ...patch } : row),
+  });
+
+  const writeCell = (row: number, column: number, patch: Partial<MatrixCell>) => {
+    const cells = spec.rows[row].cells.map((cell, at) =>
+      at === column ? { ...cell, ...patch } : cell,
+    );
+    writeRow(row, { cells });
+  };
+
+  const addRow = () => onChange(
+    appendMatrixRow(spec, `Row ${spec.rows.length + 1}`),
+  );
+  const colours: Array<{
+    label: string;
+    key: "headerColor" | "rowHeaderColor" | "cellColor" | "gridColor";
+    colour: string;
+  }> = [
+    { label: "Column heads", key: "headerColor", colour: options.headerColor },
+    { label: "Row heads", key: "rowHeaderColor", colour: options.rowHeaderColor },
+    { label: "Body cells", key: "cellColor", colour: options.cellColor },
+    { label: "Grid", key: "gridColor", colour: options.gridColor },
+  ];
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto">
-      <Field label="Title" className="border-b-2 border-edge p-3">
-        <TextField
-          value={spec.title}
-          onCommit={(title) => onChange({ ...spec, title })}
-          title="What the matrix is called"
-        />
-      </Field>
-
-      <Field label="Across" className="border-b-2 border-edge p-3">
-        <AxisFields
-          axis={spec.x}
-          lowLabel="Left"
-          highLabel="Right"
-          onChange={(x) => onChange({ ...spec, x })}
-        />
-      </Field>
-
-      <Field label="Up" className="border-b-2 border-edge p-3">
-        <AxisFields
-          axis={spec.y}
-          lowLabel="Bottom"
-          highLabel="Top"
-          onChange={(y) => onChange({ ...spec, y })}
-        />
-      </Field>
-
-      <Field label="Quadrants" className="border-b-2 border-edge p-3">
-        <div className="space-y-2.5">
-          {spec.quadrants.map((quadrant, index) => (
-            <div key={index}>
-              <Tick className="mb-1 block">{QUADRANT_NAMES[index]}</Tick>
-              <div className="flex items-center gap-1.5">
-                <ColourDot
-                  colour={quadrant.color ?? options.color}
-                  title={`Colour of the ${QUADRANT_NAMES[index].toLowerCase()} quadrant`}
-                  onPick={(color) => writeQuadrant(index, { color })}
-                />
-                <TextField
-                  value={quadrant.label}
-                  title={`Name of the ${QUADRANT_NAMES[index].toLowerCase()} quadrant`}
-                  onCommit={(label) => writeQuadrant(index, { label })}
-                />
-              </div>
-              <div className="mt-1">
-                <TextField
-                  value={quadrant.note}
-                  placeholder="a second line, if it needs one"
-                  title="What this quadrant means"
-                  onCommit={(note) => writeQuadrant(index, { note })}
-                />
-              </div>
-            </div>
-          ))}
-        </div>
-        <div className="mt-2.5">
-          <Segmented
-            size="sm"
-            value={options.labels}
-            onChange={(value) => set("labels", value)}
-            options={[
-              { value: "inside", label: "Names inside" },
-              { value: "corner", label: "Names outside" },
-            ]}
+      <Field label="Labels" className="border-b-2 border-edge p-3">
+        <div className="space-y-1.5">
+          <TextField
+            value={spec.title}
+            title="What the matrix is called"
+            placeholder="Matrix title"
+            onCommit={(title) => onChange({ ...spec, title })}
+          />
+          <TextField
+            value={spec.corner}
+            title="Caption in the top-left corner"
+            placeholder="Name / Skill"
+            onCommit={(corner) => onChange({ ...spec, corner })}
           />
         </div>
       </Field>
 
-      <Field label="Items in the field" className="border-b-2 border-edge p-3">
-        {spec.items.length === 0 && (
-          <p className="mb-2 text-[11px] leading-relaxed text-ink-faint">
-            Nothing placed yet. An item is a card dropped into the field, and it
-            is dragged where it belongs on the sheet.
-          </p>
-        )}
-        <div className="space-y-1.5">
-          {spec.items.map((item, index) => (
-            <div key={index} className="flex items-center gap-1.5">
-              <TextField
-                value={item.label}
-                title={`Name of item ${index + 1}`}
-                onCommit={(label) =>
-                  onChange({
-                    ...spec,
-                    items: spec.items.map((entry, at) =>
-                      at === index ? { ...entry, label } : entry,
-                    ),
-                  })
-                }
-              />
-              <NumberField
-                value={Math.round(item.x * 100)}
-                width="w-[54px]"
-                title="How far across, as a percentage"
-                onCommit={(value) =>
-                  onChange({
-                    ...spec,
-                    items: spec.items.map((entry, at) =>
-                      at === index ? { ...entry, x: Math.min(1, Math.max(0, value / 100)) } : entry,
-                    ),
-                  })
-                }
-              />
-              <NumberField
-                value={Math.round(item.y * 100)}
-                width="w-[54px]"
-                title="How far up, as a percentage"
-                onCommit={(value) =>
-                  onChange({
-                    ...spec,
-                    items: spec.items.map((entry, at) =>
-                      at === index ? { ...entry, y: Math.min(1, Math.max(0, value / 100)) } : entry,
-                    ),
-                  })
-                }
-              />
-              <IconButton
-                label={`Remove ${item.label}`}
-                danger
-                onClick={() =>
-                  onChange({
-                    ...spec,
-                    items: spec.items.filter((_, at) => at !== index),
-                  })
-                }
-              >
-                <Trash2 size={12} />
-              </IconButton>
+      <Field label={`Columns · ${spec.columns.length}`} className="border-b-2 border-edge p-3">
+        <div className="space-y-2">
+          {spec.columns.map((column, index) => (
+            <div key={index} className="border-2 border-edge bg-bone/40 p-1.5">
+              <Tick className="mb-1 block">Column {index + 1}</Tick>
+              <div className="flex items-center gap-1">
+                <OptionalColour
+                  value={column.color}
+                  fallback={options.headerColor}
+                  title={`Colour of ${column.label || `column ${index + 1}`}`}
+                  onChange={(color) => writeColumn(index, { color })}
+                />
+                <TextField
+                  value={column.label}
+                  title={`Name of column ${index + 1}`}
+                  onCommit={(label) => writeColumn(index, { label })}
+                />
+                <IconButton
+                  label="Move column left"
+                  onClick={() => onChange(moveMatrixColumn(spec, index, index - 1))}
+                >
+                  <ArrowUp size={11} className="-rotate-90" />
+                </IconButton>
+                <IconButton
+                  label="Move column right"
+                  onClick={() => onChange(moveMatrixColumn(spec, index, index + 1))}
+                >
+                  <ArrowDown size={11} className="-rotate-90" />
+                </IconButton>
+                <IconButton
+                  label={`Remove ${column.label || `column ${index + 1}`}`}
+                  danger
+                  onClick={() => onChange(removeMatrixColumn(spec, index))}
+                >
+                  <Trash2 size={11} />
+                </IconButton>
+              </div>
+              <div className="mt-1">
+                <TextField
+                  value={column.group}
+                  title="Spanning heading; adjacent columns with the same heading are merged"
+                  placeholder="Optional group heading"
+                  onCommit={(group) => writeColumn(index, { group })}
+                />
+              </div>
             </div>
           ))}
         </div>
-        <SlabButton
-          className="mt-2"
-          onClick={() =>
-            onChange({
-              ...spec,
-              items: [
-                ...spec.items,
-                { label: `Item ${spec.items.length + 1}`, x: 0.5, y: 0.5 },
-              ],
-            })
-          }
-        >
+        <SlabButton className="mt-2" onClick={addColumn}>
           <Plus size={12} />
-          Add an item
+          Add a column
         </SlabButton>
       </Field>
 
-      <Field label="Axes" className="border-b-2 border-edge p-3">
-        <Segmented
-          size="sm"
-          value={options.axis}
-          onChange={(value) => set("axis", value)}
-          options={[
-            { value: "cross", label: "Cross" },
-            { value: "arrows", label: "Arrows" },
-            { value: "tabs", label: "Tabs" },
-            { value: "none", label: "None" },
-          ]}
-        />
+      <Field label={`Rows & cells · ${spec.rows.length}`} className="border-b-2 border-edge p-3">
+        <div className="space-y-2.5">
+          {spec.rows.map((row, rowIndex) => (
+            <div key={rowIndex} className="border-2 border-edge bg-bone/40 p-1.5">
+              <Tick className="mb-1 block">Row {rowIndex + 1}</Tick>
+              <div className="flex items-center gap-1">
+                <OptionalColour
+                  value={row.color}
+                  fallback={options.rowHeaderColor}
+                  title={`Colour of ${row.label || `row ${rowIndex + 1}`}`}
+                  onChange={(color) => writeRow(rowIndex, { color })}
+                />
+                <TextField
+                  value={row.label}
+                  title={`Name of row ${rowIndex + 1}`}
+                  onCommit={(label) => writeRow(rowIndex, { label })}
+                />
+                <IconButton
+                  label="Move row up"
+                  onClick={() => onChange(moveMatrixRow(spec, rowIndex, rowIndex - 1))}
+                >
+                  <ArrowUp size={11} />
+                </IconButton>
+                <IconButton
+                  label="Move row down"
+                  onClick={() => onChange(moveMatrixRow(spec, rowIndex, rowIndex + 1))}
+                >
+                  <ArrowDown size={11} />
+                </IconButton>
+                <IconButton
+                  label={`Remove ${row.label || `row ${rowIndex + 1}`}`}
+                  danger
+                  onClick={() => {
+                    onChange(removeMatrixRow(spec, rowIndex));
+                  }}
+                >
+                  <Trash2 size={11} />
+                </IconButton>
+              </div>
+              <div className="mt-2 space-y-1">
+                {spec.columns.map((column, columnIndex) => {
+                  const cell = row.cells[columnIndex] ?? { value: "" };
+                  return (
+                    <div key={columnIndex} className="flex items-center gap-1">
+                      <span
+                        className="w-[58px] shrink-0 truncate font-mono text-[10px] text-ink-faint"
+                        title={column.label}
+                      >
+                        {column.label || `Col ${columnIndex + 1}`}
+                      </span>
+                      <OptionalColour
+                        value={cell.color}
+                        fallback={options.cellColor}
+                        title={`Colour of ${row.label}, ${column.label}`}
+                        onChange={(color) => writeCell(rowIndex, columnIndex, { color })}
+                      />
+                      <TextField
+                        value={cell.value}
+                        title={`Value at ${row.label}, ${column.label}`}
+                        placeholder="empty"
+                        onCommit={(value) => writeCell(rowIndex, columnIndex, { value })}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <SlabButton className="mt-2" onClick={addRow}>
+          <Plus size={12} />
+          Add a row
+        </SlabButton>
       </Field>
 
-      <Field label="Colour" className="border-b-2 border-edge p-3">
-        <Choice
-          options={PALETTES}
-          value={options.palette}
-          onChange={(value) => set("palette", value)}
+      <Field label="Layout" className="border-b-2 border-edge p-3">
+        <Tick className="mb-1 block">Column labels</Tick>
+        <Segmented
+          size="sm"
+          value={options.headerDirection}
+          onChange={(value) => set("headerDirection", value)}
+          options={[
+            { value: "horizontal", label: "Horizontal" },
+            { value: "vertical", label: "Vertical" },
+          ]}
         />
-        {options.palette === "single" && (
-          <div className="mt-2 flex items-center gap-2">
-            <ColourDot
-              colour={options.color}
-              title="The one colour the quadrants take"
-              onPick={(value) => set("color", value)}
-            />
-            <span className="font-mono text-[11px] text-ink-faint">
-              Every quadrant takes this colour.
-            </span>
-          </div>
-        )}
+        <Tick className="mb-1 mt-2.5 block">Cell alignment</Tick>
+        <Segmented
+          size="sm"
+          value={options.align}
+          onChange={(value) => set("align", value)}
+          options={[
+            { value: "left", label: "Left" },
+            { value: "center", label: "Centre" },
+            { value: "right", label: "Right" },
+          ]}
+        />
+        <div className="mt-3 space-y-2">
+          <Slider
+            label="Rows"
+            value={options.rowHeaderWidth}
+            min={54}
+            max={400}
+            step={2}
+            onChange={(value) => set("rowHeaderWidth", value)}
+          />
+          <Slider
+            label="Header"
+            value={options.headerHeight}
+            min={28}
+            max={240}
+            step={2}
+            onChange={(value) => set("headerHeight", value)}
+          />
+        </div>
       </Field>
 
       <Field label="Drawing" className="border-b-2 border-edge p-3">
@@ -279,14 +314,34 @@ export default function MatrixDrawer({ spec, onChange }: MatrixDrawerProps) {
           value={options.style}
           onChange={(value) => set("style", value)}
         />
-        <div className="mt-2.5">
+        <div className="mt-3 grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1.5">
+          {colours.map(({ label, key, colour }) => (
+            <div key={key} className="contents">
+              <ColourDot
+                colour={colour}
+                title={`${label} colour`}
+                onPick={(value) => set(key, value)}
+              />
+              <span className="font-mono text-[11px] text-ink">{label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 space-y-2">
           <Slider
             label="Text"
             value={options.fontSize}
-            min={9}
-            max={22}
+            min={8}
+            max={24}
             step={1}
             onChange={(value) => set("fontSize", value)}
+          />
+          <Slider
+            label="Border"
+            value={options.borderWidth}
+            min={0.5}
+            max={5}
+            step={0.5}
+            onChange={(value) => set("borderWidth", value)}
           />
         </div>
       </Field>
@@ -295,7 +350,7 @@ export default function MatrixDrawer({ spec, onChange }: MatrixDrawerProps) {
         width={options.width}
         height={options.height}
         onChange={(size) => onChange({ ...spec, options: { ...options, ...size } })}
-        note="A square sheet keeps the four quadrants square, which is how a matrix is read."
+        note="Resize it on the sheet too. Rows and columns divide the available table space again when it is released."
       />
     </div>
   );

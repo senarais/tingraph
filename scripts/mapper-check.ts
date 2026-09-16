@@ -17,6 +17,7 @@ import {
   LINE_TEMPLATE,
   PIE_TEMPLATE,
   SCATTER_TEMPLATE,
+  MATRIX_TEMPLATE,
   USECASE_TEMPLATE,
   ACTIVITY_TEMPLATE,
   ERD_TEMPLATE,
@@ -435,6 +436,31 @@ for (const wedge of wedges) {
     Math.abs(first[0] - last[0]) < 1 && Math.abs(first[1] - last[1]) < 1,
     "a slice closes on itself, or Excalidraw will not fill it",
   );
+}
+
+// --------------------------------------------------------------- matrix table
+
+const matrixParts = buildSkeletons(
+  computeLayout(parseDSL(MATRIX_TEMPLATE)),
+) as unknown as Array<Record<string, unknown>>;
+const matrixFrame = matrixParts[0];
+assert.equal(matrixFrame.type, "rectangle", "a matrix starts with its spec frame");
+assert.equal(matrixFrame.strokeColor, "transparent", "and that frame is invisible");
+assert.ok(
+  matrixParts.some((piece) => piece.type === "text" && piece.text === "GENBA KAIZEN"),
+  "a grouped column heading is drawn once",
+);
+assert.ok(
+  matrixParts.some((piece) => piece.type === "text" && piece.text === "x"),
+  "free-form cell text is drawn",
+);
+assert.ok(
+  matrixParts.some((piece) => piece.type === "line"),
+  "the table grid is drawn as one set of rules",
+);
+for (const piece of matrixParts) {
+  const own = (piece.customData as { tingraph?: { unit?: string } })?.tingraph;
+  assert.equal(own?.unit, "matrix-1", "every table piece belongs to the figure");
 }
 
 // ------------------------------------------------------------------ use case
