@@ -6,10 +6,12 @@ import * as monaco from "monaco-editor";
 import {
   CaptureUpdateAction,
   convertToExcalidrawElements,
+  restore,
+  serializeAsJSON,
   viewportCoordsToSceneCoords,
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
-import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { X } from "lucide-react";
 import { useTingraphStore, type Drawer } from "@/lib/store";
 import { TEMPLATES } from "@/lib/templates";
@@ -65,6 +67,14 @@ import SourceDrawer from "@/components/editor/source-drawer";
 import StyleDrawer from "@/components/editor/style-drawer";
 import TopBar from "@/components/editor/top-bar";
 import { Tick } from "@/components/editor/ui";
+import { accountsReady, createClient } from "@/lib/supabase/client";
+import type { Json } from "@/lib/supabase/database.types";
+import {
+  diagramTitle,
+  type OpenedDiagram,
+  type SavedDiagramDocument,
+  withSceneFiles,
+} from "@/lib/saved-diagrams";
 
 interface Reading {
   title: string;
@@ -125,6 +135,35 @@ function drawFromSource(
   }
 }
 
+interface InitialScene {
+  elements: ExcalidrawElement[];
+  files: BinaryFiles;
+  error?: string;
+}
+
+function openScene(
+  diagram: OpenedDiagram | undefined,
+  fallback: () => ExcalidrawElement[],
+): InitialScene {
+  if (!diagram) {
+    return { elements: fallback(), files: {} };
+  }
+  try {
+    const scene = restore(
+      diagram.document.scene as unknown as Parameters<typeof restore>[0],
+      null,
+      null,
+    );
+    return { elements: scene.elements, files: scene.files };
+  } catch {
+    return {
+      elements: [],
+      files: {},
+      error: "This saved scene is damaged and could not be opened.",
+    };
+  }
+}
+
 const DRAWER_TITLES: Record<Drawer, string> = {
   shapes: "Shapes",
   figure: "Figure",
@@ -134,7 +173,9 @@ const DRAWER_TITLES: Record<Drawer, string> = {
   ai: "Tingraph AI",
 };
 
-export default function EditorRoot() {
+type SaveState = "idle" | "saving" | "saved" | "error";
+
+export default function EditorRoot({ initialDiagram }: { initialDiagram?: OpenedDiagram }) {
   const code = useTingraphStore((s) => s.code);
   const setCode = useTingraphStore((s) => s.setCode);
   const category = useTingraphStore((s) => s.category);
@@ -159,6 +200,9 @@ export default function EditorRoot() {
   /** everything a settable notation's panel is looking at, read off the sheet */
   const [parts, setParts] = useState<SheetParts>(NO_PARTS);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
+  const [savedId, setSavedId] = useState(initialDiagram?.id ?? null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  const [saveMessage, setSaveMessage] = useState("");
   const monacoRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const counterRef = useRef(1);
 
@@ -180,7 +224,9 @@ export default function EditorRoot() {
   }
 
   // the sheet starts on the template; from here on it is the reader's
-  const [seed] = useState(() => drawFromSource(code, ink, direction, style));
+  const [seed] = useState(() =>
+    openScene(initialDiagram, () => drawFromSource(code, ink, direction, style)),
+  );
 
   const detected = useMemo(() => detectCategory(debouncedCode), [debouncedCode]);
   const editorCategory: DiagramCategory = detected ?? category;
@@ -420,6 +466,90 @@ export default function EditorRoot() {
     });
   };
 
+  const saveDiagram = async () => {
+    if (!api || saveState === "saving") {
+      return;
+    }
+    if (!accountsReady) {
+      setSaveState("error");
+      setSaveMessage("Saved diagrams are not configured here.");
+      return;
+    }
+    setSaveState("saving");
+    setSaveMessage("Saving diagram…");
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+      if (authError || !user) {
+        setSaveState("error");
+        setSaveMessage("Sign in, then press Save again.");
+        return;
+      }
+
+      const scene = withSceneFiles(
+        JSON.parse(
+          serializeAsJSON(api.getSceneElements(), {}, api.getFiles(), "database"),
+        ) as Json,
+        api.getFiles() as unknown as Json,
+      );
+      const document = {
+        version: 1,
+        category: editorCategory,
+        source: code,
+        direction,
+        ink,
+        style: styleId,
+        scene,
+      } satisfies SavedDiagramDocument;
+      const title = diagramTitle(drawn.title, initialDiagram?.title);
+      const values = {
+        title,
+        category: editorCategory,
+        document: document as unknown as Json,
+      };
+      const query = savedId
+        ? supabase
+            .from("diagrams")
+            .update(values)
+            .eq("id", savedId)
+            .eq("user_id", user.id)
+            .select("id")
+            .maybeSingle()
+        : supabase
+            .from("diagrams")
+            .insert({ ...values, user_id: user.id })
+            .select("id")
+            .single();
+      const { data, error } = await query;
+      if (error || !data) {
+        setSaveState("error");
+        setSaveMessage("Diagram could not be saved. Try again.");
+        return;
+      }
+      setSavedId(data.id);
+      setSaveState("saved");
+      setSaveMessage("Saved to My diagrams.");
+      const url = new URL(window.location.href);
+      url.searchParams.set("type", editorCategory);
+      url.searchParams.set("diagram", data.id);
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    } catch {
+      setSaveState("error");
+      setSaveMessage("Diagram could not be saved. Try again.");
+    }
+  };
+
+  useEffect(() => {
+    if (saveState !== "saved") {
+      return;
+    }
+    const handle = setTimeout(() => setSaveState("idle"), 2000);
+    return () => clearTimeout(handle);
+  }, [saveState]);
+
   // ink is a sheet-wide restyle, so it reaches the drawing without a redraw
   const inkRef = useRef(ink);
   useEffect(() => {
@@ -483,6 +613,22 @@ export default function EditorRoot() {
     });
   };
 
+  if (seed.error) {
+    return (
+      <div className="flex h-dvh items-center justify-center bg-bone px-4 font-mono">
+        <div className="slab max-w-md bg-white p-6 text-center">
+          <p className="text-[14px] text-alert">{seed.error}</p>
+          <a
+            href="/build?view=mine"
+            className="slab-tight press mt-5 inline-block bg-edge px-3 py-2 text-[12px] font-semibold text-bone"
+          >
+            Back to My diagrams
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-dvh flex-col overflow-hidden bg-bone font-mono">
       <TopBar
@@ -491,6 +637,9 @@ export default function EditorRoot() {
         summary={drawn.summary}
         errorMessage={result.error?.message ?? null}
         empty={empty}
+        saveState={saveState}
+        saveMessage={saveMessage}
+        onSave={() => void saveDiagram()}
       />
 
       <div className="flex min-h-0 flex-1">
@@ -610,7 +759,8 @@ export default function EditorRoot() {
 
         <main className="relative min-w-0 flex-1 bg-paper">
           <Canvas
-            initialElements={seed}
+            initialElements={seed.elements}
+            initialFiles={seed.files}
             category={editorCategory}
             dragging={dragging}
             connectorStyle={connectorStyle(ink, editorCategory, style)}

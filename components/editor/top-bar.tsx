@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Download, Repeat2 } from "lucide-react";
+import { Check, Download, Repeat2, Save } from "lucide-react";
 import { TEMPLATE_LABELS, useTingraphStore } from "@/lib/store";
 import { DiagramCategory } from "@/lib/types";
 import { Tick } from "@/components/editor/ui";
@@ -43,6 +43,9 @@ interface TopBarProps {
   summary: string;
   errorMessage: string | null;
   empty: boolean;
+  saveState: "idle" | "saving" | "saved" | "error";
+  saveMessage: string;
+  onSave: () => void;
 }
 
 export default function TopBar({
@@ -51,6 +54,9 @@ export default function TopBar({
   summary,
   errorMessage,
   empty,
+  saveState,
+  saveMessage,
+  onSave,
 }: TopBarProps) {
   const setExportOpen = useTingraphStore((s) => s.setExportOpen);
 
@@ -95,6 +101,29 @@ export default function TopBar({
       </Cell>
 
       <div className="ml-auto flex items-center gap-3 px-4">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saveState === "saving"}
+          title={saveMessage || "Save this diagram to your account"}
+          className={`slab-tight press flex items-center gap-2 px-3 py-2 text-[12.5px] font-semibold disabled:cursor-wait disabled:opacity-60 ${
+            saveState === "error" ? "bg-alert-tint text-alert" : "bg-white text-ink"
+          }`}
+        >
+          {saveState === "saved" ? <Check size={14} /> : <Save size={14} />}
+          <span className="hidden sm:inline">
+            {saveState === "saving"
+              ? "Saving…"
+              : saveState === "saved"
+                ? "Saved"
+                : saveState === "error"
+                  ? "Retry save"
+                  : "Save"}
+          </span>
+        </button>
+        <span className="sr-only" role="status" aria-live="polite">
+          {saveMessage}
+        </span>
         <button
           type="button"
           onClick={() => setExportOpen(true)}

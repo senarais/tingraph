@@ -36,12 +36,17 @@ function requested(value: string | string[] | undefined): DiagramCategory | unde
  * at a time. `/editor?type=flow` skips the question.
  */
 export default async function EditorPage({ searchParams }: PageProps<"/editor">) {
-  const { type } = await searchParams;
+  const { type, diagram } = await searchParams;
   const category = requested(type);
+  const diagramId = typeof diagram === "string" ? diagram : undefined;
   // keyed on the notation: asking for another one opens a fresh sheet on it
   // rather than leaving the old drawing under a new palette
-  return category ? (
-    <EditorShell key={category} initialCategory={category} />
+  return category || diagramId ? (
+    <EditorShell
+      key={`${category ?? "bpmn"}:${diagramId ?? "new"}`}
+      initialCategory={category ?? "bpmn"}
+      diagramId={diagramId}
+    />
   ) : (
     <NotationPicker />
   );

@@ -37,11 +37,11 @@ export function SiteNav() {
 
         <div className="ml-auto flex items-center gap-2 sm:gap-3">
           <Link
-            href="/build"
+            href="/build?view=mine"
             className="slab-tight press whitespace-nowrap bg-white px-3 py-1.5 text-[12.5px] font-medium text-ink"
           >
-            <span className="sm:hidden">Browse</span>
-            <span className="hidden sm:inline">Browse diagrams</span>
+            <span className="sm:hidden">Mine</span>
+            <span className="hidden sm:inline">My diagrams</span>
           </Link>
           <Link
             href="/editor"

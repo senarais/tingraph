@@ -674,14 +674,13 @@ export — already asks `isFigure()` and needs no change. If you find yourself
 editing the rail or the canvas to add a notation, the abstraction has slipped
 and that is the thing to fix.
 
-## Accounts are Supabase's, and only accounts
+## Accounts and saved diagrams are Supabase's
 
 A reader can sign up, sign in with a password or with Google, reset a
-forgotten password and keep a profile. Nothing they draw is stored: the
-account holds who they are, not their diagrams. The editor still runs with no
-Supabase project configured — `accountsReady` in `lib/supabase/client.ts` and
-the guard at the top of `proxy.ts` make the account pieces step aside rather
-than take the site down with them.
+forgotten password, keep a profile and save private diagrams. The editor still
+runs with no Supabase project configured — `accountsReady` in
+`lib/supabase/client.ts` and the guard at the top of `proxy.ts` make the account
+pieces step aside rather than take the site down with them.
 
 - **One client per place.** `lib/supabase/client.ts` for the browser,
   `lib/supabase/server.ts` for Server Components, Server Actions and Route
@@ -692,18 +691,30 @@ than take the site down with them.
   account asks for the session itself: `getClaims()`, or `getUser()` where the
   full record is wanted. A Server Action is a POST anyone can send without the
   form, and a cookie is whatever the browser says it is.
-- **Everything goes through Next.** `app/auth/actions.ts` signs in and out and
-  handles passwords; `app/profile/actions.ts` writes the profile and the
+- **Account changes go through Next.** `app/auth/actions.ts` signs in and out
+  and handles passwords; `app/profile/actions.ts` writes the profile and the
   picture; `app/auth/callback/route.ts` takes every link that comes back from
   Supabase — Google's `code`, and an email's `token_hash` (or its `code`, if
-  the template was left as it ships). The one read made from the browser is
-  `AccountButton` fetching its own row, for the face in the bar.
+  the template was left as it ships). Browser reads are the account button's
+  own profile and the signed-in reader's diagrams; diagram saves and deletes
+  also use the browser client, under RLS.
 - **The database is the validation.** The browser holds the publishable key,
   so the Data API can be reached without passing through an action.
-  `supabase/migrations/*_profiles.sql` therefore carries every limit as a
-  check constraint, RLS keeps a row to its owner, and column grants say which
-  fields of it may be written at all. `lib/auth.ts` repeats the limits only to
-  say them in words; change one and change the other.
+  the migrations therefore carry every limit as a check constraint, RLS keeps
+  a row to its owner, and column grants say which fields may be written at all.
+  `lib/auth.ts` repeats profile limits only to say them in words; change one and
+  change the other.
+- **A saved diagram is the final sheet, not only its source.** `diagrams.document`
+  stores the source, notation, direction, ink and style beside Excalidraw's
+  serialized scene and image file map. The scene matters because Generate is
+  the last time source owns the drawing; every manual edit after it is the
+  reader's. Excalidraw omits `files` when that map is empty, so `withSceneFiles`
+  materializes it on both save and load; `normalize_diagram_document` does the
+  same before database constraints for a stale tab still running older client
+  code. Loading then runs the JSON through `readSavedDiagram` and Excalidraw's
+  own `restore` before it reaches the canvas. Rows are private to `user_id`,
+  capped at 10 MB, listed without fetching `document`, and removed with the
+  user's id in both the query and RLS policy.
 - **The profile row is made by a trigger**, `handle_new_user`. A trigger that
   fails fails the sign-up with it, so it copies only what the provider handed
   over and drops anything a constraint would refuse. A username is chosen by
@@ -715,10 +726,11 @@ than take the site down with them.
   browser, since a Server Action accepts 1MB at most. It is stored at
   `avatars/<user id>/<timestamp>`, a new name every time because the old
   address is cached for a year, and the pictures it replaces are deleted.
-- **`AccountButton` asks the browser, not the server.** `/` and `/build` are
-  prerendered, and reading a cookie in `SiteNav` would render them per request.
-  In the editor it opens the account in a new tab (`detached`): the drawing
-  lives in memory, and following a link in the same tab throws it away.
+- **Account-aware chrome asks the browser, not the server.** `/` and `/build`
+  are prerendered, and reading a cookie in `SiteNav` would render them per
+  request. `AccountButton` fetches the face in the bar; `/build?view=mine`
+  fetches diagram metadata below a Suspense boundary. In the editor the account
+  opens in a new tab (`detached`), so an unsaved drawing is not thrown away.
 - `lib/supabase/database.types.ts` is generated from the project. Regenerate
   it after every migration.
 
@@ -760,6 +772,9 @@ template passes the readiness check the server holds replies to. It holds the
 account rules in `lib/auth.ts` the same way: `safeNext` refusing every
 spelling of another host, and a profile form read into exactly what the table
 will take.
+
+It also checks a saved document before Excalidraw sees it: metadata must agree
+with the source, and a scene has both elements and its image file map.
 
 `editor-check.ts` stands in for `@excalidraw/excalidraw` with two identity
 functions, which is what lets it import the canvas modules at all; add a

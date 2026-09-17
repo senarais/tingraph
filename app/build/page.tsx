@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import Catalog from "@/components/site/catalog";
 import { Mark } from "@/components/site/diagram-art";
 import { SiteFooter, SiteNav } from "@/components/site/site-chrome";
@@ -24,7 +25,7 @@ export default function BuildPage() {
             <div className="flex items-center gap-3 border-b-2 border-edge bg-bone px-4 py-3">
               <Mark className="h-4 w-4 text-ink" />
               <span className="font-mono text-[12.5px] font-semibold text-ink">
-                Diagram catalogue
+                Diagram library
               </span>
               <span className="ml-auto font-mono text-[11.5px] text-ink-soft">
                 {READY_DIAGRAMS.length} ready, {PLANNED_DIAGRAMS.length} planned
@@ -33,18 +34,24 @@ export default function BuildPage() {
 
             <div className="p-5 sm:p-7">
               <h1 className="max-w-2xl font-mono text-3xl font-semibold tracking-[-0.03em] text-ink sm:text-4xl">
-                Everything Tingraph can draw
+                Browse, build, and keep your work
               </h1>
               <p className="mt-3 max-w-[62ch] text-[14.5px] leading-relaxed text-ink-soft">
-                {READY_DIAGRAMS.length} notations are drawable today. The rest
-                are here so you can see where this is going — a card says plainly
-                which of the two it is, and only a ready one opens the editor.
-                Search by name, by keyword, or by what a notation puts on the
-                sheet.
+                Browse every notation Tingraph can draw, or sign in to reopen
+                diagrams you saved from the editor. Saved work keeps its source,
+                settings and every change made directly on the canvas.
               </p>
 
               <div className="mt-9">
-                <Catalog />
+                <Suspense
+                  fallback={
+                    <p className="slab bg-white p-6 text-[13.5px] text-ink-soft">
+                      Opening diagram library…
+                    </p>
+                  }
+                >
+                  <Catalog />
+                </Suspense>
               </div>
             </div>
           </div>

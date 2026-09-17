@@ -1,9 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { FolderOpen, LayoutGrid, Search } from "lucide-react";
 import { DiagramArt } from "@/components/site/diagram-art";
+import MyDiagrams from "@/components/site/my-diagrams";
 import {
   ACCENTS,
   ALL_DIAGRAMS,
@@ -129,6 +131,8 @@ function Card({ kind }: { kind: DiagramKind }) {
 }
 
 export default function Catalog() {
+  const searchParams = useSearchParams();
+  const view = searchParams.get("view") === "mine" ? "mine" : "browse";
   const [query, setQuery] = useState("");
   const [families, setFamilies] = useState<DiagramFamily[]>([...FAMILIES]);
   const [statuses, setStatuses] = useState<Status[]>([...STATUSES]);
@@ -154,42 +158,79 @@ export default function Catalog() {
       <aside className="lg:sticky lg:top-24 lg:self-start">
         <div className="slab bg-white">
           <h2 className="border-b-2 border-edge bg-bone px-4 py-2.5 font-mono text-[12.5px] font-semibold text-ink">
+            Diagrams
+          </h2>
+          <nav aria-label="Diagram library" className="p-2">
+            <Link
+              href="/build?view=mine"
+              aria-current={view === "mine" ? "page" : undefined}
+              className={`flex items-center gap-2.5 border-2 px-3 py-2.5 font-mono text-[12.5px] font-semibold transition-colors ${
+                view === "mine"
+                  ? "border-edge bg-edge text-bone"
+                  : "border-transparent text-ink hover:border-edge hover:bg-bone"
+              }`}
+            >
+              <FolderOpen size={15} />
+              My diagrams
+            </Link>
+            <Link
+              href="/build?view=browse"
+              aria-current={view === "browse" ? "page" : undefined}
+              className={`mt-1 flex items-center gap-2.5 border-2 px-3 py-2.5 font-mono text-[12.5px] font-semibold transition-colors ${
+                view === "browse"
+                  ? "border-edge bg-edge text-bone"
+                  : "border-transparent text-ink hover:border-edge hover:bg-bone"
+              }`}
+            >
+              <LayoutGrid size={15} />
+              Browse diagrams
+            </Link>
+          </nav>
+
+          <h2 className="border-y-2 border-edge bg-bone px-4 py-2.5 font-mono text-[12.5px] font-semibold text-ink">
             Filters
           </h2>
-          <div className="p-4">
-            <h3 className="text-[12px] font-semibold text-ink-soft">What it shows</h3>
-            <div className="mt-1">
-              {FAMILIES.map((family) => (
-                <Check
-                  key={family}
-                  label={family}
-                  count={ALL_DIAGRAMS.filter((k) => k.family === family).length}
-                  checked={families.includes(family)}
-                  onChange={() => toggle(families, setFamilies, family)}
-                />
-              ))}
-            </div>
+          {view === "browse" ? (
+            <div className="p-4">
+              <h3 className="text-[12px] font-semibold text-ink-soft">What it shows</h3>
+              <div className="mt-1">
+                {FAMILIES.map((family) => (
+                  <Check
+                    key={family}
+                    label={family}
+                    count={ALL_DIAGRAMS.filter((k) => k.family === family).length}
+                    checked={families.includes(family)}
+                    onChange={() => toggle(families, setFamilies, family)}
+                  />
+                ))}
+              </div>
 
-            <h3 className="mt-5 text-[12px] font-semibold text-ink-soft">
-              Availability
-            </h3>
-            <div className="mt-1">
-              {STATUSES.map((status) => (
-                <Check
-                  key={status}
-                  label={status}
-                  count={ALL_DIAGRAMS.filter((k) => statusOf(k) === status).length}
-                  checked={statuses.includes(status)}
-                  onChange={() => toggle(statuses, setStatuses, status)}
-                />
-              ))}
+              <h3 className="mt-5 text-[12px] font-semibold text-ink-soft">
+                Availability
+              </h3>
+              <div className="mt-1">
+                {STATUSES.map((status) => (
+                  <Check
+                    key={status}
+                    label={status}
+                    count={ALL_DIAGRAMS.filter((k) => statusOf(k) === status).length}
+                    checked={statuses.includes(status)}
+                    onChange={() => toggle(statuses, setStatuses, status)}
+                  />
+                ))}
+              </div>
             </div>
-          </div>
+          ) : (
+            <p className="p-4 text-[12.5px] leading-relaxed text-ink-soft">
+              Search by saved title or notation. Only diagrams owned by your account appear.
+            </p>
+          )}
         </div>
 
         <p className="mt-4 text-[12.5px] leading-relaxed text-ink-soft">
-          More notations land here as they are built. Nothing is behind an
-          account.
+          {view === "mine"
+            ? "Open a saved diagram to continue with its source, settings and canvas edits."
+            : "More notations land here as they are built. Browsing never needs an account."}
         </p>
       </aside>
 
@@ -201,17 +242,29 @@ export default function Catalog() {
               type="search"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search notations, shapes, keywords"
-              aria-label="Search notations"
+              placeholder={
+                view === "mine"
+                  ? "Search your diagrams"
+                  : "Search notations, shapes, keywords"
+              }
+              aria-label={view === "mine" ? "Search your diagrams" : "Search notations"}
               className="w-full bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-faint"
             />
           </div>
-          <p className="slab-tight bg-bone px-3 py-2 font-mono text-[12px] text-ink">
-            {results.length} of {ALL_DIAGRAMS.length} notations
-          </p>
+          {view === "browse" ? (
+            <p className="slab-tight bg-bone px-3 py-2 font-mono text-[12px] text-ink">
+              {results.length} of {ALL_DIAGRAMS.length} notations
+            </p>
+          ) : (
+            <p className="slab-tight bg-bone px-3 py-2 font-mono text-[12px] text-ink">
+              Private to your account
+            </p>
+          )}
         </div>
 
-        {results.length === 0 ? (
+        {view === "mine" ? (
+          <MyDiagrams query={query} />
+        ) : results.length === 0 ? (
           <p className="slab mt-6 bg-white p-6 text-[13.5px] text-ink-soft">
             Nothing matches that. Clear the search, or switch a filter back on.
           </p>

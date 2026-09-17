@@ -6,6 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CaptureUpdateAction, Excalidraw } from "@excalidraw/excalidraw";
 import type {
   AppState,
+  BinaryFiles,
   ExcalidrawImperativeAPI,
 } from "@excalidraw/excalidraw/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
@@ -53,6 +54,7 @@ import CanvasTools from "@/components/editor/canvas-tools";
 interface CanvasProps {
   /** first drawing, seeded once; afterwards the sheet is the reader's */
   initialElements: ExcalidrawElement[];
+  initialFiles: BinaryFiles;
   category: DiagramCategory;
   /** the shape being dragged in from the palette, drawn under the pointer */
   dragging: PaletteItem | null;
@@ -120,6 +122,7 @@ const RAIL_TOOLS = new Set<string>([
 
 export default function Canvas({
   initialElements,
+  initialFiles,
   category,
   dragging,
   connectorStyle,
@@ -145,6 +148,7 @@ export default function Canvas({
   const apiRef = useRef<ExcalidrawImperativeAPI | null>(null);
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [seeded] = useState(() => initialElements);
+  const [seededFiles] = useState(() => initialFiles);
   const [pools, setPools] = useState<PoolBox[]>([]);
   const [empty, setEmpty] = useState(false);
   const [view, setView] = useState<CanvasView>(NO_VIEW);
@@ -501,6 +505,7 @@ export default function Canvas({
         }}
         initialData={{
           elements: seeded,
+          files: seededFiles,
           scrollToContent: true,
           appState: {
             viewBackgroundColor: "#ffffff",

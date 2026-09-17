@@ -13,6 +13,8 @@ import { refuses, systemPrompt, unfence } from "../lib/ai/chat";
 import { avatarProblem, otpType, readProfile, safeNext } from "../lib/auth";
 import { customInk, inkFor, washFor } from "../lib/ink";
 import { styleFor } from "../lib/sheet";
+import { diagramTitle, readSavedDiagram } from "../lib/saved-diagrams";
+import type { Json } from "../lib/supabase/database.types";
 import {
   FLOWCHART_TEMPLATE,
   BPMN_TEMPLATE,
@@ -726,6 +728,45 @@ assert.ok("error" in readProfile(profileForm({ bio: "x".repeat(281) })), "a bio 
 assert.equal(avatarProblem({ type: "image/webp", size: 30_000 }), null);
 assert.ok(avatarProblem({ type: "image/gif", size: 30_000 }), "a picture is PNG, JPEG or WebP");
 assert.ok(avatarProblem({ type: "image/png", size: 2_000_000 }), "and small enough to send");
+
+const savedValue = {
+  version: 1,
+  category: "flow",
+  source: FLOWCHART_TEMPLATE,
+  direction: "down",
+  ink: customInk("#123456"),
+  style: "formal",
+  scene: { elements: [], files: {} },
+};
+const savedDocument = JSON.parse(JSON.stringify(savedValue)) as Json;
+assert.ok(readSavedDiagram(savedDocument, "flow"), "a complete saved diagram can be reopened");
+assert.equal(
+  readSavedDiagram(
+    JSON.parse(JSON.stringify({ ...savedValue, category: "bpmn" })) as Json,
+    "bpmn",
+  ),
+  null,
+  "saved metadata cannot claim another notation than its source",
+);
+const withoutFiles = readSavedDiagram(
+  JSON.parse(JSON.stringify({ ...savedValue, scene: { elements: [] } })) as Json,
+  "flow",
+);
+assert.ok(withoutFiles, "Excalidraw may omit the file map when a scene has no images");
+assert.deepEqual(
+  (withoutFiles.scene as { files?: Json }).files,
+  {},
+  "a missing image file map is restored as an empty map",
+);
+assert.equal(
+  readSavedDiagram(
+    JSON.parse(JSON.stringify({ ...savedValue, scene: { elements: [], files: null } })) as Json,
+    "flow",
+  ),
+  null,
+  "a malformed image file map is refused",
+);
+assert.equal(Array.from(diagramTitle(` ${"x".repeat(140)} `)).length, 120);
 
 checkPdf().then(() => {
   console.log("editor self-check: all assertions passed");
