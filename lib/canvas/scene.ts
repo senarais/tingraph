@@ -730,6 +730,7 @@ export function syncConnectors(
 
 export interface PoolBox {
   unit: string;
+  label: string;
   x: number;
   y: number;
   width: number;
@@ -739,12 +740,19 @@ export interface PoolBox {
   /** width of the header band its lanes use */
   laneBand: number;
   /** horizontal bands inside the pool, top to bottom */
-  lanes: Array<{ top: number; bottom: number }>;
+  lanes: Array<{ unit: string | null; label: string; top: number; bottom: number }>;
 }
 
 /** Every pool currently on the sheet, top to bottom. */
 export function poolBoxes(elements: Elements): PoolBox[] {
   const boxes: PoolBox[] = [];
+  const captions = new Map<string, string>();
+  for (const element of elements) {
+    const mark = element.isDeleted ? null : unitOf(element);
+    if (mark && element.type === "text" && (mark.kind === "pool" || mark.kind === "lane")) {
+      captions.set(mark.unit, (element.originalText ?? element.text ?? "").trim());
+    }
+  }
   for (const element of elements) {
     const mark = element.isDeleted ? null : unitOf(element);
     if (!mark || mark.kind !== "pool" || !mark.core || element.type !== "rectangle") {
@@ -752,6 +760,7 @@ export function poolBoxes(elements: Elements): PoolBox[] {
     }
     boxes.push({
       unit: mark.unit,
+      label: captions.get(mark.unit) ?? "",
       x: element.x,
       y: element.y,
       width: element.width,
@@ -780,10 +789,33 @@ export function poolBoxes(elements: Elements): PoolBox[] {
       cuts.push(element.y);
     }
     const ordered = [...new Set(cuts.map(Math.round))].sort((a, b) => a - b);
-    pool.lanes = ordered.slice(0, -1).map((top, index) => ({
-      top,
-      bottom: ordered[index + 1],
-    }));
+    const lanePieces = new Map<string, ExcalidrawElement[]>();
+    for (const element of elements) {
+      const mark = element.isDeleted ? null : unitOf(element);
+      if (
+        !mark ||
+        mark.kind !== "lane" ||
+        (mark.parent ?? parents.get(mark.unit)) !== pool.unit
+      ) {
+        continue;
+      }
+      const pieces = lanePieces.get(mark.unit) ?? [];
+      pieces.push(element);
+      lanePieces.set(mark.unit, pieces);
+    }
+    pool.lanes = ordered.slice(0, -1).map((top, index) => {
+      const bottom = ordered[index + 1];
+      const owner = [...lanePieces].find(([, pieces]) =>
+        pieces.some((piece) => {
+          if (piece.type === "line" && piece.height <= 1) {
+            return Math.abs(piece.y - top) <= 1;
+          }
+          const middle = piece.y + piece.height / 2;
+          return middle >= top - 1 && middle <= bottom + 1;
+        }),
+      )?.[0] ?? null;
+      return { unit: owner, label: owner ? captions.get(owner) ?? "" : "", top, bottom };
+    });
   }
   return boxes.sort((a, b) => a.y - b.y);
 }
@@ -922,23 +954,56 @@ export function addPoolBelow(
 ): ExcalidrawElement[] {
   const bottom = pool.y + pool.height;
   const height = MIN_LANE_HEIGHT;
+  const id = freshId();
+  const band = pool.laneBand || BPMN_HEADER_WIDTH;
   const added = place(
     buildPoolSkeletons(
       {
-        id: freshId(),
+        id,
         label: `Pool ${poolBoxes(elements).length + 1}`,
         x: pool.x,
         y: bottom + POOL_GAP,
         width: pool.width,
         height,
         headerWidth: pool.band || BPMN_HEADER_WIDTH,
-        lanes: [],
+        lanes: [
+          {
+            id: freshId(),
+            label: "Lane 1",
+            x: pool.x + (pool.band || BPMN_HEADER_WIDTH),
+            y: bottom + POOL_GAP,
+            width: pool.width - (pool.band || BPMN_HEADER_WIDTH),
+            height,
+            headerWidth: band,
+            poolId: id,
+          },
+        ],
       },
       ink,
       style,
     ),
   );
   return [...shiftBelow(elements, bottom, POOL_GAP + height), ...added];
+}
+
+/** Renames the caption carried by a BPMN pool or lane. */
+export function renamePoolPart(
+  elements: Elements,
+  unit: string,
+  label: string,
+): ExcalidrawElement[] {
+  return elements.map((element) => {
+    const mark = element.isDeleted ? null : unitOf(element);
+    if (
+      !mark ||
+      mark.unit !== unit ||
+      (mark.kind !== "pool" && mark.kind !== "lane") ||
+      element.type !== "text"
+    ) {
+      return element;
+    }
+    return newElementWith(element, { text: label, originalText: label } as never);
+  });
 }
 
 /** A new lane along the bottom of `pool`, growing the pool to hold it. */

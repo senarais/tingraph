@@ -33,10 +33,15 @@ import {
 } from "@/lib/palette";
 import { applyStyle, reink, restyle, type StylePatch } from "@/lib/canvas/restyle";
 import {
+  addLane,
+  addPoolBelow,
   newFigure,
   redrawFigure,
   labelLink,
+  removeLane,
+  removePool,
   removeUnits,
+  renamePoolPart,
   writeLink,
   type FigureOnSheet,
 } from "@/lib/canvas/scene";
@@ -682,6 +687,7 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
                 elements={parts.elements}
                 links={parts.links}
                 frames={parts.frames}
+                pools={parts.pools}
                 onSelect={selectUnit}
                 onChange={changeElement}
                 onAdd={(type) => placeShape(type, centre())}
@@ -723,6 +729,19 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
                 }
                 onRenameLane={(unit, label) =>
                   edit((elements) => renameFrame(elements, unit, label))
+                }
+                onRenamePoolPart={(unit, label) =>
+                  edit((elements) => renamePoolPart(elements, unit, label))
+                }
+                onAddPool={(pool) =>
+                  edit((elements) => addPoolBelow(elements, pool, ink, style))
+                }
+                onRemovePool={(pool) => edit((elements) => removePool(elements, pool))}
+                onAddPoolLane={(pool) =>
+                  edit((elements) => addLane(elements, pool, ink, style))
+                }
+                onRemovePoolLane={(pool) =>
+                  edit((elements) => removeLane(elements, pool))
                 }
               />
             )}

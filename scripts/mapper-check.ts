@@ -110,6 +110,11 @@ assert.equal(taskRoundness?.value, 10, "task rx 10");
 const taskLabel = (bpmnS.get("A1")?.label as { text?: string; fontSize?: number } | undefined);
 assert.equal(taskLabel?.text, "Fill vacation form", "task label bound");
 assert.equal(taskLabel?.fontSize, 12, "task label 12px");
+assert.equal(
+  unitOf(bpmnS.get("A1") as never)?.spec?.label,
+  "Fill vacation form",
+  "the BPMN menu can read and rewrite the task spec",
+);
 
 // send task: filled envelope marker
 const sendIcons = all.filter((s) => String(s.id ?? "").startsWith("A2-send"));
@@ -132,6 +137,7 @@ assert.ok(s1Label && s1Label.text === "Submit request", "event external label");
 
 // data object: folded-corner outline via DATA_OBJECT_PATH
 const dataLines = all.filter((s) => String(s.id ?? "").startsWith("D1-doc"));
+assert.equal(unitOf(bpmnS.get("D1") as never)?.spec?.type, "data", "data appears in the BPMN menu");
 assert.ok(dataLines.length >= 1, "data object outline");
 assert.equal(dataLines[0].type, "line");
 assert.equal(dataLines[0].strokeWidth, 2, "data object 2px");

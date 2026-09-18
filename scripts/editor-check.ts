@@ -114,6 +114,7 @@ for (const piece of soft) {
 {
   const pool: PoolBox = {
     unit: "pool-R",
+    label: "Pool",
     x: 0,
     y: 0,
     width: 600,
@@ -121,8 +122,8 @@ for (const piece of soft) {
     band: 30,
     laneBand: 24,
     lanes: [
-      { top: 0, bottom: 100 },
-      { top: 100, bottom: 200 },
+      { unit: "lane-A", label: "A", top: 0, bottom: 100 },
+      { unit: "lane-B", label: "B", top: 100, bottom: 200 },
     ],
   };
   const pieces = [
@@ -134,12 +135,14 @@ for (const piece of soft) {
     }),
     fake("text", { unit: pool.unit, kind: "pool", core: true }, {
       id: "pool-name", x: 10, y: 90, width: 20, height: 20,
+      text: "Request", originalText: "Request",
     }),
     fake("line", { unit: "lane-A", kind: "lane", parent: pool.unit }, {
       id: "a-rule", x: 54, y: 0, width: 0, height: 100,
     }),
     fake("text", { unit: "lane-A", kind: "lane", parent: pool.unit, core: true }, {
       id: "a-name", x: 35, y: 40, width: 20, height: 20,
+      text: "Employee", originalText: "Employee",
     }),
     fake("line", { unit: "lane-B", kind: "lane", parent: pool.unit }, {
       id: "split", x: 30, y: 100, width: 570, height: 0,
@@ -149,9 +152,23 @@ for (const piece of soft) {
     }),
     fake("text", { unit: "lane-B", kind: "lane", parent: pool.unit, core: true }, {
       id: "b-name", x: 35, y: 140, width: 20, height: 20,
+      text: "Manager", originalText: "Manager",
     }),
     fake("rectangle", undefined, { id: "below", x: 0, y: 260, width: 40, height: 40 }),
   ];
+  const described = scene.poolBoxes(pieces)[0];
+  assert.equal(described.label, "Request", "the BPMN panel reads the pool name");
+  assert.deepEqual(
+    described.lanes.map((lane) => lane.label),
+    ["Employee", "Manager"],
+    "and reads every lane name in order",
+  );
+  const renamed = scene.renamePoolPart(pieces, "lane-A", "Operations");
+  assert.equal(
+    (renamed.find((element) => element.id === "a-name") as { text?: string }).text,
+    "Operations",
+    "a lane name can be rewritten without opening its group",
+  );
   const traded = resizePoolLane(pieces, pool, 0, 130);
   const find = (all: ExcalidrawElement[], id: string) => all.find((element) => element.id === id)!;
   assert.equal(find(traded, "body").height, 200, "an internal divider keeps pool height");
@@ -637,6 +654,7 @@ async function checkPdf(): Promise<void> {
 {
   const pool: PoolBox = {
     unit: "pool-P1",
+    label: "Pool",
     x: 0,
     y: 0,
     width: 600,
@@ -644,8 +662,8 @@ async function checkPdf(): Promise<void> {
     band: 30,
     laneBand: 24,
     lanes: [
-      { top: 0, bottom: 100 },
-      { top: 100, bottom: 200 },
+      { unit: "lane-L1", label: "Lane 1", top: 0, bottom: 100 },
+      { unit: "lane-L2", label: "Lane 2", top: 100, bottom: 200 },
     ],
   };
   const body = fake(
@@ -749,10 +767,10 @@ async function checkPdf(): Promise<void> {
 
 {
   // the panel is offered to exactly the notations whose elements carry a spec
-  for (const category of ["usecase", "activity", "erd"] as DiagramCategory[]) {
+  for (const category of ["bpmn", "usecase", "activity", "erd"] as DiagramCategory[]) {
     assert.ok(isSettable(category), `${category} is set from a panel`);
   }
-  for (const category of ["flow", "bpmn", "org", "bar", "mind"] as DiagramCategory[]) {
+  for (const category of ["flow", "org", "bar", "mind"] as DiagramCategory[]) {
     assert.equal(isSettable(category), false, `${category} is not`);
   }
 

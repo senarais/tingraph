@@ -1,10 +1,12 @@
 "use client";
 
-import { Columns3, SquareDashed, Table2, type LucideIcon } from "lucide-react";
+import { Columns3, Rows3, SquareDashed, Table2, type LucideIcon } from "lucide-react";
 import type { ElementOnSheet, LinkOnSheet } from "@/lib/canvas/elements";
 import type { LinkMark } from "@/lib/canvas/units";
 import type { DiagramCategory, DSLNode } from "@/lib/types";
 import type { FrameBox } from "@/lib/canvas/frames";
+import type { PoolBox } from "@/lib/canvas/scene";
+import BpmnDrawer from "@/components/editor/bpmn-drawer";
 import ErdDrawer from "@/components/editor/erd-drawer";
 import UseCaseDrawer from "@/components/editor/usecase-drawer";
 import ActivityDrawer from "@/components/editor/activity-drawer";
@@ -25,6 +27,11 @@ export interface ElementPanel {
 }
 
 const PANELS: Partial<Record<DiagramCategory, ElementPanel>> = {
+  bpmn: {
+    label: "Pools & lanes",
+    hint: "Every participant pool and the lanes inside it",
+    icon: Rows3,
+  },
   erd: {
     label: "Tables",
     hint: "Every table, its columns and its relations",
@@ -54,6 +61,8 @@ export interface ElementDrawerProps {
   links: LinkOnSheet[];
   /** the chrome a notation draws round its elements */
   frames: FrameBox[];
+  /** BPMN participant pools and their ordered lane bands */
+  pools: PoolBox[];
   /** picks one element on the sheet, so its own handles come out with it */
   onSelect: (unit: string) => void;
   onChange: (unit: string, spec: DSLNode) => void;
@@ -68,10 +77,17 @@ export interface ElementDrawerProps {
   onAddLane: (frame: FrameBox) => void;
   onRemoveLane: (frame: FrameBox) => void;
   onRenameLane: (unit: string, label: string) => void;
+  onRenamePoolPart: (unit: string, label: string) => void;
+  onAddPool: (pool: PoolBox) => void;
+  onRemovePool: (pool: PoolBox) => void;
+  onAddPoolLane: (pool: PoolBox) => void;
+  onRemovePoolLane: (pool: PoolBox) => void;
 }
 
 export default function ElementDrawer(props: ElementDrawerProps) {
   switch (props.category) {
+    case "bpmn":
+      return <BpmnDrawer {...props} />;
     case "erd":
       return (
         <ErdDrawer

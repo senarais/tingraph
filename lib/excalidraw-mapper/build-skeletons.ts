@@ -191,6 +191,21 @@ export function bpmnNodeSkeletons(
 
   if (node.type === "data") {
     // data object reference: folded-corner document outline (bpmn-js path)
+    // An invisible carrier gives the semantic panel one stable box to rewrite;
+    // the visible outline is several lines and none spans the whole object.
+    skeletons.push({
+      type: "rectangle",
+      id: node.id,
+      x: node.x,
+      y: node.y,
+      width: node.width,
+      height: node.height,
+      ...base,
+      strokeColor: "transparent",
+      backgroundColor: "transparent",
+      strokeWidth: 1,
+      roughness: 0,
+    } as ExcalidrawElementSkeleton);
     skeletons.push(
       ...asPart(
         buildDataObjectOutline(node, {

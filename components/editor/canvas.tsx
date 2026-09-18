@@ -94,6 +94,7 @@ export interface SheetParts {
   elements: ElementOnSheet[];
   links: LinkOnSheet[];
   frames: FrameBox[];
+  pools: PoolBox[];
   /** the element the reader has hold of, when exactly one is held */
   held: string | null;
 }
@@ -102,6 +103,7 @@ export const NO_PARTS: SheetParts = {
   elements: [],
   links: [],
   frames: [],
+  pools: [],
   held: null,
 };
 
@@ -370,6 +372,7 @@ export default function Canvas({
       // --- what a settable notation's panel and handles are looking at: the
       // elements that carry a spec, the connectors between them, and the
       // frames drawn round them, all read straight off the sheet
+      const boxes = poolBoxes(scene);
       if (isSettable(rulesRef.current.category)) {
         const mine = elementsOn(scene);
         const heldUnits = new Set(
@@ -382,6 +385,7 @@ export default function Canvas({
             rulesRef.current.category === "activity"
               ? partitionFrames(scene)
               : frameBoxes(scene),
+          pools: rulesRef.current.category === "bpmn" ? boxes : [],
           held:
             heldUnits.size === 1
               ? (mine.find((entry) => heldUnits.has(entry.unit))?.unit ?? null)
@@ -390,6 +394,7 @@ export default function Canvas({
         const stamp = JSON.stringify(next.elements.map((e) => [e.unit, e.spec, e.box]))
           + JSON.stringify(next.links)
           + JSON.stringify(next.frames)
+          + JSON.stringify(next.pools)
           + next.held;
         if (stamp !== partsRef.current) {
           partsRef.current = stamp;
@@ -429,7 +434,6 @@ export default function Canvas({
         requestAnimationFrame(fit);
       }
 
-      const boxes = poolBoxes(scene);
       const overlay =
         boxes
           .map(

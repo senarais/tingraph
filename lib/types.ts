@@ -184,16 +184,15 @@ export function isGraph(category: DiagramCategory): category is GraphCategory {
 /**
  * The graphs whose elements are set from a panel as well as drawn.
  *
- * A flowchart, a BPMN sheet and an org chart are a bag of boxes: what an
- * element *is* can be read straight off the drawing, so the sheet is the whole
- * record and a panel would only repeat it. These three are not. A use case
- * stands inside a boundary, an action stands in a partition, and an ERD table
- * has columns with keys — structure the reader cannot place by hand. Each of
- * their elements therefore carries its own spec on the sheet
+ * A flowchart and an org chart are a bag of boxes: what an element *is* can be
+ * read straight off the drawing, so the sheet is the whole record. These four
+ * are not. BPMN has pools and typed events/tasks, a use case stands inside a
+ * boundary, an action stands in a partition, and an ERD table has keyed
+ * columns. Each of their elements therefore carries its own spec on the sheet
  * (`UnitMark.spec`), which the panel reads and rewrites the way a figure's
  * panel reads and rewrites its one spec.
  */
-export const SETTABLE_CATEGORIES = ["usecase", "activity", "erd"] as const;
+export const SETTABLE_CATEGORIES = ["bpmn", "usecase", "activity", "erd"] as const;
 
 export type SettableCategory = (typeof SETTABLE_CATEGORIES)[number];
 
