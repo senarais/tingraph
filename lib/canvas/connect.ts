@@ -311,7 +311,9 @@ export function routeBetween(from: Box, to: Box, options: RouteOptions): Point[]
   if (UPRIGHT[toSide] !== upright) {
     // the two ends leave on different axes: one turn is enough when both legs
     // run the way their own side faces
-    const corner = at(along(a), across(b));
+    // Keep both ends normal to their sides. Swapping these coordinates makes
+    // the last leg run along the target edge, so its arrowhead points sideways.
+    const corner = at(along(b), across(a));
     const legOk = Math.sign(along(b) - along(a)) === out || near(along(a), along(b));
     const meetOk =
       Math.sign(across(a) - across(b)) === AWAY[toSide] || near(across(a), across(b));
@@ -469,6 +471,8 @@ export function asElement(points: readonly Point[]): {
  */
 export const RECUT = "recut";
 
+const ROUTE_VERSION = "r2";
+
 const box = (b: Box) =>
   `${Math.round(b.x)},${Math.round(b.y)},${Math.round(b.width)},${Math.round(b.height)}`;
 
@@ -490,9 +494,14 @@ export function linkSignature(
     fromAt?: number;
     toAt?: number;
   },
-  origin: { x: number; y: number },
+  origin: {
+    x: number;
+    y: number;
+    points?: ReadonlyArray<readonly [number, number]>;
+  },
 ): string {
   return [
+    ROUTE_VERSION,
     box(from),
     box(to),
     link.from.side ?? "",
@@ -501,5 +510,6 @@ export function linkSignature(
     link.fromAt ?? "",
     link.toAt ?? "",
     `${Math.round(origin.x)},${Math.round(origin.y)}`,
+    origin.points?.map(([x, y]) => `${Math.round(x)},${Math.round(y)}`).join(";") ?? "",
   ].join("|");
 }

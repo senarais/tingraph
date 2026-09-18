@@ -6,6 +6,10 @@ import {
   unfence,
   type AiReply,
 } from "@/lib/ai/chat";
+import {
+  attachmentProblem,
+  attachmentsProblem,
+} from "@/lib/ai/attachments";
 import { TEMPLATES } from "@/lib/templates";
 import { DiagramCategory, LayoutDirection } from "@/lib/types";
 
@@ -29,6 +33,7 @@ import { DiagramCategory, LayoutDirection } from "@/lib/types";
  */
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+export const runtime = "nodejs";
 
 /** How much conversation is carried back, and how much of one message. */
 const TURNS = 8;
@@ -38,6 +43,11 @@ interface Turn {
   role: "you" | "ai";
   text: string;
   source?: string;
+}
+
+interface Attachment {
+  mimeType: string;
+  data: string;
 }
 
 interface Ask {
@@ -85,8 +95,8 @@ function readAsk(body: unknown): Ask | null {
  * model's is given back as the JSON object it actually emitted, so a diagram
  * it wrote but the reader has not drawn yet is still there to be changed.
  */
-function contents(turns: Turn[]) {
-  return turns.map((turn) => ({
+function contents(turns: Turn[], attachments: Attachment[]) {
+  return turns.map((turn, index) => ({
     role: turn.role === "ai" ? "model" : "user",
     parts: [
       {
@@ -95,14 +105,23 @@ function contents(turns: Turn[]) {
             ? JSON.stringify({ message: turn.text, source: turn.source ?? "" })
             : turn.text,
       },
+      ...(turn.role === "you" && index === turns.length - 1
+        ? attachments.map((attachment) => ({ inlineData: attachment }))
+        : []),
     ],
   }));
 }
 
-type Part = { text?: string };
+type Part = { text?: string; inlineData?: Attachment };
 type Reply = {
   candidates?: Array<{ content?: { parts?: Part[] }; finishReason?: string }>;
   error?: { message?: string };
+  usageMetadata?: {
+    promptTokenCount?: number;
+    candidatesTokenCount?: number;
+    thoughtsTokenCount?: number;
+    totalTokenCount?: number;
+  };
 };
 
 /** One call. Throws with something worth showing the reader when it fails. */
@@ -110,6 +129,7 @@ async function ask(
   key: string,
   system: string,
   body: ReturnType<typeof contents>,
+  attempt: "initial" | "retry",
 ): Promise<AiReply> {
   const response = await fetch(ENDPOINT, {
     method: "POST",
@@ -119,7 +139,7 @@ async function ask(
       contents: body,
       generationConfig: {
         temperature: 0.4,
-        maxOutputTokens: 4096,
+        maxOutputTokens: 1000,
         responseMimeType: "application/json",
         responseSchema: REPLY_SCHEMA,
       },
@@ -127,6 +147,17 @@ async function ask(
   });
 
   const json = (await response.json().catch(() => null)) as Reply | null;
+  console.info(
+    `Tingraph AI token usage ${JSON.stringify({
+      model: MODEL,
+      attempt,
+      status: response.status,
+      inputTokens: json?.usageMetadata?.promptTokenCount ?? null,
+      outputTokens: json?.usageMetadata?.candidatesTokenCount ?? null,
+      thoughtTokens: json?.usageMetadata?.thoughtsTokenCount ?? null,
+      totalTokens: json?.usageMetadata?.totalTokenCount ?? null,
+    })}`,
+  );
   if (!response.ok) {
     throw new Error(json?.error?.message ?? `Gemini answered ${response.status}.`);
   }
@@ -143,6 +174,33 @@ async function ask(
   };
 }
 
+/** Converts browser-uploaded files only after their type and size are bounded. */
+async function readAttachments(form: FormData): Promise<Attachment[] | null> {
+  const files = form.getAll("attachments");
+  let totalBytes = 0;
+  const attachments: Attachment[] = [];
+
+  for (const entry of files) {
+    if (!(entry instanceof File)) {
+      return null;
+    }
+    const mimeType = entry.type.toLowerCase();
+    if (attachmentProblem(mimeType, entry.size)) {
+      return null;
+    }
+    totalBytes += entry.size;
+    if (attachmentsProblem(files.length, totalBytes)) {
+      return null;
+    }
+    attachments.push({
+      mimeType,
+      data: Buffer.from(await entry.arrayBuffer()).toString("base64"),
+    });
+  }
+
+  return attachments;
+}
+
 export async function POST(request: Request) {
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
@@ -153,17 +211,28 @@ export async function POST(request: Request) {
     );
   }
 
-  const input = readAsk(await request.json().catch(() => null));
-  if (!input) {
+  const form = await request.formData().catch(() => null);
+  const askField = form?.get("ask");
+  let body: unknown = null;
+  if (typeof askField === "string") {
+    try {
+      body = JSON.parse(askField);
+    } catch {
+      // malformed multipart fields are a bad request, not a route failure
+    }
+  }
+  const input = readAsk(body);
+  const attachments = form ? await readAttachments(form).catch(() => null) : null;
+  if (!input || !attachments) {
     return say("That message did not come through. Try sending it again.", "", 400);
   }
 
   const system = systemPrompt(input.category, input.code);
-  const turns = contents(input.turns);
+  const turns = contents(input.turns, attachments);
 
   let reply: AiReply;
   try {
-    reply = await ask(key, system, turns);
+    reply = await ask(key, system, turns, "initial");
   } catch (cause) {
     return say(
       `Tingraph AI could not answer: ${cause instanceof Error ? cause.message : String(cause)}`,
@@ -181,11 +250,16 @@ export async function POST(request: Request) {
   let complaint = refuses(reply.source, input.direction);
   if (complaint) {
     try {
-      const second = await ask(key, system, [
-        ...turns,
-        { role: "model", parts: [{ text: JSON.stringify(reply) }] },
-        { role: "user", parts: [{ text: retryPrompt(reply.source, complaint) }] },
-      ]);
+      const second = await ask(
+        key,
+        system,
+        [
+          ...turns,
+          { role: "model", parts: [{ text: JSON.stringify(reply) }] },
+          { role: "user", parts: [{ text: retryPrompt(reply.source, complaint) }] },
+        ],
+        "retry",
+      );
       complaint = second.source ? refuses(second.source, input.direction) : "nothing came back";
       if (!complaint) {
         return say(second.message || reply.message, second.source);

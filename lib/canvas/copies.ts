@@ -26,6 +26,8 @@ interface Piece {
 export interface CopyPatch {
   unit: string;
   groupIds: string[];
+  /** renamed outer pool/frame, or null when that container was not copied */
+  parent?: string | null;
   /** the re-tied connector, or null when it came away without its elements */
   link?: LinkMark | null;
 }
@@ -56,11 +58,21 @@ export function renameCopies(
   const patches = new Map<string, CopyPatch>();
   for (const [piece, mark] of copies) {
     const unit = renamed.get(mark!.unit) as string;
+    const parent = mark!.parent ? renamed.get(mark!.parent) : undefined;
     const patch: CopyPatch = {
       unit,
-      // the innermost group is the element's own, which the repair keeps
-      // first; a group the reader drew around it is Excalidraw's to copy
-      groupIds: piece.groupIds.map((id, index) => (index === 0 ? unit : id)),
+      // Tingraph's nested groups are renamed together. Groups the reader drew
+      // around them are Excalidraw's to copy and therefore stay untouched.
+      groupIds: piece.groupIds.flatMap((id, index) => {
+        if (index === 0) {
+          return [unit];
+        }
+        if (index === 1 && mark!.parent) {
+          return parent ? [parent] : [];
+        }
+        return [id];
+      }),
+      ...(mark!.parent ? { parent: parent ?? null } : {}),
     };
     if (mark!.link) {
       const from = renamed.get(mark!.link.from.unit);

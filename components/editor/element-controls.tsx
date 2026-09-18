@@ -26,8 +26,10 @@ interface ElementControlsProps {
   onChange: (unit: string, spec: DSLNode) => void;
   onRenameFrame: (unit: string, label: string) => void;
   onRemoveFrame: (frame: FrameBox) => void;
+  onAddFrame: (frame: FrameBox) => void;
   onAddLane: (frame: FrameBox) => void;
   onRemoveLane: (frame: FrameBox) => void;
+  onResizeLane: (unit: string, boundary: number, at: number, settled: boolean) => void;
 }
 
 export default function ElementControls({
@@ -41,8 +43,10 @@ export default function ElementControls({
   onChange,
   onRenameFrame,
   onRemoveFrame,
+  onAddFrame,
   onAddLane,
   onRemoveLane,
+  onResizeLane,
 }: ElementControlsProps) {
   if (category === "erd") {
     return (
@@ -64,8 +68,10 @@ export default function ElementControls({
         view={view}
         onRename={onRenameFrame}
         onRemove={onRemoveFrame}
+        onAddFrame={onAddFrame}
         onAddLane={onAddLane}
         onRemoveLane={onRemoveLane}
+        onResizeLane={onResizeLane}
       />
     );
   }

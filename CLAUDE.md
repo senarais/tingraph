@@ -128,6 +128,9 @@ has to guess where one ends and the other begins.
 - The key is read once, server-side, from `GEMINI_API_KEY`. Put it in
   `.env.local` (gitignored) and restart the dev server. Without it the panel
   says so rather than failing silently.
+- Every Gemini call logs its input, output, thought and total token counts on
+  the server as `Tingraph AI token usage`, tagged `initial` or `retry`. Prompt
+  text and the API key are never logged.
 
 ## The canvas is a renderer, not an interface
 

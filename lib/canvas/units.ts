@@ -51,6 +51,8 @@ export interface UnitMark {
   /** group id shared by every piece of this element */
   unit: string;
   kind: UnitKind;
+  /** lane only: outer pool or activity frame this unit cannot leave */
+  parent?: string;
   /** a piece the reader may pick inside the element (the caption carrier) */
   core?: true;
   /** a piece filled with the ink's wash, so re-inking can find it by name */

@@ -6,9 +6,11 @@ import { removeUnits } from "@/lib/canvas/scene";
 import type { Ink } from "@/lib/ink";
 import { FORMAL, type SheetStyle } from "@/lib/sheet";
 import {
+  buildActivityFrameSkeletons,
   buildBoundarySkeletons,
   buildColumnSkeletons,
 } from "@/lib/excalidraw-mapper/build-skeletons";
+import { POOL_GAP } from "@/lib/layout/compute-layout";
 import { BOUNDARY_HEAD } from "@/lib/layout/layout-usecase";
 import { ACTIVITY_HEADER } from "@/lib/layout/layout-activity";
 
@@ -52,6 +54,7 @@ export interface FrameBox {
 
 /** The least a partition may be squeezed to, and the width a fresh one takes. */
 export const COLUMN_WIDTH = 190;
+const MIN_COLUMN_WIDTH = 100;
 
 function textOf(element: ExcalidrawElement): string {
   const text = element as unknown as { text?: string; originalText?: string };
@@ -215,6 +218,54 @@ export function addBoundary(
   ];
 }
 
+/** A fresh activity pool below this one, starting with one partition. */
+export function addPartitionFrameBelow(
+  elements: Elements,
+  frame: FrameBox,
+  ink: Ink,
+  style: SheetStyle = FORMAL,
+): ExcalidrawElement[] {
+  const bottom = frame.y + frame.height;
+  const id = freshId();
+  const y = bottom + POOL_GAP;
+  const height = Math.max(240, frame.head + 160);
+  const added = place(
+    buildActivityFrameSkeletons(
+      {
+        id,
+        label: "",
+        x: frame.x,
+        y,
+        width: frame.width,
+        height,
+        headerWidth: 0,
+        headerHeight: frame.head,
+        lanes: [
+          {
+            id: `${id}-1`,
+            label: "Partition 1",
+            x: frame.x,
+            y,
+            width: frame.width,
+            height,
+            headerWidth: 0,
+            headerHeight: frame.head,
+            poolId: id,
+          },
+        ],
+      },
+      ink,
+      style,
+    ),
+  );
+  const shifted = elements.map((element) =>
+    element.isDeleted || element.y < bottom
+      ? element
+      : newElementWith(element, { y: element.y + POOL_GAP + height }),
+  );
+  return [...shifted, ...added];
+}
+
 /**
  * Takes a frame away and leaves the drawing alone. A boundary says where the
  * system ends; the use cases inside it are elements of their own and have no
@@ -288,6 +339,7 @@ export function addColumn(
           height: frame.height,
           headerWidth: 0,
           headerHeight: frame.head,
+          poolId: frame.unit,
         },
         true,
         ink,
@@ -295,6 +347,64 @@ export function addColumn(
       ),
     ),
   ];
+}
+
+/**
+ * Moves one activity partition boundary. An internal rule trades width between
+ * adjacent partitions; the right edge grows or shrinks the whole frame.
+ */
+export function resizeColumn(
+  elements: Elements,
+  frame: FrameBox,
+  boundary: number,
+  at: number,
+): ExcalidrawElement[] {
+  const left = frame.lanes[boundary];
+  if (!left) {
+    return elements.slice();
+  }
+  const right = frame.lanes[boundary + 1];
+  const old = left.x + left.width;
+  const target = right
+    ? Math.min(
+        Math.max(Math.round(at), left.x + MIN_COLUMN_WIDTH),
+        right.x + right.width - MIN_COLUMN_WIDTH,
+      )
+    : Math.max(Math.round(at), left.x + MIN_COLUMN_WIDTH);
+  const delta = target - old;
+  if (delta === 0) {
+    return elements.slice();
+  }
+
+  const changed = elements.map((element) => {
+    const mark = element.isDeleted ? null : unitOf(element);
+    if (!mark) {
+      return element;
+    }
+    if (!right && mark.unit === frame.unit) {
+      if (element.type === "rectangle") {
+        return newElementWith(element, { width: element.width + delta });
+      }
+      if (element.type === "line") {
+        return newElementWith(element, {
+          width: element.width + delta,
+          points: [[0, 0], [element.width + delta, 0]] as never,
+        });
+      }
+      return newElementWith(element, { x: element.x + delta / 2 });
+    }
+    if (mark.kind !== "lane") {
+      return element;
+    }
+    if (element.type === "text" && (mark.unit === left.unit || mark.unit === right?.unit)) {
+      return newElementWith(element, { x: element.x + delta / 2 });
+    }
+    if (right && element.type === "line" && mark.unit === right.unit) {
+      return newElementWith(element, { x: element.x + delta });
+    }
+    return element;
+  });
+  return right ? changed : shiftRight(changed, frame.x + frame.width, delta);
 }
 
 /**

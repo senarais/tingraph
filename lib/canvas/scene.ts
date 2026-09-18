@@ -53,37 +53,118 @@ export interface SceneFix {
 interface Unit {
   members: ExcalidrawElement[];
   cores: ExcalidrawElement[];
-  /** drawn from a spec, so it is one object and has no inside */
-  figure: boolean;
+  /** outer pool/frame when this unit is a lane */
+  parent?: string;
+  /** one object with no independently movable inside */
+  sealed: boolean;
+}
+
+/**
+ * Finds the pool/frame an older lane is drawn inside. Scenes already open when
+ * nested grouping shipped have no `parent` mark, so they must be upgraded from
+ * their geometry instead of waiting for the reader to regenerate the diagram.
+ */
+function laneParents(elements: Elements): Map<string, string> {
+  const parents = new Map<string, string>();
+  const containers: Array<{ unit: string; x: number; y: number; width: number; height: number }> = [];
+  const lanes = new Map<string, ExcalidrawElement[]>();
+
+  for (const element of elements) {
+    const mark = element.isDeleted ? null : unitOf(element);
+    if (!mark) {
+      continue;
+    }
+    if (
+      mark.core &&
+      (mark.kind === "pool" || mark.kind === "frame") &&
+      element.type === "rectangle"
+    ) {
+      containers.push({
+        unit: mark.unit,
+        x: element.x,
+        y: element.y,
+        width: element.width,
+        height: element.height,
+      });
+    }
+    if (mark.kind === "lane") {
+      if (mark.parent) {
+        parents.set(mark.unit, mark.parent);
+      }
+      const pieces = lanes.get(mark.unit) ?? [];
+      pieces.push(element);
+      lanes.set(mark.unit, pieces);
+    }
+  }
+
+  for (const [unit, pieces] of lanes) {
+    if (parents.has(unit)) {
+      continue;
+    }
+    const fits = containers
+      .filter((box) =>
+        pieces.every((piece) => {
+          const x = piece.x + piece.width / 2;
+          const y = piece.y + piece.height / 2;
+          return (
+            x >= box.x - 2 &&
+            x <= box.x + box.width + 2 &&
+            y >= box.y - 2 &&
+            y <= box.y + box.height + 2
+          );
+        }),
+      )
+      .sort((a, b) => a.width * a.height - b.width * b.height);
+    if (fits[0]) {
+      parents.set(unit, fits[0].unit);
+    }
+  }
+  return parents;
 }
 
 function picked(ids: IdSet): string[] {
   return Object.keys(ids).filter((id) => ids[id]);
 }
 
-function unitIndex(elements: Elements): {
+function unitIndex(elements: Elements, parents: ReadonlyMap<string, string>): {
   units: Map<string, Unit>;
   unitOfId: Map<string, string>;
 } {
   const units = new Map<string, Unit>();
   const unitOfId = new Map<string, string>();
+  const add = (name: string, element: ExcalidrawElement, core: boolean) => {
+    let unit = units.get(name);
+    if (!unit) {
+      unit = { members: [], cores: [], sealed: false };
+      units.set(name, unit);
+    }
+    unit.members.push(element);
+    if (core) {
+      unit.cores.push(element);
+    }
+    return unit;
+  };
   for (const element of elements) {
     const mark = element.isDeleted ? null : unitOf(element);
     if (!mark) {
       continue;
     }
     unitOfId.set(element.id, mark.unit);
-    let unit = units.get(mark.unit);
-    if (!unit) {
-      unit = { members: [], cores: [], figure: false };
-      units.set(mark.unit, unit);
+    const parent = mark.parent ?? parents.get(mark.unit);
+    const unit = add(mark.unit, element, !!mark.core);
+    if (parent) {
+      unit.parent = parent;
     }
-    unit.members.push(element);
-    if (mark.kind === "figure") {
-      unit.figure = true;
+    if (
+      mark.kind === "figure" ||
+      mark.kind === "pool" ||
+      mark.kind === "frame" ||
+      (mark.kind === "lane" && !!parent)
+    ) {
+      unit.sealed = true;
     }
-    if (mark.core) {
-      unit.cores.push(element);
+    if (parent && parent !== mark.unit) {
+      add(parent, element, false);
     }
   }
   return { units, unitOfId };
@@ -110,7 +191,8 @@ export function normalizeUnits(
   elements: Elements,
   state: UnitSelection,
 ): SceneFix | null {
-  const { units, unitOfId } = unitIndex(elements);
+  const parents = laneParents(elements);
+  const { units, unitOfId } = unitIndex(elements, parents);
   if (units.size === 0) {
     return null;
   }
@@ -119,15 +201,35 @@ export function normalizeUnits(
   // --- re-form any group that was taken apart
   let repaired: ExcalidrawElement[] | null = null;
   elements.forEach((element, index) => {
-    const name = element.isDeleted ? undefined : unitOfId.get(element.id);
+    const stored = element.isDeleted ? null : unitOf(element);
+    const parent = stored ? stored.parent ?? parents.get(stored.unit) : undefined;
+    const mark = stored && parent ? { ...stored, parent } : stored;
+    const name = mark?.unit;
     const unit = name ? units.get(name) : undefined;
-    // a one-piece element is already whole; grouping it would only add chrome
-    if (!name || !unit || unit.members.length < 2 || element.groupIds[0] === name) {
+    if (!name || !unit) {
+      return;
+    }
+    // A lane is nested inside its pool/frame. Its own group keeps its caption
+    // editable; the outer group makes move and resize one container operation.
+    const required = [
+      ...(unit.members.length > 1 || mark?.parent ? [name] : []),
+      ...(mark?.parent ? [mark.parent] : []),
+    ];
+    const rest = element.groupIds.filter((id) => !required.includes(id));
+    const groupIds = [...required, ...rest];
+    if (
+      groupIds.length === element.groupIds.length &&
+      groupIds.every((id, at) => id === element.groupIds[at]) &&
+      stored?.parent === parent
+    ) {
       return;
     }
     repaired ??= elements.slice();
     repaired[index] = newElementWith(element, {
-      groupIds: [name, ...element.groupIds.filter((id) => id !== name)],
+      groupIds,
+      ...(mark && stored?.parent !== parent
+        ? { customData: { ...element.customData, tingraph: mark } }
+        : {}),
     });
   });
   if (repaired) {
@@ -135,18 +237,18 @@ export function normalizeUnits(
   }
 
   const inside = state.editingGroupId ? units.get(state.editingGroupId) : undefined;
-  if (inside && inside.figure) {
-    // a figure has no inside: its shapes are cut from a spec rather than drawn,
-    // so a reader who steps in would be holding a mark that the next redraw
-    // replaces — most confusingly the invisible frame, which carries the spec
-    // and would then be dragged away from the drawing it belongs to
+  if (inside && inside.sealed) {
+    // Figures are cut from a spec, and pool/lane chrome is one container. A
+    // double click must never expose a ring, split or lane as a movable object.
+    const whole = inside.parent ? units.get(inside.parent) ?? inside : inside;
+    const group = inside.parent ?? (state.editingGroupId as string);
     return {
       ...fix,
       appState: {
         selectedElementIds: Object.fromEntries(
-          inside.members.map((member) => [member.id, true as const]),
+          whole.members.map((member) => [member.id, true as const]),
         ),
-        selectedGroupIds: { [state.editingGroupId as string]: true },
+        selectedGroupIds: { [group]: true },
         editingGroupId: null,
       },
     };
@@ -234,6 +336,11 @@ export function reunit(next: Elements, prev: Elements): ExcalidrawElement[] | vo
       return element;
     }
     const tingraph: UnitMark = { ...mark, unit: patch.unit };
+    if (patch.parent === null) {
+      delete tingraph.parent;
+    } else if (patch.parent) {
+      tingraph.parent = patch.parent;
+    }
     if (patch.link === null) {
       delete tingraph.link;
     } else if (patch.link) {
@@ -407,8 +514,14 @@ export function linkTargets(elements: Elements): Map<string, Box> {
   };
   for (const element of elements) {
     const mark = element.isDeleted ? null : unitOf(element);
-    // a connector joins elements, and a loose caption is not one of them
-    if (element.isDeleted || element.type === "arrow" || (element.type === "text" && !mark)) {
+    // A connector joins diagram nodes, never structural chrome. Loose shapes
+    // the reader drew remain valid targets under their own element id.
+    if (
+      element.isDeleted ||
+      element.type === "arrow" ||
+      (mark && mark.kind !== "node") ||
+      (element.type === "text" && !mark)
+    ) {
       continue;
     }
     const key = mark?.unit ?? element.id;
@@ -532,6 +645,16 @@ export function syncConnectors(
 ): ExcalidrawElement[] | null {
   let next: ExcalidrawElement[] | null = null;
   let boxes: Map<string, Box> | null = null;
+  const structural = new Set(
+    elements
+      .map((element) => (element.isDeleted ? null : unitOf(element)))
+      .filter(
+        (mark): mark is UnitMark =>
+          !!mark && (mark.kind === "pool" || mark.kind === "lane" || mark.kind === "frame"),
+      )
+      .map((mark) => mark.unit),
+  );
+  const invalid = new Set<string>();
   elements.forEach((element, index) => {
     if (element.isDeleted || element.type !== "arrow" || busy.has(element.id)) {
       return;
@@ -545,6 +668,11 @@ export function syncConnectors(
     const from = boxes.get(link.from.unit);
     const to = boxes.get(link.to.unit);
     if (!from || !to) {
+      if (structural.has(link.from.unit) || structural.has(link.to.unit)) {
+        next ??= elements.slice();
+        next[index] = newElementWith(element, { isDeleted: true });
+        invalid.add(mark.unit);
+      }
       return;
     }
     const anchors = portAnchors(link, ports);
@@ -588,6 +716,13 @@ export function syncConnectors(
       },
     });
   });
+  if (invalid.size > 0) {
+    next = (next ?? elements.slice()).map((element) =>
+      invalid.has(unitOf(element)?.unit ?? "")
+        ? newElementWith(element, { isDeleted: true })
+        : element,
+    );
+  }
   return next;
 }
 
@@ -603,6 +738,8 @@ export interface PoolBox {
   band: number;
   /** width of the header band its lanes use */
   laneBand: number;
+  /** horizontal bands inside the pool, top to bottom */
+  lanes: Array<{ top: number; bottom: number }>;
 }
 
 /** Every pool currently on the sheet, top to bottom. */
@@ -621,9 +758,121 @@ export function poolBoxes(elements: Elements): PoolBox[] {
       height: element.height,
       band: mark.band ?? 0,
       laneBand: mark.laneBand ?? 0,
+      lanes: [],
     });
   }
+  const parents = laneParents(elements);
+  for (const pool of boxes) {
+    const cuts = [pool.y, pool.y + pool.height];
+    for (const element of elements) {
+      const mark = element.isDeleted ? null : unitOf(element);
+      if (
+        !mark ||
+        mark.kind !== "lane" ||
+        (mark.parent ?? parents.get(mark.unit)) !== pool.unit ||
+        element.type !== "line" ||
+        element.height > 1 ||
+        element.y <= pool.y + 1 ||
+        element.y >= pool.y + pool.height - 1
+      ) {
+        continue;
+      }
+      cuts.push(element.y);
+    }
+    const ordered = [...new Set(cuts.map(Math.round))].sort((a, b) => a - b);
+    pool.lanes = ordered.slice(0, -1).map((top, index) => ({
+      top,
+      bottom: ordered[index + 1],
+    }));
+  }
   return boxes.sort((a, b) => a.y - b.y);
+}
+
+const MIN_POOL_LANE = 60;
+
+function verticalLine(element: ExcalidrawElement, y: number, height: number) {
+  return newElementWith(
+    element,
+    {
+      y,
+      height,
+      points: [[0, 0], [0, height]],
+    } as never,
+  );
+}
+
+/**
+ * Moves one BPMN lane boundary. An internal boundary trades height between its
+ * two neighbours; the bottom boundary grows or shrinks the whole pool.
+ */
+export function resizePoolLane(
+  elements: Elements,
+  pool: PoolBox,
+  boundary: number,
+  at: number,
+): ExcalidrawElement[] {
+  const upper = pool.lanes[boundary];
+  if (!upper) {
+    return elements.slice();
+  }
+  const lower = pool.lanes[boundary + 1];
+  const target = lower
+    ? Math.min(
+        Math.max(Math.round(at), upper.top + MIN_POOL_LANE),
+        lower.bottom - MIN_POOL_LANE,
+      )
+    : Math.max(Math.round(at), upper.top + MIN_POOL_LANE);
+  const delta = target - upper.bottom;
+  if (delta === 0) {
+    return elements.slice();
+  }
+
+  const parents = laneParents(elements);
+  const changed = elements.map((element) => {
+    const mark = element.isDeleted ? null : unitOf(element);
+    if (!mark) {
+      return element;
+    }
+    if (!lower && mark.unit === pool.unit) {
+      if (element.type === "rectangle") {
+        return newElementWith(element, { height: element.height + delta });
+      }
+      if (element.type === "line") {
+        return verticalLine(element, element.y, element.height + delta);
+      }
+      return newElementWith(element, { y: element.y + delta / 2 });
+    }
+    if (mark.kind !== "lane" || (mark.parent ?? parents.get(mark.unit)) !== pool.unit) {
+      return element;
+    }
+
+    const middle = element.y + element.height / 2;
+    if (element.type === "text") {
+      const inUpper = middle >= upper.top - 1 && middle <= upper.bottom + 1;
+      const inLower = lower && middle >= lower.top - 1 && middle <= lower.bottom + 1;
+      return inUpper || inLower
+        ? newElementWith(element, { y: element.y + delta / 2 })
+        : element;
+    }
+    if (element.type !== "line") {
+      return element;
+    }
+    if (element.height <= 1 && lower && Math.abs(element.y - upper.bottom) <= 1) {
+      return newElementWith(element, { y: element.y + delta });
+    }
+    const bottom = element.y + element.height;
+    if (element.width <= 1 && Math.abs(element.y - upper.top) <= 1 && Math.abs(bottom - upper.bottom) <= 1) {
+      return verticalLine(element, element.y, element.height + delta);
+    }
+    if (lower && element.width <= 1 && Math.abs(element.y - lower.top) <= 1 && Math.abs(bottom - lower.bottom) <= 1) {
+      return verticalLine(element, element.y + delta, element.height - delta);
+    }
+    if (!lower && element.width <= 1 && Math.abs(element.y - upper.top) <= 1 && Math.abs(bottom - upper.bottom) <= 1) {
+      return verticalLine(element, element.y, element.height + delta);
+    }
+    return element;
+  });
+  return lower ? changed : shiftBelow(changed, pool.y + pool.height, delta);
 }
 
 /** Lanes already ruled inside `pool`. */

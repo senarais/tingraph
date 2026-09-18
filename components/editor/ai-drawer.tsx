@@ -1,7 +1,12 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Copy, Eraser, SendHorizonal, Wand2 } from "lucide-react";
+import { Check, Copy, Eraser, Paperclip, SendHorizonal, Wand2, X } from "lucide-react";
+import {
+  ATTACHMENT_ACCEPT,
+  attachmentProblem,
+  attachmentsProblem,
+} from "@/lib/ai/attachments";
 import { useTingraphStore, type ChatTurn } from "@/lib/store";
 import { TEMPLATE_LABELS } from "@/lib/templates";
 import { DiagramCategory } from "@/lib/types";
@@ -103,7 +108,11 @@ export default function AiDrawer({
   const setThinking = useTingraphStore((s) => s.setThinking);
   const clearChat = useTingraphStore((s) => s.clearChat);
   const [draft, setDraft] = useState("");
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const [attachmentError, setAttachmentError] = useState("");
+  const [dragging, setDragging] = useState(false);
   const foot = useRef<HTMLDivElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   // the newest turn is the one worth reading, so the panel opens at the bottom
   // and stays there as the conversation grows
@@ -111,26 +120,60 @@ export default function AiDrawer({
     foot.current?.scrollIntoView({ block: "end" });
   }, [chat.length, thinking]);
 
-  const send = async () => {
-    const text = draft.trim();
-    if (!text || thinking) {
+  const addFiles = (files: FileList | File[]) => {
+    if (thinking) {
       return;
     }
+    const next = [...attachments];
+    let totalBytes = next.reduce((total, file) => total + file.size, 0);
+    let problem = "";
+
+    for (const file of Array.from(files)) {
+      problem = attachmentProblem(file.type.toLowerCase(), file.size) ?? "";
+      if (!problem) {
+        problem = attachmentsProblem(next.length + 1, totalBytes + file.size) ?? "";
+      }
+      if (problem) {
+        break;
+      }
+      next.push(file);
+      totalBytes += file.size;
+    }
+
+    setAttachments(next);
+    setAttachmentError(problem);
+  };
+
+  const send = async () => {
+    const prompt = draft.trim();
+    const files = attachments;
+    if ((!prompt && files.length === 0) || thinking) {
+      return;
+    }
+    const text = prompt || "Create a diagram from the attached files.";
+    const message = files.length > 0 ? `${text}\n\nAttached: ${files.map((file) => file.name).join(", ")}` : text;
     const store = useTingraphStore.getState();
-    const turns = [...store.chat, { role: "you" as const, text }];
+    const turns = [...store.chat, { role: "you" as const, text: message }];
+    const form = new FormData();
+    form.set(
+      "ask",
+      JSON.stringify({
+        category,
+        direction: store.direction,
+        code: store.code,
+        turns,
+      }),
+    );
+    files.forEach((file) => form.append("attachments", file));
     setDraft("");
-    say({ role: "you", text });
+    setAttachments([]);
+    setAttachmentError("");
+    say({ role: "you", text: message });
     setThinking(true);
     try {
       const response = await fetch("/api/ai", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category,
-          direction: store.direction,
-          code: store.code,
-          turns,
-        }),
+        body: form,
       });
       const reply = (await response.json()) as { message?: string; source?: string };
       say({
@@ -187,7 +230,20 @@ export default function AiDrawer({
         <div ref={foot} />
       </div>
 
-      <div className="border-t-2 border-edge p-3">
+      <div
+        className={`border-t-2 border-edge p-3 ${dragging ? "bg-bone" : ""}`}
+        onDragEnter={(event) => {
+          event.preventDefault();
+          setDragging(true);
+        }}
+        onDragOver={(event) => event.preventDefault()}
+        onDragLeave={() => setDragging(false)}
+        onDrop={(event) => {
+          event.preventDefault();
+          setDragging(false);
+          addFiles(event.dataTransfer.files);
+        }}
+      >
         <textarea
           value={draft}
           onChange={(event) => setDraft(event.target.value)}
@@ -198,13 +254,53 @@ export default function AiDrawer({
             }
           }}
           rows={3}
-          placeholder="What should the diagram show?"
+          placeholder="What should the diagram show? Drop a PDF or image for context."
           aria-label="Ask Tingraph AI"
           className="w-full resize-none border-2 border-edge bg-white px-2.5 py-2 font-mono text-[12px] leading-relaxed text-ink placeholder:text-ink-faint"
         />
+        <input
+          ref={fileInput}
+          type="file"
+          accept={ATTACHMENT_ACCEPT}
+          multiple
+          className="hidden"
+          onChange={(event) => {
+            addFiles(event.target.files ?? []);
+            event.target.value = "";
+          }}
+        />
+        {attachments.length > 0 && (
+          <ul className="mt-2 space-y-1" aria-label="Attached files">
+            {attachments.map((file, index) => (
+              <li
+                key={`${file.name}-${file.lastModified}-${index}`}
+                className="flex items-center gap-2 border-2 border-edge bg-white px-2 py-1 text-[11px] text-ink"
+              >
+                <span className="min-w-0 flex-1 truncate">{file.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setAttachments((current) => current.filter((item) => item !== file))}
+                  aria-label={`Remove ${file.name}`}
+                  className="shrink-0 text-ink-faint hover:text-ink"
+                >
+                  <X size={13} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+        {attachmentError && (
+          <p role="alert" className="mt-2 text-[11px] text-alert">
+            {attachmentError}
+          </p>
+        )}
         <div className="mt-2 flex items-center gap-2">
+          <SlabButton onClick={() => fileInput.current?.click()} disabled={thinking} title="Attach PDF or image">
+            <Paperclip size={13} />
+            Attach
+          </SlabButton>
           <span className="min-w-0 flex-1 truncate text-[11px] text-ink-faint">
-            Enter sends
+            PDF or image, up to 4 files / 10 MB. Enter sends
           </span>
           {chat.length > 0 && (
             <SlabButton onClick={clearChat} title="Start the conversation again">
@@ -215,7 +311,7 @@ export default function AiDrawer({
           <SlabButton
             tone="solid"
             onClick={() => void send()}
-            disabled={thinking || draft.trim() === ""}
+            disabled={thinking || (draft.trim() === "" && attachments.length === 0)}
           >
             <SendHorizonal size={13} />
             Send

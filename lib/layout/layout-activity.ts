@@ -202,6 +202,7 @@ export function computeActivityLayout(ast: AST): PositionedAST {
       height: bottom - top,
       headerWidth: 0,
       headerHeight: ACTIVITY_HEADER,
+      poolId: ast.pools?.[0]?.id ?? "partitions",
     }));
     pools.push({
       id: ast.pools?.[0]?.id ?? "partitions",

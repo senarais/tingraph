@@ -677,7 +677,7 @@ function bandLabelSkeleton(
     x: Math.round(band.x + band.width / 2),
     y: Math.round(band.y + band.height / 2),
     angle: -Math.PI / 2,
-    groupIds: [mark.unit],
+    groupIds: [mark.unit, ...(mark.parent ? [mark.parent] : [])],
     ...marked(mark),
     ...ACADEMIC_MONOCHROME_THEME,
     roughness: theme.roughness,
@@ -710,6 +710,13 @@ function laneSkeletons(
   const out: ExcalidrawElementSkeleton[] = [];
   const box = chromeBox(theme);
   const unit = `lane-${lane.id}`;
+  const parent = lane.poolId
+    ? lane.poolId.startsWith("pool-")
+      ? lane.poolId
+      : `pool-${lane.poolId}`
+    : undefined;
+  const groupIds = [unit, ...(parent ? [parent] : [])];
+  const mark = { unit, kind: "lane", ...(parent ? { parent } : {}) } as const;
   // lanes share the pool's outer border; only the split lines are drawn
   if (drawSplit) {
     out.push({
@@ -724,8 +731,8 @@ function laneSkeletons(
         [lane.width, 0],
       ],
       ...box,
-      groupIds: [unit],
-      ...marked({ unit, kind: "lane" }),
+      groupIds,
+      ...marked(mark),
     } as ExcalidrawElementSkeleton);
   }
   if (lane.headerWidth > 0) {
@@ -741,8 +748,8 @@ function laneSkeletons(
         [0, lane.height],
       ],
       ...box,
-      groupIds: [unit],
-      ...marked({ unit, kind: "lane" }),
+      groupIds,
+      ...marked(mark),
     } as ExcalidrawElementSkeleton);
     if (lane.label) {
       out.push(
@@ -757,7 +764,7 @@ function laneSkeletons(
           },
           theme,
           BPMN_LABEL_FONT_SIZE,
-          { unit, kind: "lane", core: true },
+          { ...mark, core: true },
         ),
       );
     }
@@ -1004,6 +1011,15 @@ export function buildColumnSkeletons(
   style: SheetStyle = FORMAL,
 ): ExcalidrawElementSkeleton[] {
   return activityColumnSkeletons(lane, themeFor(ink, "activity", style), rule);
+}
+
+/** One activity pool and its partitions, for adding it straight on the canvas. */
+export function buildActivityFrameSkeletons(
+  pool: PositionedPool,
+  ink: Ink = MONOCHROME,
+  style: SheetStyle = FORMAL,
+): ExcalidrawElementSkeleton[] {
+  return activityChromeSkeletons(pool, themeFor(ink, "activity", style));
 }
 
 /** One lane rule set, for splitting a pool that is already on the canvas. */

@@ -229,6 +229,16 @@ const poolMark = unitOf(poolBox as never);
 assert.equal(poolMark?.kind, "pool", "pool box marked as a pool");
 assert.equal(typeof poolMark?.band, "number", "pool records its header band");
 assert.equal(typeof poolMark?.laneBand, "number", "pool records its lane band");
+const poolLanes = marked.filter(
+  (skeleton) => unitOf(skeleton as never)?.kind === "lane",
+);
+assert.ok(poolLanes.length > 0, "the pool has lane chrome");
+for (const skeleton of poolLanes) {
+  const laneMark = unitOf(skeleton as never)!;
+  const groups = skeleton.groupIds as string[];
+  assert.equal(laneMark.parent, poolMark?.unit, "each lane belongs to its pool");
+  assert.equal(groups[groups.length - 1], poolMark?.unit, "pool is the lane's outer group");
+}
 
 // --- a pool added on the canvas draws box, rule and rotated caption
 const fresh = indexByPrefix(
@@ -263,6 +273,7 @@ const lane = indexByPrefix(
     width: 370,
     height: 110,
     headerWidth: 30,
+    poolId: "pool-P1",
   }),
 );
 assert.deepEqual(
@@ -271,6 +282,10 @@ assert.deepEqual(
   "new lane: split, header rule, caption",
 );
 assert.equal(lane[0].y, 110, "split sits on the lane top edge");
+assert.ok(
+  lane.every((piece) => (piece.groupIds as string[]).includes("pool-P1")),
+  "a lane added on the canvas joins the pool group",
+);
 
 // ------------------------------------------------------------------ org chart
 
@@ -529,6 +544,20 @@ assert.equal(
   unitOf(laneName as never)?.kind,
   "lane",
   "the name belongs to the partition",
+);
+const activityFrame = acAll.find(
+  (piece) => unitOf(piece as never)?.kind === "frame",
+);
+const activityFrameUnit = unitOf(activityFrame as never)?.unit;
+assert.equal(
+  unitOf(laneName as never)?.parent,
+  activityFrameUnit,
+  "an activity partition belongs to its pool",
+);
+assert.equal(
+  (laneName?.groupIds as string[]).slice(-1)[0],
+  activityFrameUnit,
+  "the activity pool is the partition's outer group",
 );
 
 // ----------------------------------------------------------------------- erd

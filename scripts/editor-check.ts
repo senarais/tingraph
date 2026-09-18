@@ -4,9 +4,11 @@ import { computeLayout } from "../lib/layout/compute-layout";
 import { buildSkeletons } from "../lib/excalidraw-mapper/build-skeletons";
 import { shapeFamily } from "../lib/layout/compute-layout";
 import { controlsFor, held } from "../lib/canvas/inspect";
+import { unitOf } from "../lib/canvas/units";
 import Module from "node:module";
 import { createRequire } from "node:module";
 import type { PoolBox } from "../lib/canvas/scene";
+import type { FrameBox } from "../lib/canvas/frames";
 import { jpegToPdf } from "../lib/export/pdf";
 import { promptFor, GUIDE_SECTIONS } from "../lib/guide";
 import { refuses, systemPrompt, unfence } from "../lib/ai/chat";
@@ -50,7 +52,7 @@ loader._load = function (request: string, parent: unknown, main: boolean) {
 };
 const require_ = createRequire(__filename);
 const scene = require_("../lib/canvas/scene") as typeof import("../lib/canvas/scene");
-const { normalizeUnits, removeLane } = scene;
+const { linkTargets, normalizeUnits, removeLane, resizePoolLane } = scene;
 const elements = require_("../lib/canvas/elements") as typeof import("../lib/canvas/elements");
 const erd = require_("../lib/canvas/erd") as typeof import("../lib/canvas/erd");
 const frames = require_("../lib/canvas/frames") as typeof import("../lib/canvas/frames");
@@ -106,6 +108,220 @@ const soft = org.filter(
 assert.ok(soft.length > 0, "an org box is a box a style may round");
 for (const piece of soft) {
   assert.deepEqual(piece.roundness, { type: 3, value: 14 }, `${piece.id} rounded`);
+}
+
+// ----------------------------------------- BPMN lane boundaries share space
+{
+  const pool: PoolBox = {
+    unit: "pool-R",
+    x: 0,
+    y: 0,
+    width: 600,
+    height: 200,
+    band: 30,
+    laneBand: 24,
+    lanes: [
+      { top: 0, bottom: 100 },
+      { top: 100, bottom: 200 },
+    ],
+  };
+  const pieces = [
+    fake("rectangle", { unit: pool.unit, kind: "pool", core: true }, {
+      id: "body", x: 0, y: 0, width: 600, height: 200,
+    }),
+    fake("line", { unit: pool.unit, kind: "pool" }, {
+      id: "pool-rule", x: 30, y: 0, width: 0, height: 200,
+    }),
+    fake("text", { unit: pool.unit, kind: "pool", core: true }, {
+      id: "pool-name", x: 10, y: 90, width: 20, height: 20,
+    }),
+    fake("line", { unit: "lane-A", kind: "lane", parent: pool.unit }, {
+      id: "a-rule", x: 54, y: 0, width: 0, height: 100,
+    }),
+    fake("text", { unit: "lane-A", kind: "lane", parent: pool.unit, core: true }, {
+      id: "a-name", x: 35, y: 40, width: 20, height: 20,
+    }),
+    fake("line", { unit: "lane-B", kind: "lane", parent: pool.unit }, {
+      id: "split", x: 30, y: 100, width: 570, height: 0,
+    }),
+    fake("line", { unit: "lane-B", kind: "lane", parent: pool.unit }, {
+      id: "b-rule", x: 54, y: 100, width: 0, height: 100,
+    }),
+    fake("text", { unit: "lane-B", kind: "lane", parent: pool.unit, core: true }, {
+      id: "b-name", x: 35, y: 140, width: 20, height: 20,
+    }),
+    fake("rectangle", undefined, { id: "below", x: 0, y: 260, width: 40, height: 40 }),
+  ];
+  const traded = resizePoolLane(pieces, pool, 0, 130);
+  const find = (all: ExcalidrawElement[], id: string) => all.find((element) => element.id === id)!;
+  assert.equal(find(traded, "body").height, 200, "an internal divider keeps pool height");
+  assert.equal(find(traded, "split").y, 130, "the divider follows the hand");
+  assert.equal(find(traded, "a-rule").height, 130, "the upper lane grows");
+  assert.equal(find(traded, "b-rule").y, 130, "the lower lane starts at the divider");
+  assert.equal(find(traded, "b-rule").height, 70, "and gives that space to its neighbour");
+
+  const resizedPool = scene.poolBoxes(traded)[0];
+  const grown = resizePoolLane(traded, resizedPool, 1, 250);
+  assert.equal(find(grown, "body").height, 250, "the outer edge grows the pool");
+  assert.equal(find(grown, "pool-rule").height, 250, "its header rule grows too");
+  assert.equal(find(grown, "b-rule").height, 120, "the last lane takes the new space");
+  assert.equal(find(grown, "below").y, 310, "content below makes room");
+}
+
+// ------------------------------------- activity partitions share frame width
+{
+  const frame: FrameBox = {
+    unit: "frame-R",
+    label: "",
+    x: 0,
+    y: 0,
+    width: 380,
+    height: 240,
+    head: 32,
+    lanes: [
+      { unit: "lane-A", label: "A", x: 0, width: 190 },
+      { unit: "lane-B", label: "B", x: 190, width: 190 },
+    ],
+  };
+  const pieces = [
+    fake("rectangle", { unit: frame.unit, kind: "frame", core: true }, {
+      id: "frame", x: 0, y: 0, width: 380, height: 240,
+    }),
+    fake("line", { unit: frame.unit, kind: "frame" }, {
+      id: "head", x: 0, y: 32, width: 380, height: 0,
+    }),
+    fake("text", { unit: "lane-A", kind: "lane", parent: frame.unit, core: true }, {
+      id: "a", x: 85, y: 8, width: 20, height: 16,
+    }),
+    fake("line", { unit: "lane-B", kind: "lane", parent: frame.unit }, {
+      id: "divider", x: 190, y: 0, width: 0, height: 240,
+    }),
+    fake("text", { unit: "lane-B", kind: "lane", parent: frame.unit, core: true }, {
+      id: "b", x: 275, y: 8, width: 20, height: 16,
+    }),
+    fake("rectangle", undefined, { id: "right", x: 440, y: 0, width: 40, height: 40 }),
+  ];
+  const traded = frames.resizeColumn(pieces, frame, 0, 240);
+  const find = (all: ExcalidrawElement[], id: string) => all.find((element) => element.id === id)!;
+  assert.equal(find(traded, "frame").width, 380, "an internal rule keeps frame width");
+  assert.equal(find(traded, "divider").x, 240, "the partition rule follows the hand");
+  const resizedFrame = frames.partitionFrames(traded)[0];
+  assert.deepEqual(
+    resizedFrame.lanes.map((lane) => lane.width),
+    [240, 140],
+    "one partition grows by exactly what its neighbour gives up",
+  );
+  const grown = frames.resizeColumn(traded, resizedFrame, 1, 450);
+  assert.equal(find(grown, "frame").width, 450, "the outer edge grows the frame");
+  assert.equal(find(grown, "head").width, 450, "the header follows the frame");
+  assert.equal(find(grown, "right").x, 510, "content to the right makes room");
+}
+
+// ------------------------------------------ structure is not an arrow target
+{
+  const pool = fake("rectangle", { unit: "pool-P", kind: "pool", core: true }, {
+    id: "pool-target", x: 0, y: 0, width: 500, height: 200,
+  });
+  const lane = fake("text", { unit: "lane-L", kind: "lane", parent: "pool-P", core: true }, {
+    id: "lane-target", x: 20, y: 80, width: 20, height: 20,
+  });
+  const task = fake("rectangle", { unit: "bpmn-A", kind: "node", core: true }, {
+    id: "task-target", x: 100, y: 60, width: 100, height: 80,
+  });
+  const targets = linkTargets([
+    pool,
+    lane,
+    task,
+  ]);
+  assert.deepEqual([...targets.keys()], ["bpmn-A"], "arrows target nodes, not pools or lanes");
+
+  const invalid = fake("arrow", {
+    unit: "line-lane",
+    kind: "edge",
+    core: true,
+    link: { line: "sequence", from: { unit: "bpmn-A" }, to: { unit: "lane-L" }, at: "old" },
+  }, { id: "invalid-line", x: 100, y: 100, width: 80, height: 0, points: [[0, 0], [80, 0]] });
+  const cleaned = scene.syncConnectors(
+    [
+      pool,
+      lane,
+      task,
+      invalid,
+    ],
+    { category: "bpmn", direction: "down" },
+  );
+  assert.equal(
+    cleaned!.find((element) => element.id === invalid.id)!.isDeleted,
+    true,
+    "an existing connector tied to a lane is removed",
+  );
+}
+
+// ----------------------------------------------- pool and lanes are one hold
+{
+  const body = fake(
+    "rectangle",
+    { unit: "pool-P1", kind: "pool", core: true },
+    { id: "pool", groupIds: ["pool-P1"], x: 0, y: 0, width: 600, height: 220 },
+  );
+  const split = fake(
+    "line",
+    { unit: "lane-L2", kind: "lane" },
+    { id: "split", groupIds: ["lane-L2"], x: 30, y: 110, width: 570, height: 0 },
+  );
+  const label = fake(
+    "text",
+    { unit: "lane-L2", kind: "lane", core: true },
+    { id: "label", groupIds: ["lane-L2"], x: 40, y: 145, width: 18, height: 40 },
+  );
+  const fixed = normalizeUnits([body, split, label], {
+    selectedElementIds: { label: true },
+    selectedGroupIds: {},
+    editingGroupId: null,
+  });
+  assert.deepEqual(
+    Object.keys(fixed!.appState!.selectedElementIds).sort(),
+    ["label", "pool", "split"],
+    "taking one lane holds the whole pool",
+  );
+  const migrated = fixed!.elements!;
+  assert.equal(
+    unitOf(migrated.find((element) => element.id === "split")!)?.parent,
+    "pool-P1",
+    "an open scene gains the missing lane parent without regeneration",
+  );
+  const steppedIntoLane = normalizeUnits(migrated, {
+    selectedElementIds: { label: true },
+    selectedGroupIds: {},
+    editingGroupId: "lane-L2",
+  });
+  assert.equal(steppedIntoLane!.appState!.editingGroupId, null, "a lane has no inside");
+  assert.deepEqual(
+    Object.keys(steppedIntoLane!.appState!.selectedElementIds).sort(),
+    ["label", "pool", "split"],
+    "double-clicking a lane still holds the whole pool",
+  );
+  assert.deepEqual(
+    steppedIntoLane!.appState!.selectedGroupIds,
+    { "pool-P1": true },
+    "the selected group stays the outer pool",
+  );
+
+  const ungrouped = migrated.map((element) =>
+    element.id === "split"
+      ? ({ ...element, groupIds: ["lane-L2"] } as ExcalidrawElement)
+      : element,
+  );
+  const repaired = normalizeUnits(ungrouped, {
+    selectedElementIds: {},
+    selectedGroupIds: {},
+    editingGroupId: null,
+  });
+  assert.deepEqual(
+    repaired!.elements!.find((element) => element.id === "split")!.groupIds,
+    ["lane-L2", "pool-P1"],
+    "ungroup cannot detach a lane from its pool",
+  );
 }
 
 // ------------------------------------------------- what the panel may offer
@@ -427,6 +643,10 @@ async function checkPdf(): Promise<void> {
     height: 200,
     band: 30,
     laneBand: 24,
+    lanes: [
+      { top: 0, bottom: 100 },
+      { top: 100, bottom: 200 },
+    ],
   };
   const body = fake(
     "rectangle",
@@ -492,6 +712,36 @@ async function checkPdf(): Promise<void> {
     alone.find((element) => element.id === "lane1")!.isDeleted,
     undefined,
     "a pool never loses its last lane",
+  );
+}
+
+// ------------------------------------------ adding another activity pool
+{
+  const frame: FrameBox = {
+    unit: "frame-main",
+    label: "",
+    x: 20,
+    y: 30,
+    width: 420,
+    height: 260,
+    head: 32,
+    lanes: [],
+  };
+  const body = fake(
+    "rectangle",
+    { unit: frame.unit, kind: "frame", core: true },
+    { id: "activity-frame", x: frame.x, y: frame.y, width: frame.width, height: frame.height },
+  );
+  const added = frames.addPartitionFrameBelow([body], frame, inkFor("mono"));
+  const newFrame = added.find(
+    (element) => element.id !== body.id && unitOf(element)?.kind === "frame" && unitOf(element)?.core,
+  )!;
+  const newLane = added.find((element) => unitOf(element)?.kind === "lane")!;
+  assert.ok(newFrame, "activity can add another pool");
+  assert.equal(
+    unitOf(newLane)?.parent,
+    unitOf(newFrame)?.unit,
+    "its first partition is nested in that pool",
   );
 }
 

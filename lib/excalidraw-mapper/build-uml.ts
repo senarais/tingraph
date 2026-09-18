@@ -39,6 +39,7 @@ const ACTION_ROUNDNESS = { type: 3, value: 14 } as const;
 
 interface Piece {
   unit: string;
+  parent?: string;
   theme: Theme;
   id: (part: string) => string;
 }
@@ -50,8 +51,12 @@ function shape(piece: Piece, body: Record<string, unknown>): ExcalidrawElementSk
     strokeColor: piece.theme.strokeColor,
     backgroundColor: WHITE,
     roundness: null,
-    groupIds: [piece.unit],
-    ...marked({ unit: piece.unit, kind: "node" }),
+    groupIds: [piece.unit, ...(piece.parent ? [piece.parent] : [])],
+    ...marked({
+      unit: piece.unit,
+      kind: "node",
+      ...(piece.parent ? { parent: piece.parent } : {}),
+    }),
     ...body,
   } as unknown as ExcalidrawElementSkeleton;
 }
@@ -77,7 +82,13 @@ function caption(
     fontFamily: piece.theme.fontFamily,
     textAlign: align,
     verticalAlign: "top",
-    ...marked({ unit: piece.unit, kind: "node", core: true, ...(part ? { part } : {}) }),
+    ...marked({
+      unit: piece.unit,
+      kind: "node",
+      core: true,
+      ...(piece.parent ? { parent: piece.parent } : {}),
+      ...(part ? { part } : {}),
+    }),
   });
 }
 
@@ -107,13 +118,19 @@ function stroke(
     points: local,
     backgroundColor: "transparent",
     strokeWidth: options.width ?? CHROME_STROKE_WIDTH,
-    ...(options.mark ? marked({ unit: piece.unit, kind: options.mark }) : {}),
+    ...(options.mark
+      ? marked({
+          unit: piece.unit,
+          kind: options.mark,
+          ...(piece.parent ? { parent: piece.parent } : {}),
+        })
+      : {}),
   });
 }
 
-function maker(unit: string, theme: Theme): Piece {
+function maker(unit: string, theme: Theme, parent?: string): Piece {
   let n = 0;
-  return { unit, theme, id: (part) => `${unit}-${part}-${n++}` };
+  return { unit, parent, theme, id: (part) => `${unit}-${part}-${n++}` };
 }
 
 /**
@@ -130,7 +147,13 @@ function chromeCaption(
 ): ExcalidrawElementSkeleton {
   return {
     ...caption(piece, lines, at, fontSize),
-    ...marked({ unit: piece.unit, kind, core: true, part: "name" }),
+    ...marked({
+      unit: piece.unit,
+      kind,
+      core: true,
+      ...(piece.parent ? { parent: piece.parent } : {}),
+      part: "name",
+    }),
   } as ExcalidrawElementSkeleton;
 }
 
@@ -461,7 +484,12 @@ export function activityColumnSkeletons(
   rule: boolean,
 ): ExcalidrawElementSkeleton[] {
   const out: ExcalidrawElementSkeleton[] = [];
-  const piece = maker(`lane-${lane.id}`, theme);
+  const parent = lane.poolId
+    ? lane.poolId.startsWith("frame-")
+      ? lane.poolId
+      : `frame-${lane.poolId}`
+    : undefined;
+  const piece = maker(`lane-${lane.id}`, theme, parent);
   const band = lane.headerHeight ?? 0;
   if (rule) {
     out.push(

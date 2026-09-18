@@ -21,6 +21,7 @@ import {
   removeLane,
   removePool,
   reunit,
+  resizePoolLane,
   syncFigures,
   syncConnectors,
   type FigureOnSheet,
@@ -28,12 +29,14 @@ import {
 } from "@/lib/canvas/scene";
 import { elementsOn, linksOn, type ElementOnSheet, type LinkOnSheet } from "@/lib/canvas/elements";
 import {
+  addPartitionFrameBelow,
   addColumn,
   frameBoxes,
   partitionFrames,
   removeColumn,
   removeFrame,
   renameFrame,
+  resizeColumn,
   type FrameBox,
 } from "@/lib/canvas/frames";
 import { portsOf, syncTables } from "@/lib/canvas/erd";
@@ -428,7 +431,14 @@ export default function Canvas({
 
       const boxes = poolBoxes(scene);
       const overlay =
-        boxes.map((p) => `${p.unit}@${p.x},${p.y},${p.width},${p.height}`).join("|") +
+        boxes
+          .map(
+            (p) =>
+              `${p.unit}@${p.x},${p.y},${p.width},${p.height}:${p.lanes
+                .map((lane) => `${lane.top}-${lane.bottom}`)
+                .join(",")}`,
+          )
+          .join("|") +
         `#${state.scrollX},${state.scrollY},${state.zoom.value},${state.width},${state.height}`;
       if (overlay === overlayRef.current) {
         return;
@@ -559,10 +569,29 @@ export default function Canvas({
           onEdit((elements) => renameFrame(elements, unit, label))
         }
         onRemoveFrame={(frame) => onEdit((elements) => removeFrame(elements, frame))}
+        onAddFrame={(frame) =>
+          onEdit((elements) => addPartitionFrameBelow(elements, frame, ink, sheet))
+        }
         onAddLane={(frame) =>
           onEdit((elements) => addColumn(elements, frame, ink, sheet))
         }
         onRemoveLane={(frame) => onEdit((elements) => removeColumn(elements, frame))}
+        onResizeLane={(unit, boundary, at, settled) => {
+          if (!api) {
+            return;
+          }
+          const elements = api.getSceneElementsIncludingDeleted();
+          const frame = partitionFrames(elements).find((entry) => entry.unit === unit);
+          if (!frame) {
+            return;
+          }
+          api.updateScene({
+            elements: resizeColumn(elements, frame, boundary, at),
+            captureUpdate: settled
+              ? CaptureUpdateAction.IMMEDIATELY
+              : CaptureUpdateAction.EVENTUALLY,
+          });
+        }}
       />
       {dragging && (
         <div
@@ -591,12 +620,28 @@ export default function Canvas({
       <PoolControls
         pools={pools}
         view={view}
-        onAddLane={(pool) => onEdit((elements) => addLane(elements, pool, ink))}
+        onAddLane={(pool) => onEdit((elements) => addLane(elements, pool, ink, sheet))}
         onRemoveLane={(pool) => onEdit((elements) => removeLane(elements, pool))}
         onAddPool={(pool) =>
-          onEdit((elements) => addPoolBelow(elements, pool, ink))
+          onEdit((elements) => addPoolBelow(elements, pool, ink, sheet))
         }
         onRemove={(pool) => onEdit((elements) => removePool(elements, pool))}
+        onResizeLane={(unit, boundary, at, settled) => {
+          if (!api) {
+            return;
+          }
+          const elements = api.getSceneElementsIncludingDeleted();
+          const pool = poolBoxes(elements).find((entry) => entry.unit === unit);
+          if (!pool) {
+            return;
+          }
+          api.updateScene({
+            elements: resizePoolLane(elements, pool, boundary, at),
+            captureUpdate: settled
+              ? CaptureUpdateAction.IMMEDIATELY
+              : CaptureUpdateAction.EVENTUALLY,
+          });
+        }}
       />
     </div>
   );

@@ -38,6 +38,12 @@ import { moveMatrixColumn, type MatrixSpec } from "@/lib/matrix/spec";
 import { planMatrix } from "@/lib/matrix/build-matrix";
 import type { VennSpec } from "@/lib/venn/spec";
 import { planVenn } from "@/lib/venn/build-venn";
+import {
+  attachmentProblem,
+  attachmentsProblem,
+  MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS_BYTES,
+} from "@/lib/ai/attachments";
 import type { FishboneSpec } from "@/lib/fishbone/spec";
 import { planFishbone } from "@/lib/fishbone/build-fishbone";
 import {
@@ -692,6 +698,20 @@ const pinned = routeBetween(parentBox, leftChild, { ...CHART, fromSide: "left" }
 assertSquare(pinned, "route pinned to a side");
 assert.equal(pinned[0].x, parentBox.x, "a pinned end leaves the side it was given");
 
+// mixed side axes still leave and arrive at right angles to both outlines
+const mixedSides = routeBetween(parentBox, leftChild, {
+  ...CHART,
+  fromSide: "left",
+  toSide: "top",
+});
+assertSquare(mixedSides, "route between a left and top side");
+assert.equal(mixedSides[0].y, mixedSides[1].y, "it leaves the left side horizontally");
+assert.equal(
+  mixedSides[mixedSides.length - 2].x,
+  mixedSides[mixedSides.length - 1].x,
+  "and enters the top vertically, so the arrowhead faces down",
+);
+
 // a dot is grabbed from the outline: a press in the middle of a short box is
 // not a press on its top edge, whatever the reach
 assert.equal(gripSide(parentBox, { x: 380, y: 100 }, 10), "top", "a press on the dot");
@@ -804,6 +824,43 @@ const alone = renameCopies(
 );
 assert.equal(alone.get("line~")!.link, null, "a line copied on its own is let go");
 
+// nested pool/lane groups are renamed together when the whole pool is copied
+const nestedOriginal = [
+  { id: "pool", groupIds: ["pool-P1"], ...mark("pool-P1") },
+  {
+    id: "lane",
+    groupIds: ["lane-L1", "pool-P1"],
+    customData: {
+      tingraph: { unit: "lane-L1", kind: "lane", parent: "pool-P1" },
+    },
+  },
+];
+const nestedCopy = renameCopies(
+  [
+    ...nestedOriginal,
+    { id: "pool~", groupIds: ["gp"], ...mark("pool-P1") },
+    {
+      id: "lane~",
+      groupIds: ["gl", "gp"],
+      customData: {
+        tingraph: { unit: "lane-L1", kind: "lane", parent: "pool-P1" },
+      },
+    },
+  ],
+  nestedOriginal,
+  () => `n${++stamp}`,
+);
+assert.equal(
+  nestedCopy.get("lane~")!.parent,
+  nestedCopy.get("pool~")!.unit,
+  "the copied lane belongs to the copied pool",
+);
+assert.deepEqual(
+  nestedCopy.get("lane~")!.groupIds,
+  [nestedCopy.get("lane~")!.unit, nestedCopy.get("pool~")!.unit],
+  "and keeps the inner-lane / outer-pool group order",
+);
+
 // a connector only reads as unchanged while both boxes stand where they were
 const signature = linkSignature(
   parentBox,
@@ -811,6 +868,7 @@ const signature = linkSignature(
   { from: {}, to: {} },
   toLeft[0],
 );
+assert.ok(signature.startsWith("r2|"), "old connector signatures are invalidated once");
 assert.equal(
   signature,
   linkSignature(parentBox, leftChild, { from: {}, to: {} }, toLeft[0]),
@@ -825,6 +883,19 @@ assert.notEqual(
   signature,
   linkSignature(parentBox, leftChild, { from: {}, to: {} }, { x: 0, y: 0 }),
   "and so does a connector dragged off its route",
+);
+assert.notEqual(
+  linkSignature(parentBox, leftChild, { from: {}, to: {} }, {
+    x: toLeft[0].x,
+    y: toLeft[0].y,
+    points: [[0, 0], [20, 20]],
+  }),
+  linkSignature(parentBox, leftChild, { from: {}, to: {} }, {
+    x: toLeft[0].x,
+    y: toLeft[0].y,
+    points: [[0, 0], [20, 0]],
+  }),
+  "and a connector skewed in place is re-cut too",
 );
 
 // -------------------------------------------------------------------- charts
@@ -1439,5 +1510,18 @@ for (const kind of READY_DIAGRAMS) {
   assert.equal(ast.category, kind.keyword, `${kind.id} sample opens with its own keyword`);
   computeLayout(ast, "down");
 }
+
+assert.equal(attachmentProblem("application/pdf", 1), null, "a PDF may be attached");
+assert.equal(attachmentProblem("image/png", 1), null, "a PNG may be attached");
+assert.ok(attachmentProblem("application/msword", 1), "unsupported documents are rejected");
+assert.ok(
+  attachmentProblem("application/pdf", MAX_ATTACHMENT_BYTES + 1),
+  "each attachment has a size cap",
+);
+assert.ok(attachmentsProblem(5, 1), "attachment count has a cap");
+assert.ok(
+  attachmentsProblem(1, MAX_ATTACHMENTS_BYTES + 1),
+  "attachment total has a size cap",
+);
 
 console.log("parse + layout self-check: all assertions passed");
