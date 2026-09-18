@@ -14,7 +14,6 @@ import {
   Wand2,
 } from "lucide-react";
 import { useTingraphStore } from "@/lib/store";
-import { TEMPLATES } from "@/lib/templates";
 import { GUIDE_INTRO, GUIDE_SECTIONS, promptFor } from "@/lib/guide";
 import { DiagramCategory, LayoutDirection } from "@/lib/types";
 import { Segmented, SlabButton, Tick } from "@/components/editor/ui";
@@ -116,6 +115,9 @@ interface SourceDrawerProps {
   onGenerate: () => void;
   /** draws the starting diagram again, over whatever is on the sheet */
   onReset: () => void;
+  generating: boolean;
+  generationMessage: string;
+  onOpenAi: () => void;
   onEditorMount: OnMount;
 }
 
@@ -149,6 +151,9 @@ export default function SourceDrawer({
   error,
   onGenerate,
   onReset,
+  generating,
+  generationMessage,
+  onOpenAi,
   onEditorMount,
 }: SourceDrawerProps) {
   const code = useTingraphStore((s) => s.code);
@@ -167,7 +172,6 @@ export default function SourceDrawer({
       return;
     }
     setArmed(false);
-    setCode(TEMPLATES[category]);
     onReset();
   };
 
@@ -227,7 +231,7 @@ export default function SourceDrawer({
             <span className="min-w-0 flex-1 truncate text-[11px] text-ink-soft">
               {error
                 ? "Source has a syntax error"
-                : summary}
+                : generationMessage || summary}
             </span>
             {!ONE_WAY.has(category) && (
               <div className="w-[86px] shrink-0">
@@ -243,19 +247,20 @@ export default function SourceDrawer({
               onClick={reset}
               onBlur={() => setArmed(false)}
               tone={armed ? "solid" : "plain"}
+              disabled={generating}
               title="Put the source and the sheet back to the diagram this notation opens with"
             >
               <RotateCcw size={13} />
               {armed ? "Sure?" : "Reset"}
             </SlabButton>
-            <SlabButton tone="solid" onClick={onGenerate} disabled={!!error}>
+            <SlabButton tone="solid" onClick={onGenerate} disabled={!!error || generating}>
               <Wand2 size={13} />
-              Generate
+              {generating ? "Generating…" : "Generate"}
             </SlabButton>
           </div>
         </>
       ) : (
-        <Guide category={category} />
+        <Guide category={category} onOpenAi={onOpenAi} />
       )}
     </>
   );
@@ -288,8 +293,7 @@ const ASSISTANTS = [
 
 type Assistant = (typeof ASSISTANTS)[number];
 
-function Guide({ category }: { category: DiagramCategory }) {
-  const openDrawer = useTingraphStore((s) => s.openDrawer);
+function Guide({ category, onOpenAi }: { category: DiagramCategory; onOpenAi: () => void }) {
   // which copy was pressed last: the plain one, or the name of a chat
   const [copied, setCopied] = useState<string | null>(null);
   const copyPrompt = async (into?: Assistant) => {
@@ -316,7 +320,7 @@ function Guide({ category }: { category: DiagramCategory }) {
             Tingraph AI already knows this notation, and every diagram it writes
             is checked before you see it.
           </p>
-          <SlabButton tone="solid" onClick={() => openDrawer("ai")} className="mt-3 w-full">
+          <SlabButton tone="solid" onClick={onOpenAi} className="mt-3 w-full">
             <Sparkles size={13} />
             Ask Tingraph AI
           </SlabButton>

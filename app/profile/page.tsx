@@ -10,6 +10,7 @@ import {
 import { AccountPage } from "@/components/account/shell";
 import { SlabButton } from "@/components/editor/ui";
 import { PROFILE_FIELDS, type ProfileField, type ProfileInput } from "@/lib/auth";
+import { isPlanTier, PLAN_LIMITS, planName } from "@/lib/plans";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
@@ -17,6 +18,7 @@ export const metadata: Metadata = {
 };
 
 const SECTIONS = [
+  { href: "#plan", label: "Plan & usage" },
   { href: "#details", label: "Details" },
   { href: "#security", label: "Security" },
   { href: "#accounts", label: "Connected accounts" },
@@ -47,14 +49,20 @@ export default async function ProfilePage() {
 
   const { data: row } = await supabase
     .from("profiles")
-    .select("full_name, username, avatar_url, profession, affiliation, location, website, bio")
+    .select("full_name, username, avatar_url, profession, affiliation, location, website, bio, tier")
     .eq("id", user.id)
     .maybeSingle();
+  const { data: usage } = await supabase.rpc("get_my_entitlements").single();
   const profile = Object.fromEntries(
     (Object.keys(PROFILE_FIELDS) as ProfileField[]).map((field) => [field, row?.[field] ?? null]),
   ) as ProfileInput;
   const name = profile.full_name || profile.username || user.email || "";
   const identities = user.identities ?? [];
+  const storedTier = row?.tier ?? "";
+  const tier = isPlanTier(storedTier) ? storedTier : "free";
+  const limits = PLAN_LIMITS[tier];
+  const generationLimit = usage?.generation_limit ?? limits.generations;
+  const number = (value: number) => value.toLocaleString("en-US");
 
   return (
     <AccountPage>
@@ -91,6 +99,43 @@ export default async function ProfilePage() {
         </aside>
 
         <div className="min-w-0 space-y-6">
+          <section id="plan" className="slab scroll-mt-20 bg-white">
+            <SectionHead title="Plan & usage">
+              <span className="border-2 border-edge bg-edge px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-bone">
+                {planName(tier)}
+              </span>
+            </SectionHead>
+            <div className="grid gap-3 p-5 sm:grid-cols-3">
+              <div className="border-2 border-edge bg-bone p-3">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+                  Saved diagrams
+                </p>
+                <p className="mt-2 text-xl font-semibold text-ink">
+                  {number(usage?.diagram_count ?? 0)} / {number(usage?.diagram_limit ?? limits.diagrams)}
+                </p>
+              </div>
+              <div className="border-2 border-edge bg-bone p-3">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+                  Generations today
+                </p>
+                <p className="mt-2 text-xl font-semibold text-ink">
+                  {number(usage?.generation_used ?? 0)} / {generationLimit === null ? "Unlimited" : number(generationLimit)}
+                </p>
+              </div>
+              <div className="border-2 border-edge bg-bone p-3">
+                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
+                  AI tokens today
+                </p>
+                <p className="mt-2 text-xl font-semibold text-ink">
+                  {number(usage?.ai_tokens_used ?? 0)} / {number(usage?.ai_token_limit ?? limits.aiTokens)}
+                </p>
+              </div>
+            </div>
+            <p className="border-t-2 border-edge px-5 py-3 text-[11.5px] text-ink-soft">
+              Daily allowances reset at 00:00 UTC. Export options are available on every plan.
+            </p>
+          </section>
+
           <ProfileDetails profile={profile} />
 
           <section id="security" className="slab scroll-mt-20 bg-bone">

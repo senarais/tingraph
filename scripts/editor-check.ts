@@ -14,6 +14,7 @@ import { promptFor, GUIDE_SECTIONS } from "../lib/guide";
 import { refuses, systemPrompt, unfence } from "../lib/ai/chat";
 import { avatarProblem, otpType, readProfile, safeNext } from "../lib/auth";
 import { customInk, inkFor, washFor } from "../lib/ink";
+import { isPlanTier, PLAN_LIMITS, planName } from "../lib/plans";
 import { styleFor } from "../lib/sheet";
 import { diagramTitle, readSavedDiagram } from "../lib/saved-diagrams";
 import type { Json } from "../lib/supabase/database.types";
@@ -961,6 +962,20 @@ async function checkPdf(): Promise<void> {
 }
 
 // --------------------------------------------------------------- accounts
+
+assert.deepEqual(
+  PLAN_LIMITS.free,
+  { diagrams: 2, generations: 10, aiTokens: 3_000 },
+  "the Free plan keeps its published limits",
+);
+assert.deepEqual(
+  PLAN_LIMITS.premium,
+  { diagrams: 100, generations: null, aiTokens: 100_000 },
+  "the Premium plan keeps its published limits",
+);
+assert.equal(isPlanTier("premium"), true);
+assert.equal(isPlanTier("pro"), false, "only stored tier values are accepted");
+assert.equal(planName("premium"), "Premium");
 
 // a sign-in only ever comes back to a page on this site
 assert.equal(safeNext("/editor?type=flow#top"), "/editor?type=flow#top");

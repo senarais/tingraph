@@ -54,6 +54,7 @@ export type Database = {
           id: string
           location: string | null
           profession: string | null
+          tier: string
           updated_at: string
           username: string | null
           website: string | null
@@ -67,6 +68,7 @@ export type Database = {
           id: string
           location?: string | null
           profession?: string | null
+          tier?: string
           updated_at?: string
           username?: string | null
           website?: string | null
@@ -80,6 +82,7 @@ export type Database = {
           id?: string
           location?: string | null
           profession?: string | null
+          tier?: string
           updated_at?: string
           username?: string | null
           website?: string | null
@@ -91,7 +94,38 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      consume_generation: {
+        Args: never
+        Returns: {
+          allowed: boolean
+          usage_limit: number | null
+          used: number
+        }[]
+      }
+      get_my_entitlements: {
+        Args: never
+        Returns: {
+          ai_token_limit: number
+          ai_tokens_used: number
+          diagram_count: number
+          diagram_limit: number
+          generation_limit: number | null
+          generation_used: number
+          tier: string
+        }[]
+      }
+      reserve_ai_tokens: {
+        Args: { p_tokens: number }
+        Returns: {
+          allowed: boolean
+          remaining: number
+          reservation_id: string | null
+        }[]
+      }
+      settle_ai_tokens: {
+        Args: { p_reservation_id: string; p_tokens: number }
+        Returns: number
+      }
     }
     Enums: {
       [_ in never]: never

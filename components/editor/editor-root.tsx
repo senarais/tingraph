@@ -13,6 +13,7 @@ import {
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { X } from "lucide-react";
+import AccessDialog from "@/components/account/access-dialog";
 import { useTingraphStore, type Drawer } from "@/lib/store";
 import { TEMPLATES } from "@/lib/templates";
 import { styleFor, type SheetStyle } from "@/lib/sheet";
@@ -208,8 +209,16 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
   const [savedId, setSavedId] = useState(initialDiagram?.id ?? null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveMessage, setSaveMessage] = useState("");
+  const [generating, setGenerating] = useState(false);
+  const [generationMessage, setGenerationMessage] = useState("");
+  const [accountGate, setAccountGate] = useState<{
+    title: string;
+    message: string;
+    next: string;
+  } | null>(null);
   const monacoRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const counterRef = useRef(1);
+  const generatingRef = useRef(false);
 
   useEffect(() => {
     const handle = setTimeout(() => setDebouncedCode(code), 300);
@@ -447,52 +456,112 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
     );
   };
 
+  const requireAccount = async (title: string, message: string) => {
+    const next = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (!accountsReady) {
+      setAccountGate({ title, message, next });
+      return null;
+    }
+    const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      setAccountGate({ title, message, next });
+      return null;
+    }
+    return { supabase, user };
+  };
+
   /**
-   * Redraws the sheet from the source. This is the only moment the code
-   * touches the canvas: everything after it belongs to the reader.
+   * Redraws the sheet from the source after taking one server-side allowance.
+   * This is the only moment the code touches the canvas: everything after it
+   * belongs to the reader.
    */
-  const generate = (source: string = code) => {
+  const generate = async (source: string = code, replaceSource = false) => {
+    if (generatingRef.current) {
+      return;
+    }
     const fresh = drawFromSource(source, ink, direction, style);
     if (!api || fresh.length === 0) {
       return;
     }
-    api.updateScene({
-      elements: fresh,
-      appState: {
-        selectedElementIds: {},
-        selectedGroupIds: {},
-        editingGroupId: null,
-      },
-      captureUpdate: CaptureUpdateAction.IMMEDIATELY,
-    });
-    api.scrollToContent(api.getSceneElements(), {
-      fitToViewport: true,
-      viewportZoomFactor: 0.85,
-    });
+
+    generatingRef.current = true;
+    setGenerating(true);
+    setGenerationMessage("");
+    try {
+      const account = await requireAccount(
+        "Sign up to generate diagrams",
+        "Generation needs an account. The Free plan includes 10 generations per day; Premium generation is unlimited.",
+      );
+      if (!account) return;
+
+      const { data, error } = await account.supabase
+        .rpc("consume_generation")
+        .single();
+      if (error || !data) {
+        setGenerationMessage("Generation allowance could not be checked. Try again.");
+        return;
+      }
+      if (!data.allowed) {
+        setGenerationMessage(
+          `Daily generation limit reached (${data.used}/${data.usage_limit ?? 10}).`,
+        );
+        return;
+      }
+
+      if (replaceSource) {
+        setCode(source);
+      }
+      api.updateScene({
+        elements: fresh,
+        appState: {
+          selectedElementIds: {},
+          selectedGroupIds: {},
+          editingGroupId: null,
+        },
+        captureUpdate: CaptureUpdateAction.IMMEDIATELY,
+      });
+      api.scrollToContent(fresh, {
+        fitToViewport: true,
+        viewportZoomFactor: 0.85,
+      });
+      setGenerationMessage(
+        data.usage_limit === null
+          ? "Generated. Premium generation is unlimited."
+          : `${data.used} of ${data.usage_limit} generations used today.`,
+      );
+    } finally {
+      generatingRef.current = false;
+      setGenerating(false);
+    }
+  };
+
+  const openAi = async () => {
+    const account = await requireAccount(
+      "Sign up to use Tingraph AI",
+      "Tingraph AI needs an account. The Free plan includes 3,000 tokens per day; Premium includes 100,000.",
+    );
+    if (account) {
+      openDrawer("ai");
+    }
   };
 
   const saveDiagram = async () => {
     if (!api || saveState === "saving") {
       return;
     }
-    if (!accountsReady) {
-      setSaveState("error");
-      setSaveMessage("Saved diagrams are not configured here.");
-      return;
-    }
+    const account = await requireAccount(
+      "Sign up to save diagrams",
+      "Saving needs an account. The Free plan stores up to 2 diagrams; Premium stores up to 100.",
+    );
+    if (!account) return;
+
     setSaveState("saving");
     setSaveMessage("Saving diagram…");
     try {
-      const supabase = createClient();
-      const {
-        data: { user },
-        error: authError,
-      } = await supabase.auth.getUser();
-      if (authError || !user) {
-        setSaveState("error");
-        setSaveMessage("Sign in, then press Save again.");
-        return;
-      }
+      const { supabase, user } = account;
 
       const scene = withSceneFiles(
         JSON.parse(
@@ -531,7 +600,11 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
       const { data, error } = await query;
       if (error || !data) {
         setSaveState("error");
-        setSaveMessage("Diagram could not be saved. Try again.");
+        setSaveMessage(
+          error?.message.includes("diagram_limit_reached")
+            ? "Saved-diagram limit reached for your plan."
+            : "Diagram could not be saved. Try again.",
+        );
         return;
       }
       setSavedId(data.id);
@@ -648,7 +721,7 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
       />
 
       <div className="flex min-h-0 flex-1">
-        <Rail category={editorCategory} />
+        <Rail category={editorCategory} onOpenAi={() => void openAi()} />
 
         {drawer && (
           <aside className="flex w-[352px] shrink-0 flex-col border-r-2 border-edge bg-bone">
@@ -758,18 +831,18 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
                 category={editorCategory}
                 summary={result.summary}
                 error={result.error}
-                onGenerate={() => generate()}
-                onReset={() => generate(TEMPLATES[editorCategory])}
+                onGenerate={() => void generate()}
+                onReset={() => void generate(TEMPLATES[editorCategory], true)}
+                generating={generating}
+                generationMessage={generationMessage}
+                onOpenAi={() => void openAi()}
                 onEditorMount={handleEditorMount}
               />
             )}
             {drawer === "ai" && (
               <AiDrawer
                 category={editorCategory}
-                onGenerate={(source) => {
-                  setCode(source);
-                  generate(source);
-                }}
+                onGenerate={(source) => void generate(source, true)}
               />
             )}
             {drawer === "style" && <StyleDrawer category={editorCategory} />}
@@ -820,6 +893,13 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
           onClose={() => setExportOpen(false)}
         />
       )}
+      <AccessDialog
+        open={accountGate !== null}
+        title={accountGate?.title ?? "Account required"}
+        message={accountGate?.message ?? "Sign in to continue."}
+        next={accountGate?.next ?? "/editor"}
+        onClose={() => setAccountGate(null)}
+      />
     </div>
   );
 }

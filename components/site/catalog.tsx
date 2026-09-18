@@ -1,9 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
 import { FolderOpen, LayoutGrid, Search } from "lucide-react";
+import AccessDialog from "@/components/account/access-dialog";
 import { DiagramArt } from "@/components/site/diagram-art";
 import MyDiagrams from "@/components/site/my-diagrams";
 import {
@@ -13,6 +14,7 @@ import {
   type DiagramFamily,
   type DiagramKind,
 } from "@/lib/diagrams";
+import { accountsReady, createClient } from "@/lib/supabase/client";
 
 /**
  * The full list of notations, filtered in the browser: the ready ones and the
@@ -60,7 +62,7 @@ function Check({
   );
 }
 
-function Card({ kind }: { kind: DiagramKind }) {
+function Card({ kind, onOpen }: { kind: DiagramKind; onOpen: () => void }) {
   const ready = Boolean(kind.keyword);
   const tone = ACCENTS[kind.accent];
 
@@ -113,12 +115,13 @@ function Card({ kind }: { kind: DiagramKind }) {
 
         <div className="mt-auto pt-4">
           {ready ? (
-            <Link
-              href={`/editor?type=${kind.id}`}
-              className="block border-2 border-edge bg-edge px-3 py-2 text-center font-mono text-[12.5px] font-semibold text-bone transition-colors hover:bg-navy"
+            <button
+              type="button"
+              onClick={onOpen}
+              className="block w-full border-2 border-edge bg-edge px-3 py-2 text-center font-mono text-[12.5px] font-semibold text-bone transition-colors hover:bg-navy"
             >
               Open in editor
-            </Link>
+            </button>
           ) : (
             <span className="block border-2 border-dashed border-ink-faint px-3 py-2 text-center font-mono text-[12.5px] text-ink-faint">
               Not drawable yet
@@ -131,11 +134,27 @@ function Card({ kind }: { kind: DiagramKind }) {
 }
 
 export default function Catalog() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "mine" ? "mine" : "browse";
   const [query, setQuery] = useState("");
   const [families, setFamilies] = useState<DiagramFamily[]>([...FAMILIES]);
   const [statuses, setStatuses] = useState<Status[]>([...STATUSES]);
+  const [guestChoice, setGuestChoice] = useState<DiagramKind | null>(null);
+
+  const openDiagram = async (kind: DiagramKind) => {
+    const href = `/editor?type=${kind.id}`;
+    if (accountsReady) {
+      const {
+        data: { user },
+      } = await createClient().auth.getUser();
+      if (user) {
+        router.push(href);
+        return;
+      }
+    }
+    setGuestChoice(kind);
+  };
 
   const toggle = <T,>(list: T[], set: (next: T[]) => void, value: T) =>
     set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
@@ -271,11 +290,27 @@ export default function Catalog() {
         ) : (
           <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {results.map((kind) => (
-              <Card key={kind.id} kind={kind} />
+              <Card key={kind.id} kind={kind} onOpen={() => void openDiagram(kind)} />
             ))}
           </div>
         )}
       </div>
+
+      <AccessDialog
+        open={guestChoice !== null}
+        title="Sign up to use generation and AI"
+        message="A free account unlocks 10 generations and 3,000 Tingraph AI tokens per day, plus space for 2 saved diagrams. You can continue without an account to edit manually and export."
+        next={guestChoice ? `/editor?type=${guestChoice.id}` : "/editor"}
+        onClose={() => setGuestChoice(null)}
+        onContinue={
+          guestChoice
+            ? () => {
+                router.push(`/editor?type=${guestChoice.id}`);
+                setGuestChoice(null);
+              }
+            : undefined
+        }
+      />
     </div>
   );
 }

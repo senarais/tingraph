@@ -12,6 +12,7 @@ import {
 } from "@/lib/ai/attachments";
 import { TEMPLATES } from "@/lib/templates";
 import { DiagramCategory, LayoutDirection } from "@/lib/types";
+import { createClient } from "@/lib/supabase/server";
 
 /**
  * Tingraph AI's one endpoint.
@@ -33,6 +34,9 @@ import { DiagramCategory, LayoutDirection } from "@/lib/types";
  */
 const MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash-lite";
 const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+const TOKENS_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:countTokens`;
+const MAX_OUTPUT_TOKENS = 1000;
+const MIN_OUTPUT_TOKENS = 256;
 export const runtime = "nodejs";
 
 /** How much conversation is carried back, and how much of one message. */
@@ -124,29 +128,135 @@ type Reply = {
   };
 };
 
+type Supabase = Awaited<ReturnType<typeof createClient>>;
+
+class AiQuotaError extends Error {}
+
+function generationRequest(
+  system: string,
+  body: ReturnType<typeof contents>,
+  maxOutputTokens: number,
+) {
+  return {
+    systemInstruction: { parts: [{ text: system }] },
+    contents: body,
+    generationConfig: {
+      temperature: 0.4,
+      maxOutputTokens,
+      responseMimeType: "application/json",
+      responseSchema: REPLY_SCHEMA,
+    },
+  };
+}
+
+async function inputTokens(
+  key: string,
+  request: ReturnType<typeof generationRequest>,
+): Promise<number> {
+  const response = await fetch(TOKENS_ENDPOINT, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+    body: JSON.stringify({
+      generateContentRequest: { model: `models/${MODEL}`, ...request },
+    }),
+  });
+  const json = (await response.json().catch(() => null)) as
+    | { totalTokens?: number; error?: { message?: string } }
+    | null;
+  if (!response.ok || !Number.isSafeInteger(json?.totalTokens) || (json?.totalTokens ?? 0) <= 0) {
+    throw new Error(json?.error?.message ?? "Gemini could not count this request's tokens.");
+  }
+  return json!.totalTokens!;
+}
+
+async function reserveTokens(
+  supabase: Supabase,
+  key: string,
+  system: string,
+  body: ReturnType<typeof contents>,
+) {
+  const counted = await inputTokens(
+    key,
+    generationRequest(system, body, MAX_OUTPUT_TOKENS),
+  );
+
+  const reserve = async (tokens: number) =>
+    supabase.rpc("reserve_ai_tokens", { p_tokens: tokens }).single();
+
+  let output = MAX_OUTPUT_TOKENS;
+  let held = await reserve(counted + output);
+  if (held.error || !held.data) {
+    throw new Error("Tingraph AI token allowance could not be checked.");
+  }
+
+  if (!held.data.allowed || !held.data.reservation_id) {
+    output = Math.min(MAX_OUTPUT_TOKENS, held.data.remaining - counted);
+    if (output < MIN_OUTPUT_TOKENS) {
+      throw new AiQuotaError(
+        "Your daily Tingraph AI token limit is reached, or this request is larger than the remaining allowance. It resets at 00:00 UTC.",
+      );
+    }
+    held = await reserve(counted + output);
+    if (held.error || !held.data) {
+      throw new Error("Tingraph AI token allowance could not be checked.");
+    }
+    if (!held.data.allowed || !held.data.reservation_id) {
+      throw new AiQuotaError(
+        "Your daily Tingraph AI token limit is reached. It resets at 00:00 UTC.",
+      );
+    }
+  }
+
+  return {
+    id: held.data.reservation_id,
+    tokens: counted + output,
+    maxOutputTokens: output,
+  };
+}
+
+async function settleTokens(
+  supabase: Supabase,
+  reservation: { id: string; tokens: number },
+  actual: number,
+): Promise<void> {
+  const { error } = await supabase.rpc("settle_ai_tokens", {
+    p_reservation_id: reservation.id,
+    p_tokens: actual,
+  });
+  if (error) {
+    // Reservation remains charged at its safe upper bound and expires after 15 minutes.
+    console.error("Tingraph AI token settlement failed", error.message);
+  }
+}
+
 /** One call. Throws with something worth showing the reader when it fails. */
 async function ask(
+  supabase: Supabase,
   key: string,
   system: string,
   body: ReturnType<typeof contents>,
   attempt: "initial" | "retry",
 ): Promise<AiReply> {
-  const response = await fetch(ENDPOINT, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-goog-api-key": key },
-    body: JSON.stringify({
-      systemInstruction: { parts: [{ text: system }] },
-      contents: body,
-      generationConfig: {
-        temperature: 0.4,
-        maxOutputTokens: 1000,
-        responseMimeType: "application/json",
-        responseSchema: REPLY_SCHEMA,
-      },
-    }),
-  });
+  const reservation = await reserveTokens(supabase, key, system, body);
+  let response: Response;
+  try {
+    response = await fetch(ENDPOINT, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-goog-api-key": key },
+      body: JSON.stringify(generationRequest(system, body, reservation.maxOutputTokens)),
+    });
+  } catch (cause) {
+    await settleTokens(supabase, reservation, 0);
+    throw cause;
+  }
 
   const json = (await response.json().catch(() => null)) as Reply | null;
+  const reported = json?.usageMetadata?.totalTokenCount;
+  const actual =
+    Number.isSafeInteger(reported) && (reported ?? -1) >= 0
+      ? reported!
+      : reservation.tokens;
+  await settleTokens(supabase, reservation, actual);
   console.info(
     `Tingraph AI token usage ${JSON.stringify({
       model: MODEL,
@@ -202,6 +312,14 @@ async function readAttachments(form: FormData): Promise<Attachment[] | null> {
 }
 
 export async function POST(request: Request) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return say("Sign up or sign in to use Tingraph AI.", "", 401);
+  }
+
   const key = process.env.GEMINI_API_KEY;
   if (!key) {
     return say(
@@ -232,10 +350,14 @@ export async function POST(request: Request) {
 
   let reply: AiReply;
   try {
-    reply = await ask(key, system, turns, "initial");
+    reply = await ask(supabase, key, system, turns, "initial");
   } catch (cause) {
+    if (cause instanceof AiQuotaError) {
+      return say(cause.message, "", 429);
+    }
+    console.error("Tingraph AI initial request failed", cause);
     return say(
-      `Tingraph AI could not answer: ${cause instanceof Error ? cause.message : String(cause)}`,
+      "Tingraph AI could not answer right now. Try again.",
       "",
       502,
     );
@@ -251,6 +373,7 @@ export async function POST(request: Request) {
   if (complaint) {
     try {
       const second = await ask(
+        supabase,
         key,
         system,
         [
@@ -264,7 +387,10 @@ export async function POST(request: Request) {
       if (!complaint) {
         return say(second.message || reply.message, second.source);
       }
-    } catch {
+    } catch (cause) {
+      if (cause instanceof AiQuotaError) {
+        return say(cause.message, "", 429);
+      }
       // the second call failing is the same outcome as it not helping
     }
   }

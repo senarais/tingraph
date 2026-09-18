@@ -332,7 +332,13 @@ function RailButton({
   );
 }
 
-export default function Rail({ category }: { category: DiagramCategory }) {
+export default function Rail({
+  category,
+  onOpenAi,
+}: {
+  category: DiagramCategory;
+  onOpenAi: () => void;
+}) {
   const tool = useTingraphStore((s) => s.tool);
   const setTool = useTingraphStore((s) => s.setTool);
   const drawer = useTingraphStore((s) => s.drawer);
@@ -377,7 +383,11 @@ export default function Rail({ category }: { category: DiagramCategory }) {
     if (entry.tool) {
       setTool(entry.tool);
     } else if (entry.drawer) {
-      openDrawer(entry.drawer);
+      if (entry.drawer === "ai") {
+        onOpenAi();
+      } else {
+        openDrawer(entry.drawer);
+      }
     }
   };
 
