@@ -37,6 +37,7 @@ const ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODE
 const TOKENS_ENDPOINT = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:countTokens`;
 const MAX_OUTPUT_TOKENS = 1000;
 const MIN_OUTPUT_TOKENS = 256;
+const MAX_INPUT_TOKENS = 3000;
 export const runtime = "nodejs";
 
 /** How much conversation is carried back, and how much of one message. */
@@ -131,6 +132,7 @@ type Reply = {
 type Supabase = Awaited<ReturnType<typeof createClient>>;
 
 class AiQuotaError extends Error {}
+class AiInputLimitError extends Error {}
 
 function generationRequest(
   system: string,
@@ -179,24 +181,29 @@ async function reserveTokens(
     key,
     generationRequest(system, body, MAX_OUTPUT_TOKENS),
   );
+  if (counted > MAX_INPUT_TOKENS) {
+    throw new AiInputLimitError(
+      "This request is too long. Keep the input under 3,000 tokens and try again.",
+    );
+  }
 
   const reserve = async (tokens: number) =>
     supabase.rpc("reserve_ai_tokens", { p_tokens: tokens }).single();
 
   let output = MAX_OUTPUT_TOKENS;
-  let held = await reserve(counted + output);
+  let held = await reserve(output);
   if (held.error || !held.data) {
     throw new Error("Tingraph AI token allowance could not be checked.");
   }
 
   if (!held.data.allowed || !held.data.reservation_id) {
-    output = Math.min(MAX_OUTPUT_TOKENS, held.data.remaining - counted);
+    output = Math.min(MAX_OUTPUT_TOKENS, held.data.remaining);
     if (output < MIN_OUTPUT_TOKENS) {
       throw new AiQuotaError(
         "Your daily Tingraph AI token limit is reached, or this request is larger than the remaining allowance. It resets at 00:00 UTC.",
       );
     }
-    held = await reserve(counted + output);
+    held = await reserve(output);
     if (held.error || !held.data) {
       throw new Error("Tingraph AI token allowance could not be checked.");
     }
@@ -209,7 +216,7 @@ async function reserveTokens(
 
   return {
     id: held.data.reservation_id,
-    tokens: counted + output,
+    tokens: output,
     maxOutputTokens: output,
   };
 }
@@ -251,11 +258,14 @@ async function ask(
   }
 
   const json = (await response.json().catch(() => null)) as Reply | null;
-  const reported = json?.usageMetadata?.totalTokenCount;
+  const prompt = json?.usageMetadata?.promptTokenCount;
+  const total = json?.usageMetadata?.totalTokenCount;
   const actual =
-    Number.isSafeInteger(reported) && (reported ?? -1) >= 0
-      ? reported!
-      : reservation.tokens;
+    Number.isSafeInteger(prompt) && Number.isSafeInteger(total) && total! >= prompt!
+      ? Math.min(total! - prompt!, reservation.tokens)
+      : response.ok
+        ? reservation.tokens
+        : 0;
   await settleTokens(supabase, reservation, actual);
   console.info(
     `Tingraph AI token usage ${JSON.stringify({
@@ -352,6 +362,9 @@ export async function POST(request: Request) {
   try {
     reply = await ask(supabase, key, system, turns, "initial");
   } catch (cause) {
+    if (cause instanceof AiInputLimitError) {
+      return say(cause.message, "", 413);
+    }
     if (cause instanceof AiQuotaError) {
       return say(cause.message, "", 429);
     }
@@ -388,6 +401,9 @@ export async function POST(request: Request) {
         return say(second.message || reply.message, second.source);
       }
     } catch (cause) {
+      if (cause instanceof AiInputLimitError) {
+        return say(cause.message, "", 413);
+      }
       if (cause instanceof AiQuotaError) {
         return say(cause.message, "", 429);
       }

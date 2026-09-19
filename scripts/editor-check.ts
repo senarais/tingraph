@@ -965,7 +965,7 @@ async function checkPdf(): Promise<void> {
 
 assert.deepEqual(
   PLAN_LIMITS.free,
-  { diagrams: 2, generations: 10, aiTokens: 3_000 },
+  { diagrams: 2, generations: 10, aiTokens: 2_000 },
   "the Free plan keeps its published limits",
 );
 assert.deepEqual(

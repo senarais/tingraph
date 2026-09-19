@@ -42,6 +42,7 @@ import {
   attachmentProblem,
   attachmentsProblem,
   MAX_ATTACHMENT_BYTES,
+  MAX_ATTACHMENTS,
   MAX_ATTACHMENTS_BYTES,
 } from "@/lib/ai/attachments";
 import type { FishboneSpec } from "@/lib/fishbone/spec";
@@ -1518,7 +1519,8 @@ assert.ok(
   attachmentProblem("application/pdf", MAX_ATTACHMENT_BYTES + 1),
   "each attachment has a size cap",
 );
-assert.ok(attachmentsProblem(5, 1), "attachment count has a cap");
+assert.equal(attachmentsProblem(MAX_ATTACHMENTS, 1), null, "attachment limit is accepted");
+assert.ok(attachmentsProblem(MAX_ATTACHMENTS + 1, 1), "attachment count has a cap");
 assert.ok(
   attachmentsProblem(1, MAX_ATTACHMENTS_BYTES + 1),
   "attachment total has a size cap",

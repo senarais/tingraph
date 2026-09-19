@@ -7,7 +7,7 @@ export type Entitlements = Omit<
 > & { tier: PlanTier };
 
 export const PLAN_LIMITS = {
-  free: { diagrams: 2, generations: 10, aiTokens: 3_000 },
+  free: { diagrams: 2, generations: 10, aiTokens: 2_000 },
   premium: { diagrams: 100, generations: null, aiTokens: 100_000 },
 } as const;
 

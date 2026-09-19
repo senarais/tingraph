@@ -8,7 +8,7 @@ export const ATTACHMENT_MIME_TYPES = [
 ] as const;
 
 export const ATTACHMENT_ACCEPT = ATTACHMENT_MIME_TYPES.join(",");
-export const MAX_ATTACHMENTS = 4;
+export const MAX_ATTACHMENTS = 2;
 export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 export const MAX_ATTACHMENTS_BYTES = 10 * 1024 * 1024;
 
@@ -27,7 +27,7 @@ export function attachmentProblem(mimeType: string, size: number): string | null
 
 export function attachmentsProblem(count: number, totalBytes: number): string | null {
   if (count > MAX_ATTACHMENTS) {
-    return "Attach up to 4 files at a time.";
+    return "Attach up to 2 files at a time.";
   }
   if (totalBytes > MAX_ATTACHMENTS_BYTES) {
     return "Attachments can total at most 10 MB.";

@@ -6,6 +6,7 @@ import {
   ATTACHMENT_ACCEPT,
   attachmentProblem,
   attachmentsProblem,
+  MAX_ATTACHMENTS,
 } from "@/lib/ai/attachments";
 import { useTingraphStore, type ChatTurn } from "@/lib/store";
 import { TEMPLATE_LABELS } from "@/lib/templates";
@@ -300,7 +301,7 @@ export default function AiDrawer({
             Attach
           </SlabButton>
           <span className="min-w-0 flex-1 truncate text-[11px] text-ink-faint">
-            PDF or image, up to 4 files / 10 MB. Enter sends
+            PDF or image, up to {MAX_ATTACHMENTS} files / 10 MB. Enter sends
           </span>
           {chat.length > 0 && (
             <SlabButton onClick={clearChat} title="Start the conversation again">
