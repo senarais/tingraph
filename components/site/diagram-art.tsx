@@ -70,37 +70,6 @@ function Head({
   );
 }
 
-function Caption({
-  x,
-  y,
-  ink,
-  size = 9,
-  weight = 400,
-  children,
-}: {
-  x: number;
-  y: number;
-  ink: string;
-  size?: number;
-  weight?: number;
-  children: React.ReactNode;
-}) {
-  return (
-    <text
-      x={x}
-      y={y}
-      fill={ink}
-      fontSize={size}
-      fontWeight={weight}
-      textAnchor="middle"
-      dominantBaseline="middle"
-      fontFamily="var(--font-plex-sans), system-ui, sans-serif"
-    >
-      {children}
-    </text>
-  );
-}
-
 /* --------------------------------------------------------------- flowchart */
 
 export function FlowArt({ accent = "navy", className }: ArtProps) {
@@ -110,7 +79,7 @@ export function FlowArt({ accent = "navy", className }: ArtProps) {
       viewBox="0 0 320 264"
       className={className}
       role="img"
-      aria-label="Flowchart preview: start, read input, run checks, a valid decision, save record"
+      aria-label="Flowchart preview"
     >
       <ellipse
         cx={160}
@@ -123,10 +92,6 @@ export function FlowArt({ accent = "navy", className }: ArtProps) {
         pathLength={1}
         className="ink-path"
       />
-      <Caption x={160} y={23} ink={ink}>
-        Start
-      </Caption>
-
       <Line d="M160 37V52" ink={ink} delay={90} />
       <Head x={160} y={56} dir="down" ink={ink} delay={200} />
 
@@ -142,10 +107,6 @@ export function FlowArt({ accent = "navy", className }: ArtProps) {
         className="ink-path"
         style={{ animationDelay: "120ms" }}
       />
-      <Caption x={160} y={73} ink={ink}>
-        Read input
-      </Caption>
-
       <Line d="M160 87V102" ink={ink} delay={200} />
       <Head x={160} y={106} dir="down" ink={ink} delay={310} />
 
@@ -161,10 +122,6 @@ export function FlowArt({ accent = "navy", className }: ArtProps) {
         className="ink-path"
         style={{ animationDelay: "240ms" }}
       />
-      <Caption x={160} y={123} ink={ink}>
-        Run checks
-      </Caption>
-
       <Line d="M160 137V150" ink={ink} delay={310} />
       <Head x={160} y={154} dir="down" ink={ink} delay={420} />
 
@@ -177,15 +134,8 @@ export function FlowArt({ accent = "navy", className }: ArtProps) {
         className="ink-path"
         style={{ animationDelay: "360ms" }}
       />
-      <Caption x={160} y={183} ink={ink}>
-        Valid?
-      </Caption>
-
       <Line d="M160 209V224" ink={ink} delay={440} />
       <Head x={160} y={228} dir="down" ink={ink} delay={540} />
-      <Caption x={173} y={218} ink={ink} size={8}>
-        Yes
-      </Caption>
 
       <ellipse
         cx={160}
@@ -199,16 +149,9 @@ export function FlowArt({ accent = "navy", className }: ArtProps) {
         className="ink-path"
         style={{ animationDelay: "480ms" }}
       />
-      <Caption x={160} y={245} ink={ink}>
-        Save record
-      </Caption>
-
       {/* the No branch runs back up the left margin into Run checks */}
       <Line d="M112 182H66V122H109" ink={ink} delay={520} />
       <Head x={113} y={122} dir="right" ink={ink} delay={640} />
-      <Caption x={80} y={112} ink={ink} size={8}>
-        No
-      </Caption>
     </svg>
   );
 }
@@ -217,37 +160,12 @@ export function FlowArt({ accent = "navy", className }: ArtProps) {
 
 export function BpmnArt({ accent = "forest", className }: ArtProps) {
   const ink = ACCENTS[accent].stroke;
-  /** A pool or lane name, set on its side in the header column, as bpmn.io does. */
-  const sideways = (
-    x: number,
-    y: number,
-    text: string,
-    size: number,
-    dim = false,
-  ) => (
-    <text
-      // rotate(-90) maps (x, y) to (y, -x), so the pair below is written back
-      x={-y}
-      y={x}
-      fill={ink}
-      fontSize={size}
-      transform="rotate(-90 0 0)"
-      textAnchor="middle"
-      dominantBaseline="middle"
-      opacity={dim ? 0.8 : 1}
-      fontFamily="var(--font-plex-sans), system-ui, sans-serif"
-      fontWeight={dim ? 400 : 600}
-    >
-      {text}
-    </text>
-  );
-
   return (
     <svg
       viewBox="0 0 320 210"
       className={className}
       role="img"
-      aria-label="BPMN preview: a pool split into an employee lane and a manager lane, with a start event, a task, an exclusive gateway and an end event"
+      aria-label="BPMN workflow preview"
     >
       {/* pool, its name column, the lane name column, then the lane rule */}
       <rect
@@ -265,10 +183,6 @@ export function BpmnArt({ accent = "forest", className }: ArtProps) {
       <Line d="M60 18V186" ink={ink} delay={110} />
       <Line d="M38 102H304" ink={ink} delay={150} />
 
-      {sideways(27, 102, "Request", 9)}
-      {sideways(49, 60, "Employee", 8, true)}
-      {sideways(49, 144, "Manager", 8, true)}
-
       {/* employee lane: start event, then the task it kicks off */}
       <circle
         cx={88}
@@ -281,10 +195,6 @@ export function BpmnArt({ accent = "forest", className }: ArtProps) {
         className="ink-path"
         style={{ animationDelay: "180ms" }}
       />
-      <Caption x={88} y={86} ink={ink} size={8}>
-        Submit
-      </Caption>
-
       <Line d="M101 60H128" ink={ink} delay={260} />
       <Head x={135} y={60} dir="right" ink={ink} delay={360} />
 
@@ -301,13 +211,6 @@ export function BpmnArt({ accent = "forest", className }: ArtProps) {
         className="ink-path"
         style={{ animationDelay: "300ms" }}
       />
-      <Caption x={180} y={54} ink={ink} size={8}>
-        Fill vacation
-      </Caption>
-      <Caption x={180} y={66} ink={ink} size={8}>
-        form
-      </Caption>
-
       {/* down into the manager lane */}
       <Line d="M180 78V122" ink={ink} delay={400} />
       <Head x={180} y={128} dir="down" ink={ink} delay={520} />
@@ -330,15 +233,8 @@ export function BpmnArt({ accent = "forest", className }: ArtProps) {
         className="ink-path"
         style={{ animationDelay: "560ms" }}
       />
-      <Caption x={180} y={178} ink={ink} size={8}>
-        Approved?
-      </Caption>
-
       <Line d="M199 147H234" ink={ink} delay={580} />
       <Head x={240} y={147} dir="right" ink={ink} delay={680} />
-      <Caption x={218} y={139} ink={ink} size={7}>
-        Yes
-      </Caption>
 
       <circle
         cx={256}
@@ -351,9 +247,6 @@ export function BpmnArt({ accent = "forest", className }: ArtProps) {
         className="ink-path"
         style={{ animationDelay: "640ms" }}
       />
-      <Caption x={256} y={175} ink={ink} size={8}>
-        Done
-      </Caption>
     </svg>
   );
 }
@@ -367,8 +260,6 @@ export function OrgArt({ accent = "oxblood", className }: ArtProps) {
     x: number,
     y: number,
     w: number,
-    role: string,
-    name: string | null,
     delay: number,
   ) => (
     <g key={`${x}-${y}`}>
@@ -376,7 +267,7 @@ export function OrgArt({ accent = "oxblood", className }: ArtProps) {
         x={x}
         y={y}
         width={w}
-        height={name ? 40 : 22}
+        height={40}
         fill="#fff"
         stroke={ink}
         strokeWidth={CONNECTOR}
@@ -397,14 +288,6 @@ export function OrgArt({ accent = "oxblood", className }: ArtProps) {
         className="ink-path"
         style={{ animationDelay: `${delay}ms` }}
       />
-      <Caption x={x + w / 2} y={y + 12} ink={ink} size={8} weight={600}>
-        {role}
-      </Caption>
-      {name ? (
-        <Caption x={x + w / 2} y={y + 31} ink={ink} size={7.5}>
-          {name}
-        </Caption>
-      ) : null}
     </g>
   );
 
@@ -413,9 +296,9 @@ export function OrgArt({ accent = "oxblood", className }: ArtProps) {
       viewBox="0 0 320 200"
       className={className}
       role="img"
-      aria-label="Org chart preview: a dean over two vice deans, with a dashed advisory tie to the faculty senate"
+      aria-label="Organization chart preview"
     >
-      {box(102, 16, 116, "DEAN", "Dr. Marion Hale", 0)}
+      {box(102, 16, 116, 0)}
 
       {/* dashed advisory tie out to the senate */}
       <path
@@ -426,21 +309,7 @@ export function OrgArt({ accent = "oxblood", className }: ArtProps) {
         fill="none"
         opacity={0.85}
       />
-      <rect
-        x={262}
-        y={25}
-        width={54}
-        height={22}
-        fill={wash}
-        stroke={ink}
-        strokeWidth={CONNECTOR}
-        pathLength={1}
-        className="ink-path"
-        style={{ animationDelay: "160ms" }}
-      />
-      <Caption x={289} y={37} ink={ink} size={7} weight={600}>
-        SENATE
-      </Caption>
+      {box(262, 16, 54, 160)}
 
       {/* the reporting bus: down out of the dean, across, down into each box */}
       <Line d="M160 56V92" ink={ink} delay={220} />
@@ -450,8 +319,8 @@ export function OrgArt({ accent = "oxblood", className }: ArtProps) {
       <Head x={74} y={124} dir="down" ink={ink} delay={470} />
       <Head x={246} y={124} dir="down" ink={ink} delay={470} />
 
-      {box(16, 125, 116, "VICE DEAN I", "Priya Raman, Ph.D", 420)}
-      {box(188, 125, 116, "VICE DEAN II", "Dr. Elena Sorbo", 460)}
+      {box(16, 125, 116, 420)}
+      {box(188, 125, 116, 460)}
     </svg>
   );
 }
