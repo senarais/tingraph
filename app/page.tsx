@@ -102,7 +102,7 @@ export default function Home() {
                 width={1000}
                 height={1000}
                 sizes="112px"
-                className="mascot-float-left pointer-events-none absolute left-0 top-24 hidden h-28 w-28 object-contain lg:block"
+                className="mascot-float-right pointer-events-none absolute right-0 top-2 hidden h-28 w-28 object-contain lg:block"
               />
               <Image
                 src="/mascot/4.png"
@@ -110,7 +110,7 @@ export default function Home() {
                 width={1000}
                 height={1000}
                 sizes="112px"
-                className="mascot-float-right pointer-events-none absolute right-0 top-28 hidden h-28 w-28 object-contain lg:block"
+                className="mascot-float-left pointer-events-none absolute bottom-0 left-0 hidden h-28 w-28 object-contain lg:block"
               />
 
               <div className="mx-auto flex w-fit items-center gap-3 border-2 border-edge bg-white p-1 pl-4">
@@ -244,7 +244,7 @@ export default function Home() {
               afterwards.
             </p>
 
-            <div className="mt-10 grid gap-5 md:grid-cols-3">
+            <div className="mt-10 grid gap-5 md:grid-cols-3 md:grid-flow-dense">
               {FEATURES.map((feature, i) => (
                 <Fragment key={feature.title}>
                   <article
@@ -274,7 +274,7 @@ export default function Home() {
                     </div>
                   )}
 
-                  {i === 2 && (
+                  {i === 5 && (
                     <div
                       aria-hidden="true"
                       className="slab flex min-h-56 items-center justify-center overflow-hidden bg-white p-3"
@@ -333,9 +333,9 @@ export default function Home() {
                 width={1000}
                 height={1000}
                 sizes="176px"
-                className="pointer-events-none absolute left-4 top-0 z-10 h-40 w-40 object-contain sm:left-8 sm:h-44 sm:w-44"
+                className="pointer-events-none absolute -left-6 -top-3 z-0 h-40 w-40 object-contain sm:-left-7 sm:h-44 sm:w-44"
               />
-              <div className="slab divide-y-2 divide-edge bg-white">
+              <div className="slab relative z-10 divide-y-2 divide-edge bg-white">
                 {FAQ.map((item, i) => (
                   <details key={item.q} open={i === 0} className="group">
                     <summary className="flex cursor-pointer list-none items-center gap-4 px-5 py-4 text-[14.5px] font-medium text-ink marker:content-none hover:bg-bone">

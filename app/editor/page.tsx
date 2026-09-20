@@ -4,7 +4,7 @@ import NotationPicker from "@/components/editor/notation-picker";
 import { DiagramCategory } from "@/lib/types";
 
 export const metadata: Metadata = {
-  title: "Editor — Tingraph",
+  title: "Editor | Tingraph",
   description:
     "Pick a notation, write the source, watch the drawing follow, then edit it on the sheet and export a PNG, JPG, SVG or PDF.",
 };
