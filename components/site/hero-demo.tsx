@@ -13,7 +13,7 @@ import { parseDSL } from "@/lib/parser/parse-dsl";
  * pair moves on to the next notation until the reader picks one themselves.
  */
 
-const TYPE_MS = 2100;
+const TYPE_MS = 1650;
 const HOLD_MS = 3400;
 const SOURCE_ROWS = HERO_DIAGRAMS.reduce(
   (rows, diagram) => Math.max(rows, (diagram.sample ?? "").split("\n").length),

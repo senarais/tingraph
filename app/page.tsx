@@ -316,7 +316,7 @@ export default function Home() {
 
         {/* ------------------------------------------------------------- faq */}
         <section id="faq" className="scroll-mt-16 border-b-2 border-edge">
-          <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 sm:py-20 lg:grid-cols-[minmax(0,22rem)_minmax(0,1fr)]">
+          <div className="mx-auto grid max-w-4xl gap-10 px-4 py-16 sm:px-6 sm:py-20">
             <div>
               <h2 className="text-balance font-mono text-3xl font-semibold tracking-[-0.03em] text-ink sm:text-4xl">
                 Questions
@@ -348,7 +348,7 @@ export default function Home() {
                         <span className="hidden group-open:inline">−</span>
                       </span>
                     </summary>
-                    <p className="border-t-2 border-edge bg-bone px-5 py-4 text-[13.5px] leading-relaxed text-ink-soft">
+                    <p className="faq-answer border-t-2 border-edge bg-bone px-5 py-4 text-[13.5px] leading-relaxed text-ink-soft">
                       {item.a}
                     </p>
                   </details>
