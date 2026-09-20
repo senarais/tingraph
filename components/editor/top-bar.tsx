@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { Check, Download, Repeat2, Save } from "lucide-react";
 import { TEMPLATE_LABELS, useTingraphStore } from "@/lib/store";
 import { DiagramCategory } from "@/lib/types";
@@ -67,15 +68,14 @@ export default function TopBar({
         title="Back to the Tingraph home page"
         className="flex items-center gap-2.5 border-r-2 border-edge px-4 transition-colors hover:bg-white"
       >
-        <svg viewBox="0 0 16 16" className="h-4 w-4 text-ink" aria-hidden="true">
-          <path d="M1 15V1h14" fill="none" stroke="currentColor" strokeWidth="1.75" />
-          <path
-            d="M4 12l3.5-6L11 9l3-5"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-          />
-        </svg>
+        <Image
+          src="/icon.png"
+          alt=""
+          width={1000}
+          height={1000}
+          sizes="28px"
+          className="h-7 w-7 object-contain"
+        />
         <span className="text-[14px] font-semibold tracking-tight text-ink">
           tingraph
         </span>

@@ -18,6 +18,10 @@ export const metadata: Metadata = {
   title: "Tingraph — code-to-diagram for papers",
   description:
     "Write a simple DSL, get publication-ready black-and-white flowcharts and BPMN diagrams on an editable canvas.",
+  icons: {
+    icon: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

@@ -1,4 +1,6 @@
 import Link from "next/link";
+import Image from "next/image";
+import { Fragment } from "react";
 import { ArrowRight } from "lucide-react";
 import { DiagramArt } from "@/components/site/diagram-art";
 import HeroDemo from "@/components/site/hero-demo";
@@ -93,30 +95,49 @@ export default function Home() {
           />
 
           <div className="relative mx-auto max-w-6xl px-4 pb-16 pt-14 sm:px-6 sm:pt-20">
-            <div className="mx-auto flex w-fit items-center gap-3 border-2 border-edge bg-white p-1 pl-4">
-              <span className="text-[12.5px] text-ink">
-                {READY_DIAGRAMS.length} notations ready, more on the way
-              </span>
-              <Link
-                href="/build"
-                className="flex items-center gap-1.5 bg-edge px-2.5 py-1.5 font-mono text-[12px] font-semibold text-bone transition-colors hover:bg-navy"
-              >
-                See them
-                <ArrowRight size={13} />
-              </Link>
+            <div className="relative mx-auto max-w-5xl">
+              <Image
+                src="/mascot/2.png"
+                alt=""
+                width={1000}
+                height={1000}
+                sizes="112px"
+                className="mascot-float-left pointer-events-none absolute left-0 top-24 hidden h-28 w-28 object-contain lg:block"
+              />
+              <Image
+                src="/mascot/4.png"
+                alt=""
+                width={1000}
+                height={1000}
+                sizes="112px"
+                className="mascot-float-right pointer-events-none absolute right-0 top-28 hidden h-28 w-28 object-contain lg:block"
+              />
+
+              <div className="mx-auto flex w-fit items-center gap-3 border-2 border-edge bg-white p-1 pl-4">
+                <span className="text-[12.5px] text-ink">
+                  {READY_DIAGRAMS.length} notations ready, more on the way
+                </span>
+                <Link
+                  href="/build"
+                  className="flex items-center gap-1.5 bg-edge px-2.5 py-1.5 font-mono text-[12px] font-semibold text-bone transition-colors hover:bg-navy"
+                >
+                  See them
+                  <ArrowRight size={13} />
+                </Link>
+              </div>
+
+              <h1 className="mx-auto mt-8 max-w-3xl text-center font-mono text-[1.75rem] font-semibold leading-[1.06] tracking-[-0.035em] text-ink sm:text-5xl lg:text-6xl">
+                Write the diagram.
+                <br />
+                Tingraph draws it.
+              </h1>
+
+              <p className="mx-auto mt-6 max-w-[46ch] text-center text-[15px] leading-relaxed text-ink-soft sm:text-base">
+                A small language for flowcharts, BPMN 2.0, org charts, charts,
+                mind maps and more. Spacing, routing and geometry are worked out
+                for you, and every shape stays editable once it lands on the sheet.
+              </p>
             </div>
-
-            <h1 className="mx-auto mt-8 max-w-3xl text-center font-mono text-[1.75rem] font-semibold leading-[1.06] tracking-[-0.035em] text-ink sm:text-5xl lg:text-6xl">
-              Write the diagram.
-              <br />
-              Tingraph draws it.
-            </h1>
-
-            <p className="mx-auto mt-6 max-w-[46ch] text-center text-[15px] leading-relaxed text-ink-soft sm:text-base">
-              A small language for flowcharts, BPMN 2.0, org charts, charts,
-              mind maps and more. Spacing, routing and geometry are worked out
-              for you, and every shape stays editable once it lands on the sheet.
-            </p>
 
             <div className="mt-10">
               <HeroDemo />
@@ -224,18 +245,51 @@ export default function Home() {
             </p>
 
             <div className="mt-10 grid gap-5 md:grid-cols-3">
-              {FEATURES.map((feature) => (
-                <article
-                  key={feature.title}
-                  className={`slab bg-white p-5 ${feature.span ? "md:col-span-2" : ""}`}
-                >
-                  <h3 className="font-mono text-[16px] font-semibold tracking-tight text-ink">
-                    {feature.title}
-                  </h3>
-                  <p className="mt-2.5 text-[13.5px] leading-relaxed text-ink-soft">
-                    {feature.body}
-                  </p>
-                </article>
+              {FEATURES.map((feature, i) => (
+                <Fragment key={feature.title}>
+                  <article
+                    className={`slab bg-white p-5 ${feature.span || i === FEATURES.length - 1 ? "md:col-span-2" : ""}`}
+                  >
+                    <h3 className="font-mono text-[16px] font-semibold tracking-tight text-ink">
+                      {feature.title}
+                    </h3>
+                    <p className="mt-2.5 text-[13.5px] leading-relaxed text-ink-soft">
+                      {feature.body}
+                    </p>
+                  </article>
+
+                  {i === 0 && (
+                    <div
+                      aria-hidden="true"
+                      className="slab flex min-h-56 items-center justify-center overflow-hidden bg-white p-3"
+                    >
+                      <Image
+                        src="/mascot/3.png"
+                        alt=""
+                        width={1000}
+                        height={1000}
+                        sizes="(min-width: 768px) 352px, 100vw"
+                        className="h-52 w-full object-contain"
+                      />
+                    </div>
+                  )}
+
+                  {i === 2 && (
+                    <div
+                      aria-hidden="true"
+                      className="slab flex min-h-56 items-center justify-center overflow-hidden bg-white p-3"
+                    >
+                      <Image
+                        src="/mascot/5.png"
+                        alt=""
+                        width={1000}
+                        height={1000}
+                        sizes="(min-width: 768px) 352px, 100vw"
+                        className="h-52 w-full object-contain"
+                      />
+                    </div>
+                  )}
+                </Fragment>
               ))}
             </div>
           </div>
@@ -272,24 +326,34 @@ export default function Home() {
               </p>
             </div>
 
-            <div className="slab divide-y-2 divide-edge bg-white">
-              {FAQ.map((item, i) => (
-                <details key={item.q} open={i === 0} className="group">
-                  <summary className="flex cursor-pointer list-none items-center gap-4 px-5 py-4 text-[14.5px] font-medium text-ink marker:content-none hover:bg-bone">
-                    {item.q}
-                    <span
-                      aria-hidden="true"
-                      className="ml-auto grid h-6 w-6 shrink-0 place-items-center border-2 border-edge font-mono text-[15px] leading-none group-open:bg-edge group-open:text-bone"
-                    >
-                      <span className="group-open:hidden">+</span>
-                      <span className="hidden group-open:inline">−</span>
-                    </span>
-                  </summary>
-                  <p className="border-t-2 border-edge bg-bone px-5 py-4 text-[13.5px] leading-relaxed text-ink-soft">
-                    {item.a}
-                  </p>
-                </details>
-              ))}
+            <div className="relative pt-28 sm:pt-32">
+              <Image
+                src="/mascot/7.png"
+                alt=""
+                width={1000}
+                height={1000}
+                sizes="176px"
+                className="pointer-events-none absolute left-4 top-0 z-10 h-40 w-40 object-contain sm:left-8 sm:h-44 sm:w-44"
+              />
+              <div className="slab divide-y-2 divide-edge bg-white">
+                {FAQ.map((item, i) => (
+                  <details key={item.q} open={i === 0} className="group">
+                    <summary className="flex cursor-pointer list-none items-center gap-4 px-5 py-4 text-[14.5px] font-medium text-ink marker:content-none hover:bg-bone">
+                      {item.q}
+                      <span
+                        aria-hidden="true"
+                        className="ml-auto grid h-6 w-6 shrink-0 place-items-center border-2 border-edge font-mono text-[15px] leading-none group-open:bg-edge group-open:text-bone"
+                      >
+                        <span className="group-open:hidden">+</span>
+                        <span className="hidden group-open:inline">−</span>
+                      </span>
+                    </summary>
+                    <p className="border-t-2 border-edge bg-bone px-5 py-4 text-[13.5px] leading-relaxed text-ink-soft">
+                      {item.a}
+                    </p>
+                  </details>
+                ))}
+              </div>
             </div>
           </div>
         </section>

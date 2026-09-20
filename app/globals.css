@@ -61,6 +61,15 @@ body {
   color: var(--ink);
   font-family: var(--font-plex-sans), system-ui, sans-serif;
   font-feature-settings: "cv05" 1;
+  user-select: none;
+}
+
+input,
+textarea,
+[contenteditable="true"],
+.monaco-editor,
+.monaco-editor * {
+  user-select: text;
 }
 
 /* Annotation label, set the way a drawing sheet labels its cells. */
@@ -209,6 +218,36 @@ body {
   mask-image: linear-gradient(to bottom, #000 55%, transparent 100%);
 }
 
+.mascot-float-left {
+  animation: mascot-drift-left 4.8s ease-in-out infinite;
+  will-change: transform;
+}
+
+.mascot-float-right {
+  animation: mascot-drift-right 5.4s ease-in-out infinite;
+  will-change: transform;
+}
+
+@keyframes mascot-drift-left {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(1deg);
+  }
+}
+
+@keyframes mascot-drift-right {
+  0%,
+  100% {
+    transform: translateY(-6px) rotate(4deg);
+  }
+  50% {
+    transform: translateY(6px) rotate(-1deg);
+  }
+}
+
 /*
  * Diagram previews draw themselves in. Every stroke carries pathLength="1", so
  * one dash length covers any path whatever its real geometry. A preview is
@@ -271,7 +310,9 @@ body {
   .redraw:focus-within .ink-path,
   .drawn .ink-fill,
   .redraw:hover .ink-fill,
-  .redraw:focus-within .ink-fill {
+  .redraw:focus-within .ink-fill,
+  .mascot-float-left,
+  .mascot-float-right {
     animation: none;
   }
   .press:hover,

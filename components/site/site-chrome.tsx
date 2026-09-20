@@ -1,6 +1,6 @@
 import Link from "next/link";
+import Image from "next/image";
 import AccountButton from "@/components/account/account-button";
-import { Mark } from "@/components/site/diagram-art";
 import { READY_DIAGRAMS } from "@/lib/diagrams";
 
 /** Anchors on the landing page, written absolute so the bar works from /build. */
@@ -19,7 +19,14 @@ export function SiteNav() {
           href="/"
           className="flex shrink-0 items-center gap-2 font-mono text-[15px] font-semibold tracking-tight text-ink"
         >
-          <Mark className="h-4 w-4" />
+          <Image
+            src="/icon.png"
+            alt=""
+            width={1000}
+            height={1000}
+            sizes="28px"
+            className="h-7 w-7 object-contain"
+          />
           tingraph
         </Link>
 
@@ -63,7 +70,14 @@ export function SiteFooter() {
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 md:grid-cols-[2fr_1fr_1fr]">
         <div>
           <div className="flex items-center gap-2 font-mono text-[15px] font-semibold text-ink">
-            <Mark className="h-4 w-4" />
+            <Image
+              src="/icon.png"
+              alt=""
+              width={1000}
+              height={1000}
+              sizes="24px"
+              className="h-6 w-6 object-contain"
+            />
             tingraph
           </div>
           <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-ink-soft">

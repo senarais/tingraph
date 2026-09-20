@@ -15,6 +15,10 @@ import { parseDSL } from "@/lib/parser/parse-dsl";
 
 const TYPE_MS = 2100;
 const HOLD_MS = 3400;
+const SOURCE_ROWS = HERO_DIAGRAMS.reduce(
+  (rows, diagram) => Math.max(rows, (diagram.sample ?? "").split("\n").length),
+  1,
+);
 
 type Token = { text: string; tone: string };
 
@@ -166,7 +170,10 @@ export default function HeroDemo() {
 
       <div className="grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)]">
         <div className="min-w-0 bg-edge p-5 md:border-r-2 md:border-edge">
-          <pre className="overflow-x-auto font-mono text-[12px] leading-[1.75] md:text-[12.5px]">
+          <pre
+            className="overflow-x-auto font-mono text-[12px] leading-[1.75] md:text-[12.5px]"
+            style={{ height: `${SOURCE_ROWS * 1.75}em` }}
+          >
             <code>
               {slice(tokens, typed).map((token, i) => (
                 <span key={i} style={{ color: token.tone }}>
