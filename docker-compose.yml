@@ -1,0 +1,278 @@
+name: tingraph
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: tingraph
+      POSTGRES_USER: tingraph_owner
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_owner_password
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=40
+      - -c
+      - wal_compression=on
+    secrets:
+      - postgres_owner_password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tingraph_owner -d tingraph"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+    logging: *default-logging
+    mem_limit: 512m
+    cpus: 0.75
+    networks:
+      - internal
+
+  db-bootstrap:
+    image: postgres:17-alpine
+    restart: "no"
+    entrypoint: ["/opt/tingraph/bootstrap-role.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
+    secrets:
+      - migrations_database_url
+      - postgres_app_password
+      - postgres_backup_password
+    volumes:
+      - ./ops/bootstrap-role.sh:/opt/tingraph/bootstrap-role.sh:ro
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+    logging: *default-logging
+
+  migrate:
+    build:
+      context: ./backend
+    restart: "no"
+    command: ["/app/migrate"]
+    environment:
+      MIGRATIONS_DATABASE_URL_FILE: /run/secrets/migrations_database_url
+    secrets:
+      - migrations_database_url
+    depends_on:
+      db-bootstrap:
+        condition: service_completed_successfully
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    networks:
+      - internal
+    logging: *default-logging
+
+  api:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN in .env}
+      HTTP_ADDRESS: :8080
+      TRUST_PROXY: "true"
+      DATABASE_URL_FILE: /run/secrets/database_url
+      RATE_LIMIT_SECRET_FILE: /run/secrets/rate_limit_secret
+      UPLOADS_DIR: /var/lib/tingraph/uploads
+      SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-__Host-tingraph_session}
+      GEMINI_API_KEY_FILE: /run/secrets/gemini_api_key
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET_FILE: /run/secrets/google_client_secret
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME:-}
+      SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+      SMTP_FROM: ${SMTP_FROM:-}
+      SMTP_TLS_MODE: ${SMTP_TLS_MODE:-starttls}
+    secrets:
+      - database_url
+      - rate_limit_secret
+      - gemini_api_key
+      - google_client_secret
+      - smtp_password
+    volumes:
+      - uploads:/var/lib/tingraph/uploads
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8080/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    read_only: true
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=0750
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging: *default-logging
+    mem_limit: 320m
+    cpus: 0.65
+    networks:
+      - internal
+
+  web:
+    build:
+      context: ./web
+    restart: unless-stopped
+    environment:
+      BACKEND_INTERNAL_URL: http://api:8080
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    read_only: true
+    tmpfs:
+      - /tmp:uid=10001,gid=10001,mode=0750
+      - /app/.next/cache:uid=10001,gid=10001,mode=0750
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging: *default-logging
+    mem_limit: 384m
+    cpus: 0.65
+    networks:
+      - internal
+
+  caddy:
+    image: caddy:2.10-alpine
+    restart: unless-stopped
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:?Set SITE_ADDRESS in .env}
+    ports:
+      - ${HTTP_PORT:-80}:80
+      - ${HTTPS_PORT:-443}:443
+      - ${HTTPS_PORT:-443}:443/udp
+    volumes:
+      - ./ops/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      api:
+        condition: service_healthy
+      web:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    logging: *default-logging
+    mem_limit: 96m
+    cpus: 0.20
+    networks:
+      - internal
+
+  backup:
+    profiles: ["backup"]
+    build:
+      context: ./ops/backup
+    restart: unless-stopped
+    environment:
+      BACKUP_INTERVAL_SECONDS: ${BACKUP_INTERVAL_SECONDS:-86400}
+    secrets:
+      - backup_database_url
+      - restic_repository
+      - restic_password
+      - aws_access_key_id
+      - aws_secret_access_key
+    volumes:
+      - uploads:/data/uploads:ro
+      - backup_scratch:/scratch
+      - ./backups:/restore
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging: *default-logging
+    mem_limit: 256m
+    cpus: 0.25
+    networks:
+      - internal
+
+secrets:
+  postgres_owner_password:
+    file: ./secrets/postgres_owner_password
+  postgres_app_password:
+    file: ./secrets/postgres_app_password
+  postgres_backup_password:
+    file: ./secrets/postgres_backup_password
+  database_url:
+    file: ./secrets/database_url
+  migrations_database_url:
+    file: ./secrets/migrations_database_url
+  backup_database_url:
+    file: ./secrets/backup_database_url
+  rate_limit_secret:
+    file: ./secrets/rate_limit_secret
+  gemini_api_key:
+    file: ./secrets/gemini_api_key
+  google_client_secret:
+    file: ./secrets/google_client_secret
+  smtp_password:
+    file: ./secrets/smtp_password
+  restic_repository:
+    file: ./secrets/restic_repository
+  restic_password:
+    file: ./secrets/restic_password
+  aws_access_key_id:
+    file: ./secrets/aws_access_key_id
+  aws_secret_access_key:
+    file: ./secrets/aws_secret_access_key
+
+volumes:
+  postgres_data:
+  uploads:
+  caddy_data:
+  caddy_config:
+  backup_scratch:
+
+networks:
+  internal:
+    driver: bridge

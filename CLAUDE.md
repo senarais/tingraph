@@ -2,6 +2,9 @@
 
 # Tingraph
 
+The repository is a monorepo. Unless a path starts with `backend/` or `ops/`,
+paths in this file are relative to `web/`.
+
 A diagram editor. The reader writes a small DSL, Tingraph parses it, lays it
 out, and draws it onto an Excalidraw canvas; from that moment the sheet is
 theirs to edit by hand. Fifteen notations ship today, in two families:
@@ -101,13 +104,13 @@ has to guess where one ends and the other begins.
   had described anything. The copy is awaited before the tab opens, because a
   new tab takes the focus and Chrome will not write the clipboard for a page
   that has lost it.
-- **The reply is checked before the reader sees it.** `app/api/ai/route.ts`
-  runs every `source` through `parseDSL` and `computeLayout` — the editor's
-  own pipeline — and hands a failure back to the model once, with the parser's
-  own complaint. What arrives with a `source` on it is ready to generate; what
-  could not be written is a message with no block under it. `refuses()` in
-  `lib/ai/chat.ts` is that check, and `scripts/editor-check.ts` asserts it
-  against every notation's template.
+- **The reply is checked before the reader sees it.** `ai-drawer.tsx` runs every
+  `source` through `refuses()` in `lib/ai/chat.ts`, which uses `parseDSL` and
+  `computeLayout` — the editor's own pipeline. A failure is sent once more to
+  `/api/v1/ai` with the parser's complaint. What arrives with a `source` on it
+  is ready to generate; what could not be written is a message with no block
+  under it. `scripts/editor-check.ts` asserts the check against every
+  notation's template.
 - **It still does not touch the sheet.** The reply carries a Generate button
   and the reader presses it. The rule holds: the code writes over the sheet at
   exactly one moment, and an assistant is not entitled to that moment either.
@@ -125,12 +128,13 @@ has to guess where one ends and the other begins.
   nothing. `GEMINI_MODEL` overrides it, because Google gates a Flash-Lite for
   new keys about as often as it ships one — 2.5 went that way within months,
   and the API says so in the error rather than at the door.
-- The key is read once, server-side, from `GEMINI_API_KEY`. Put it in
-  `.env.local` (gitignored) and restart the dev server. Without it the panel
-  says so rather than failing silently.
-- Every Gemini call logs its input, output, thought and total token counts on
-  the server as `Tingraph AI token usage`, tagged `initial` or `retry`. Prompt
-  text and the API key are never logged.
+- The Go API reads the key from `GEMINI_API_KEY` or `GEMINI_API_KEY_FILE`.
+  Compose mounts `secrets/gemini_api_key`; no provider secret belongs in a
+  browser or image. `backend/internal/ai/briefings.json` is generated from the
+  guide by `npm run ai-briefings:build` before the backend image is built.
+- Output tokens are reserved and settled in PostgreSQL around every Gemini
+  call. A failed call releases the unused reservation; the free tier cannot
+  race concurrent requests past its daily limit.
 
 ## The canvas is a renderer, not an interface
 
@@ -677,88 +681,72 @@ export — already asks `isFigure()` and needs no change. If you find yourself
 editing the rail or the canvas to add a notation, the abstraction has slipped
 and that is the thing to fix.
 
-## Accounts and saved diagrams are Supabase's
+## Accounts and saved diagrams belong to the Go API
 
-A reader can sign up, sign in with a password or with Google, reset a
-forgotten password, keep a profile and save private diagrams. The editor still
-runs with no Supabase project configured — `accountsReady` in
-`lib/supabase/client.ts` and the guard at the top of `proxy.ts` make the account
-pieces step aside rather than take the site down with them.
+A reader can sign up, sign in with a password or Google, reset a forgotten
+password, keep a profile and save private diagrams. Caddy sends `/api/v1/*`
+and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
+`lib/api/client.ts`, Server Components use `lib/api/server.ts`, and
+`app/api/ai/route.ts` remains only as a temporary compatibility proxy.
 
-- **One client per place.** `lib/supabase/client.ts` for the browser,
-  `lib/supabase/server.ts` for Server Components, Server Actions and Route
-  Handlers, and `proxy.ts` — Next 16's name for middleware — whose only job is
-  to refresh the session with `getClaims()` before anything renders. The
-  project signs its tokens with ES256, so that check needs no request.
-- **The proxy is not the guard.** Every page and every action that needs an
-  account asks for the session itself: `getClaims()`, or `getUser()` where the
-  full record is wanted. A Server Action is a POST anyone can send without the
-  form, and a cookie is whatever the browser says it is.
-- **Account changes go through Next.** `app/auth/actions.ts` signs in and out
-  and handles passwords; `app/profile/actions.ts` writes the profile and the
-  picture; `app/auth/callback/route.ts` takes every link that comes back from
-  Supabase — Google's `code`, and an email's `token_hash` (or its `code`, if
-  the template was left as it ships). Browser reads are the account button's
-  own profile and the signed-in reader's diagrams; diagram saves and deletes
-  also use the browser client, under RLS.
-- **The database is the validation.** The browser holds the publishable key,
-  so the Data API can be reached without passing through an action.
-  the migrations therefore carry every limit as a check constraint, RLS keeps
-  a row to its owner, and column grants say which fields may be written at all.
-  `lib/auth.ts` repeats profile limits only to say them in words; change one and
-  change the other.
+- **The API is the guard.** Every private route is wrapped by
+  `requireSession`. Mutations additionally need an exact allowed `Origin` and
+  a session-bound CSRF token. The opaque 256-bit session value exists only in
+  an `HttpOnly`, `SameSite=Lax` cookie; PostgreSQL stores its SHA-256 hash.
+- **Passwords are deliberately expensive.** `backend/internal/auth/crypto.go`
+  uses Argon2id and a minimum of 15 characters. Login performs a dummy hash
+  comparison for unknown users. Registration, login, verification, reset and
+  OAuth starts have database-backed rate limits shared by every API replica.
+- **Google is OIDC, not email trust.** The flow uses state, a browser-binding
+  cookie, PKCE and nonce. A Google email that already belongs to another login
+  method is not silently linked. The only callback is
+  `/api/v1/auth/google/callback`.
+- **PostgreSQL has two credentials.** Migrations run as `tingraph_owner`; the
+  API runs as `tingraph_app`, which receives only explicit schema, table and
+  function grants. Tables are split across `auth`, `app` and `ops`. Ownership
+  predicates remain in every diagram query even though clients cannot reach
+  PostgreSQL directly.
+- **The database is still the final validation.** Migrations carry text,
+  category, document and quota constraints. `lib/auth.ts` repeats profile
+  limits only to say them in words; change one and change the other.
 - **A saved diagram is the final sheet, not only its source.** `diagrams.document`
   stores the source, notation, direction, ink and style beside Excalidraw's
   serialized scene and image file map. The scene matters because Generate is
   the last time source owns the drawing; every manual edit after it is the
   reader's. Excalidraw omits `files` when that map is empty, so `withSceneFiles`
   materializes it on both save and load; `normalize_diagram_document` does the
-  same before database constraints for a stale tab still running older client
-  code. Loading then runs the JSON through `readSavedDiagram` and Excalidraw's
-  own `restore` before it reaches the canvas. Rows are private to `user_id`,
-  capped at 10 MB, listed without fetching `document`, and removed with the
-  user's id in both the query and RLS policy.
+  same before database constraints. Loading runs the JSON through
+  `readSavedDiagram` and Excalidraw's own `restore` before it reaches the
+  canvas. Rows are private to `user_id`, capped at 10 MB, listed without
+  fetching `document`, and read, changed or removed only with the user's id in
+  the query.
 - **The profile row is made by a trigger**, `handle_new_user`. A trigger that
-  fails fails the sign-up with it, so it copies only what the provider handed
-  over and drops anything a constraint would refuse. A username is chosen by
-  the reader later, never generated.
+  fails fails sign-up with it. A username is chosen by the reader later, never
+  generated.
 - **A sign-in only ever comes back to this site.** `safeNext` parses `next`
   rather than prefix-checking it, because `//host`, `/\host` and a path with a
   tab in it are all another host to a browser.
 - **A picture is cut down before it is sent** — to a 256px square, in the
-  browser, since a Server Action accepts 1MB at most. It is stored at
-  `avatars/<user id>/<timestamp>`, a new name every time because the old
-  address is cached for a year, and the pictures it replaces are deleted.
+  browser, with a 1 MB API limit. It is stored on the persistent uploads volume
+  at `avatars/<user id>/<random name>`, a new name every time because the old
+  address is cached for a year; replaced files are deleted.
 - **Account-aware chrome asks the browser, not the server.** `/` and `/build`
   are prerendered, and reading a cookie in `SiteNav` would render them per
   request. `AccountButton` fetches the face in the bar; `/build?view=mine`
   fetches diagram metadata below a Suspense boundary. In the editor the account
   opens in a new tab (`detached`), so an unsaved drawing is not thrown away.
-- `lib/supabase/database.types.ts` is generated from the project. Regenerate
-  it after every migration.
-
-What the code cannot set: `NEXT_PUBLIC_SUPABASE_URL` and
-`NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` in `.env.local`; the Site URL and
-`<site>/auth/callback` on Supabase's redirect list; the Google provider and its
-OAuth client; and a custom SMTP sender, because the built-in one only mails the
-project's own team.
-
-**Auth email HTML lives in this repository.** `scripts/auth-email-templates.mjs`
-is the source for all six Supabase authentication templates and generates the
-standalone files in `supabase/templates`. The markup repeats its styles on
-purpose: email clients cannot share the site's stylesheet, and table layout
-plus inline styles are the reliable common language across them. Run
-`npm run auth-emails:build` after changing copy or layout and
-`npm run auth-emails:check` in review. `npm run auth-emails:push` publishes only
-the six subject/content pairs through Supabase's Management API; it requires a
-short-lived `SUPABASE_ACCESS_TOKEN` in the shell and leaves SMTP, providers and
-notification toggles untouched. Confirm signup and Reset password point their
-`token_hash` at the existing `/auth/callback`, rather than using Supabase's
-browser-bound PKCE link, so either email can be opened in another browser.
+- **Email is an outbox, not part of the request.** Registration and password
+  transactions enqueue rows in `ops.email_outbox`; the worker claims with
+  `FOR UPDATE SKIP LOCKED`, renders repository-owned templates and sends over
+  authenticated TLS SMTP. Provider outages retry without rolling back account
+  state or exposing whether an email exists.
+- **Quota changes are SQL functions.** Generation counters and AI token
+  reservations lock the relevant daily row, so concurrent requests cannot
+  exceed a plan. Keep policy in migrations, not only in React.
 
 ## Checks
 
-`npm run self-check` runs three assert-based scripts under `tsx`:
+From `web/`, `npm run self-check` runs three assert-based scripts under `tsx`:
 `scripts/self-check.ts` (parser, layout, connector geometry, copies, the ERD's
 port pairing, and every figure's own geometry — a Venn region really falls
 inside the right rings, a fishbone's causes really meet their bone, a sequence
@@ -772,9 +760,8 @@ should be asserted there rather than clicked through.
 `editor-check.ts` also covers Tingraph AI without calling anything: the
 chatbot's briefing carries every syntax row of its notation, and every
 template passes the readiness check the server holds replies to. It holds the
-account rules in `lib/auth.ts` the same way: `safeNext` refusing every
-spelling of another host, and a profile form read into exactly what the table
-will take.
+  account rules in `lib/auth.ts` the same way: `safeNext` refuses every spelling
+  of another host, and a profile form is read into exactly what the API takes.
 
 It also checks a saved document before Excalidraw sees it: metadata must agree
 with the source, and a scene has both elements and its image file map.
@@ -785,6 +772,11 @@ canvas rule there rather than clicking it.
 
 `npm run typecheck` and `npm run lint` both have to stay clean; the lint config
 is strict about React hooks, including reading a ref during render.
+
+From `backend/`, `go test ./...` must pass. From the repository root,
+`ops/smoke-test.sh` drives the running Compose stack through routing,
+registration, login, Origin checks, CSRF, account isolation, diagram quota and
+logout. It creates and removes its own database users.
 
 The canvas itself can only be judged by driving it. Clicks and screenshots
 through a browser agent work; plain key presses and drags often do not arrive,
