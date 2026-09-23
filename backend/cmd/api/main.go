@@ -13,6 +13,7 @@ import (
 
 	"tingraph/backend/internal/ai"
 	"tingraph/backend/internal/auth"
+	"tingraph/backend/internal/billing"
 	"tingraph/backend/internal/config"
 	"tingraph/backend/internal/database"
 	"tingraph/backend/internal/handler"
@@ -59,7 +60,7 @@ func main() {
 	}
 	go mailworker.NewWorker(db, cfg.SMTP, logger).Run(ctx)
 	go database.RunCleanup(ctx, db, logger)
-	handlers := handler.New(cfg, db, authService, aiService, logger)
+	handlers := handler.New(cfg, db, authService, aiService, billing.New(db, cfg.Billing, cfg.PublicOrigin), logger)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Address,

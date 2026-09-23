@@ -113,12 +113,21 @@ services:
       SMTP_PASSWORD_FILE: /run/secrets/smtp_password
       SMTP_FROM: ${SMTP_FROM:-}
       SMTP_TLS_MODE: ${SMTP_TLS_MODE:-starttls}
+      MIDTRANS_SERVER_KEY_FILE: /run/secrets/midtrans_server_key
+      MIDTRANS_MODE: ${MIDTRANS_MODE:-sandbox}
+      PAYPAL_CLIENT_ID: ${PAYPAL_CLIENT_ID:-}
+      PAYPAL_CLIENT_SECRET_FILE: /run/secrets/paypal_client_secret
+      PAYPAL_WEBHOOK_ID: ${PAYPAL_WEBHOOK_ID:-}
+      PAYPAL_MODE: ${PAYPAL_MODE:-sandbox}
+      FX_BASE_URL: ${FX_BASE_URL:-https://api.frankfurter.dev}
     secrets:
       - database_url
       - rate_limit_secret
       - gemini_api_key
       - google_client_secret
       - smtp_password
+      - midtrans_server_key
+      - paypal_client_secret
     volumes:
       - uploads:/var/lib/tingraph/uploads
     depends_on:
@@ -257,6 +266,10 @@ secrets:
     file: ./secrets/google_client_secret
   smtp_password:
     file: ./secrets/smtp_password
+  midtrans_server_key:
+    file: ./secrets/midtrans_server_key
+  paypal_client_secret:
+    file: ./secrets/paypal_client_secret
   restic_repository:
     file: ./secrets/restic_repository
   restic_password:

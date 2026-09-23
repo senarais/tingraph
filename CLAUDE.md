@@ -743,6 +743,16 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
 - **Quota changes are SQL functions.** Generation counters and AI token
   reservations lock the relevant daily row, so concurrent requests cannot
   exceed a plan. Keep policy in migrations, not only in React.
+- **Premium is prepaid for 30 days, without automatic renewal.**
+  `backend/internal/billing/` creates hosted Midtrans Snap Redirect (daily IDR conversion of
+  USD 5) and PayPal (USD 5) checkouts. Midtrans callbacks verify SHA-512 using
+  the Server Key and re-fetch transaction status before crediting anything.
+  Only verified provider responses and webhooks may settle an
+  `ops.payment_orders` row; `ops.settle_payment` applies
+  each payment once and extends `app.profiles.premium_until` atomically. Quota
+  functions and the profile endpoint check expiry at read time. The browser's
+  return URL is never proof of payment; the PayPal return calls server-side
+  capture. Keep secrets in mounted files, not in Next or the image.
 
 ## Checks
 

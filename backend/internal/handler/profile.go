@@ -35,13 +35,14 @@ var (
 )
 
 type entitlements struct {
-	Tier            string `json:"tier"`
-	DiagramCount    int64  `json:"diagram_count"`
-	DiagramLimit    int    `json:"diagram_limit"`
-	GenerationUsed  int    `json:"generation_used"`
-	GenerationLimit *int   `json:"generation_limit"`
-	AITokensUsed    int64  `json:"ai_tokens_used"`
-	AITokenLimit    int64  `json:"ai_token_limit"`
+	Tier            string     `json:"tier"`
+	PremiumUntil    *time.Time `json:"premium_until,omitempty"`
+	DiagramCount    int64      `json:"diagram_count"`
+	DiagramLimit    int        `json:"diagram_limit"`
+	GenerationUsed  int        `json:"generation_used"`
+	GenerationLimit *int       `json:"generation_limit"`
+	AITokensUsed    int64      `json:"ai_tokens_used"`
+	AITokenLimit    int64      `json:"ai_token_limit"`
 }
 
 func (server *Handler) Me(w http.ResponseWriter, r *http.Request) {
@@ -59,19 +60,20 @@ func (server *Handler) Me(w http.ResponseWriter, r *http.Request) {
 func (server *Handler) entitlements(r *http.Request, userID string) (entitlements, error) {
 	var result entitlements
 	err := server.db.QueryRow(r.Context(), `
-		select p.tier,
+		select case when p.tier = 'premium' and (p.premium_until is null or p.premium_until > now())
+		       then 'premium' else 'free' end, p.premium_until,
 		       (select count(*) from app.diagrams d where d.user_id = p.id),
-		       case when p.tier = 'premium' then 100 else 2 end,
+		       case when p.tier = 'premium' and (p.premium_until is null or p.premium_until > now()) then 100 else 2 end,
 		       coalesce(u.generations, 0),
-		       case when p.tier = 'premium' then null else 10 end,
+		       case when p.tier = 'premium' and (p.premium_until is null or p.premium_until > now()) then null else 10 end,
 		       coalesce(u.ai_tokens, 0),
-		       case when p.tier = 'premium' then 100000::bigint else 2000::bigint end
+		       case when p.tier = 'premium' and (p.premium_until is null or p.premium_until > now()) then 100000::bigint else 2000::bigint end
 		from app.profiles p
 		left join app.daily_usage u
 		  on u.user_id = p.id and u.usage_date = (now() at time zone 'utc')::date
 		where p.id = $1`, userID,
 	).Scan(
-		&result.Tier, &result.DiagramCount, &result.DiagramLimit,
+		&result.Tier, &result.PremiumUntil, &result.DiagramCount, &result.DiagramLimit,
 		&result.GenerationUsed, &result.GenerationLimit,
 		&result.AITokensUsed, &result.AITokenLimit,
 	)

@@ -28,6 +28,7 @@ export interface SessionResponse {
 
 export interface Entitlements {
   tier: "free" | "premium";
+  premium_until?: string | null;
   diagram_count: number;
   diagram_limit: number;
   generation_used: number;

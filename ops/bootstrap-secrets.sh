@@ -37,7 +37,7 @@ printf 'postgresql://tingraph_owner:%s@db:5432/tingraph?sslmode=disable\n' "$own
 printf 'postgresql://tingraph_app:%s@db:5432/tingraph?sslmode=disable\n' "$app_password" > "$SECRETS/database_url"
 printf 'postgresql://tingraph_backup:%s@db:5432/tingraph?sslmode=disable\n' "$backup_password" > "$SECRETS/backup_database_url"
 
-for name in gemini_api_key google_client_secret smtp_password restic_repository restic_password aws_access_key_id aws_secret_access_key; do
+for name in gemini_api_key google_client_secret smtp_password midtrans_server_key paypal_client_secret restic_repository restic_password aws_access_key_id aws_secret_access_key; do
   ensure_file "$name"
 done
 

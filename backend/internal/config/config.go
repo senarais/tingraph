@@ -28,6 +28,17 @@ type Config struct {
 	GoogleClientID    string
 	GoogleSecret      string
 	SMTP              SMTP
+	Billing           Billing
+}
+
+type Billing struct {
+	MidtransServerKey  string
+	MidtransMode       string
+	PayPalClientID     string
+	PayPalClientSecret string
+	PayPalWebhookID    string
+	PayPalMode         string
+	FXBaseURL          string
 }
 
 type SMTP struct {
@@ -82,6 +93,14 @@ func Load() (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	midtransKey, err := secret("MIDTRANS_SERVER_KEY")
+	if err != nil {
+		return Config{}, err
+	}
+	payPalSecret, err := secret("PAYPAL_CLIENT_SECRET")
+	if err != nil {
+		return Config{}, err
+	}
 
 	cfg := Config{
 		Environment:       environment,
@@ -107,6 +126,14 @@ func Load() (Config, error) {
 			From:     value("SMTP_FROM", ""),
 			TLSMode:  value("SMTP_TLS_MODE", "starttls"),
 		},
+		Billing: Billing{
+			MidtransServerKey: midtransKey,
+			MidtransMode:      value("MIDTRANS_MODE", "sandbox"),
+			PayPalClientID:    value("PAYPAL_CLIENT_ID", ""), PayPalClientSecret: payPalSecret,
+			PayPalWebhookID: value("PAYPAL_WEBHOOK_ID", ""),
+			PayPalMode:      value("PAYPAL_MODE", "sandbox"),
+			FXBaseURL:       value("FX_BASE_URL", "https://api.frankfurter.dev"),
+		},
 	}
 	cfg.GeminiAPIKey, err = secret("GEMINI_API_KEY")
 	if err != nil {
@@ -128,6 +155,23 @@ func Load() (Config, error) {
 	}
 	if environment == "production" && cfg.SMTP.TLSMode == "none" {
 		return Config{}, errors.New("SMTP_TLS_MODE=none is forbidden in production")
+	}
+	if cfg.Billing.MidtransMode != "sandbox" && cfg.Billing.MidtransMode != "production" {
+		return Config{}, errors.New("MIDTRANS_MODE must be sandbox or production")
+	}
+	if (cfg.Billing.PayPalClientID == "") != (cfg.Billing.PayPalClientSecret == "") ||
+		(cfg.Billing.PayPalClientID == "") != (cfg.Billing.PayPalWebhookID == "") {
+		return Config{}, errors.New("PAYPAL_CLIENT_ID, PAYPAL_CLIENT_SECRET and PAYPAL_WEBHOOK_ID must be set together")
+	}
+	if cfg.Billing.PayPalMode != "sandbox" && cfg.Billing.PayPalMode != "live" {
+		return Config{}, errors.New("PAYPAL_MODE must be sandbox or live")
+	}
+	if environment == "production" && cfg.Billing.PayPalClientID != "" && cfg.Billing.PayPalMode != "live" {
+		return Config{}, errors.New("PAYPAL_MODE must be live when payments are enabled in production")
+	}
+	if cfg.Billing.MidtransServerKey != "" &&
+		((environment == "production") != (cfg.Billing.MidtransMode == "production")) {
+		return Config{}, errors.New("MIDTRANS_MODE must match APP_ENV when payments are enabled")
 	}
 	return cfg, nil
 }

@@ -1,6 +1,7 @@
 export type PlanTier = "free" | "premium";
 export interface Entitlements {
   tier: PlanTier;
+  premium_until?: string | null;
   diagram_count: number;
   diagram_limit: number;
   generation_used: number;

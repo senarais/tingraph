@@ -31,6 +31,10 @@ Open <http://localhost:8080>. Development defaults leave SMTP, Google, Gemini,
 and offsite backup disabled. Email verification/reset messages remain safely
 queued until SMTP is configured.
 
+Payments also stay disabled until provider credentials are supplied. Premium is
+prepaid for 30 days at USD 5, without automatic renewal. Midtrans charges IDR at
+the most recent daily USD/IDR rate; PayPal charges USD 5.
+
 Inspect state with:
 
 ```bash
@@ -86,6 +90,59 @@ Production startup fails closed when HTTPS origin or SMTP sender configuration
 is missing. Migration owner and runtime API use separate PostgreSQL roles. App
 containers run non-root, read-only, with dropped Linux capabilities and bounded
 CPU/memory.
+
+### Premium payments
+
+For Midtrans Snap Redirect checkout, put the **Sandbox Server Key** from
+**Sandbox dashboard → Settings → Access Keys** in `secrets/midtrans_server_key`.
+Set `MIDTRANS_MODE=sandbox` in `.env`. In **Settings → Configuration**, set
+the Payment Notification URL to
+`https://your-domain/api/v1/billing/webhook/midtrans`. Snap's per-transaction
+finish URL returns the buyer to `/billing/return`; the return URL alone never
+changes the account's tier. Only the Server Key is needed by this hosted redirect
+integration; it never reaches the browser.
+The bootstrap script makes secret files read-only; run `chmod u+w secrets/<name>`
+before editing one and `chmod 444 secrets/<name>` afterward.
+
+For PayPal, put the REST app client secret in `secrets/paypal_client_secret`.
+Set `PAYPAL_CLIENT_ID`, `PAYPAL_WEBHOOK_ID`, and `PAYPAL_MODE=sandbox` in `.env`.
+Subscribe the webhook at `https://your-domain/api/v1/billing/webhook/paypal` to
+`PAYMENT.CAPTURE.COMPLETED`, `PAYMENT.CAPTURE.REFUNDED`, and
+`PAYMENT.CAPTURE.REVERSED`. Switch to
+`PAYPAL_MODE=live` with live app credentials and live webhook ID for production.
+With payment credentials configured, production rejects sandbox PayPal or
+Midtrans mode; development rejects production Midtrans mode.
+
+The API verifies provider notifications before crediting a payment; the database
+applies each payment once. Redirects back from checkout do not grant Premium.
+Full refunds, chargebacks, and PayPal reversals revoke the refunded period.
+Midtrans partial refunds only revoke it when the cumulative refunded amount
+reaches the full original charge. Midtrans obtains daily IDR quotes from Frankfurter's USD/IDR endpoint;
+`FX_BASE_URL` can point to a [self-hosted Frankfurter](https://frankfurter.dev/deploy/)
+instance at `http://frankfurter:8080` instead. If quotes are unavailable, Midtrans
+checkout is disabled until rates recover; PayPal remains available. After
+populating the secrets, run `docker compose up -d --build` so migration 005
+is applied before the new API and web images start.
+
+To test locally, expose Caddy's `localhost:8080` through a public HTTPS URL
+(for example `ngrok http 8080`) and set `APP_ORIGIN` in `.env` to **that exact
+HTTPS origin** before rebuilding. Open the app through the public URL too:
+browser POSTs must match `APP_ORIGIN`. Update both dashboard webhook URLs if
+the tunnel URL changes. Use a Midtrans Sandbox simulator payment or a PayPal
+Sandbox **Personal** buyer account, not real funds. Successful payments should
+change `/profile` to Premium for 30 days. Sandbox PayPal webhook simulation
+events cannot be verified via the postback API; use an actual sandbox purchase.
+
+For production, use a verified merchant account, a stable public HTTPS origin,
+`APP_ENV=production`, `MIDTRANS_MODE=production`, `PAYPAL_MODE=live`, the
+providers' **production** keys/webhooks, and the production cookie name
+`__Host-tingraph_session`. Never reuse sandbox credentials in production.
+
+Integration references: [Midtrans Snap Redirect](https://docs.midtrans.com/docs/snap-snap-integration-guide.md),
+[Midtrans notifications](https://docs.midtrans.com/docs/https-notification-webhooks.md),
+[Midtrans Sandbox tests](https://docs.midtrans.com/docs/testing-payment-on-sandbox.md),
+[PayPal Checkout](https://developer.paypal.com/docs/checkout/standard/integrate/),
+and [PayPal webhook verification](https://developer.paypal.com/api/webhooks/v1/verify-webhook-signature-post).
 
 Deploy updates with:
 

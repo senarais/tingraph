@@ -37,5 +37,12 @@ func Setup(h *handler.Handler, authService *auth.Service, origin *url.URL, logge
 	mux.Handle("POST /api/v1/usage/generations", protected(h.ConsumeGeneration))
 	mux.HandleFunc("GET /media/avatars/{user}/{file}", h.Avatar)
 	mux.Handle("POST /api/v1/ai", protected(h.AI))
+	mux.Handle("GET /api/v1/billing/quote", protected(h.BillingQuote))
+	mux.Handle("POST /api/v1/billing/checkout", protected(h.BillingCheckout))
+	mux.Handle("GET /api/v1/billing/orders/{id}", protected(h.BillingOrder))
+	mux.Handle("POST /api/v1/billing/orders/{id}/capture", protected(h.BillingCapture))
+	mux.Handle("POST /api/v1/billing/orders/{id}/sync", protected(h.BillingSync))
+	mux.HandleFunc("POST /api/v1/billing/webhook/midtrans", h.MidtransWebhook)
+	mux.HandleFunc("POST /api/v1/billing/webhook/paypal", h.PayPalWebhook)
 	return middleware.Recover(logger, middleware.Security(middleware.Origin(origin, mux)))
 }

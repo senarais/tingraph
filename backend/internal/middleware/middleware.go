@@ -28,7 +28,8 @@ func Security(next http.Handler) http.Handler {
 func Origin(publicOrigin *url.URL, next http.Handler) http.Handler {
 	expected := canonicalOrigin(publicOrigin)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete {
+		webhook := r.Method == http.MethodPost && (r.URL.Path == "/api/v1/billing/webhook/midtrans" || r.URL.Path == "/api/v1/billing/webhook/paypal")
+		if !webhook && (r.Method == http.MethodPost || r.Method == http.MethodPut || r.Method == http.MethodPatch || r.Method == http.MethodDelete) {
 			origin := r.Header.Get("Origin")
 			parsed, err := url.Parse(origin)
 			if err != nil || origin == "" || canonicalOrigin(parsed) != expected {

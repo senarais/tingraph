@@ -6,6 +6,7 @@ import {
   SectionHead,
 } from "@/components/account/forms";
 import SignOutButton from "@/components/account/sign-out-button";
+import PremiumCheckout from "@/components/account/premium-checkout";
 import { AccountPage } from "@/components/account/shell";
 import { PROFILE_FIELDS, type ProfileField, type ProfileInput } from "@/lib/auth";
 import { isPlanTier, PLAN_LIMITS, planName } from "@/lib/plans";
@@ -124,6 +125,7 @@ export default async function ProfilePage() {
             <p className="border-t-2 border-edge px-5 py-3 text-[11.5px] text-ink-soft">
               Daily allowances reset at 00:00 UTC. Export options are available on every plan.
             </p>
+            <PremiumCheckout active={tier === "premium"} until={usage.premium_until ?? null} />
           </section>
 
           <ProfileDetails profile={profile} />

@@ -12,6 +12,7 @@ import (
 
 	"tingraph/backend/internal/ai"
 	"tingraph/backend/internal/auth"
+	"tingraph/backend/internal/billing"
 	"tingraph/backend/internal/config"
 	"tingraph/backend/internal/httpx"
 	"tingraph/backend/internal/middleware"
@@ -22,12 +23,13 @@ type Handler struct {
 	db        *pgxpool.Pool
 	auth      *auth.Service
 	aiService *ai.Service
+	billing   *billing.Service
 	aiSlots   chan struct{}
 	log       *slog.Logger
 }
 
-func New(cfg config.Config, db *pgxpool.Pool, authService *auth.Service, aiService *ai.Service, logger *slog.Logger) *Handler {
-	return &Handler{cfg: cfg, db: db, auth: authService, aiService: aiService, aiSlots: make(chan struct{}, 2), log: logger}
+func New(cfg config.Config, db *pgxpool.Pool, authService *auth.Service, aiService *ai.Service, billingService *billing.Service, logger *slog.Logger) *Handler {
+	return &Handler{cfg: cfg, db: db, auth: authService, aiService: aiService, billing: billingService, aiSlots: make(chan struct{}, 2), log: logger}
 }
 
 func (server *Handler) Live(w http.ResponseWriter, _ *http.Request) {
