@@ -1,4 +1,4 @@
-package api
+package handler
 
 import (
 	"encoding/base64"
@@ -30,7 +30,7 @@ var attachmentTypes = map[string]bool{
 	"image/heif":      true,
 }
 
-func (server *Server) ai(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) AI(w http.ResponseWriter, r *http.Request) {
 	if !server.aiService.Enabled() {
 		httpx.Problem(w, http.StatusServiceUnavailable, "Tingraph AI is not configured")
 		return

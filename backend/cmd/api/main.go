@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"tingraph/backend/internal/ai"
-	"tingraph/backend/internal/api"
 	"tingraph/backend/internal/auth"
 	"tingraph/backend/internal/config"
 	"tingraph/backend/internal/database"
+	"tingraph/backend/internal/handler"
 	mailworker "tingraph/backend/internal/mail"
+	"tingraph/backend/internal/router"
 )
 
 func main() {
@@ -58,10 +59,11 @@ func main() {
 	}
 	go mailworker.NewWorker(db, cfg.SMTP, logger).Run(ctx)
 	go database.RunCleanup(ctx, db, logger)
+	handlers := handler.New(cfg, db, authService, aiService, logger)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Address,
-		Handler:           api.New(cfg, db, authService, aiService, logger).Handler(),
+		Handler:           router.Setup(handlers, authService, cfg.PublicOrigin, logger),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      90 * time.Second,

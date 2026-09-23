@@ -1,4 +1,4 @@
-package api
+package handler
 
 import (
 	"encoding/json"
@@ -38,7 +38,7 @@ type diagramRow struct {
 	UpdatedAt time.Time       `json:"updated_at"`
 }
 
-func (server *Server) listDiagrams(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) ListDiagrams(w http.ResponseWriter, r *http.Request) {
 	rows, err := server.db.Query(r.Context(), `
 		select id::text, title, category, created_at, updated_at
 		from app.diagrams where user_id = $1 order by updated_at desc`, currentSession(r).User.ID,
@@ -64,7 +64,7 @@ func (server *Server) listDiagrams(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{"diagrams": diagrams})
 }
 
-func (server *Server) getDiagram(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) GetDiagram(w http.ResponseWriter, r *http.Request) {
 	var diagram diagramRow
 	err := server.db.QueryRow(r.Context(), `
 		select id::text, title, category, document, created_at, updated_at
@@ -82,7 +82,7 @@ func (server *Server) getDiagram(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{"diagram": diagram})
 }
 
-func (server *Server) createDiagram(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) CreateDiagram(w http.ResponseWriter, r *http.Request) {
 	input, err := readDiagram(w, r)
 	if err != nil {
 		httpx.Problem(w, http.StatusBadRequest, err.Error())
@@ -106,7 +106,7 @@ func (server *Server) createDiagram(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
-func (server *Server) updateDiagram(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) UpdateDiagram(w http.ResponseWriter, r *http.Request) {
 	input, err := readDiagram(w, r)
 	if err != nil {
 		httpx.Problem(w, http.StatusBadRequest, err.Error())
@@ -130,7 +130,7 @@ func (server *Server) updateDiagram(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"id": id})
 }
 
-func (server *Server) deleteDiagram(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) DeleteDiagram(w http.ResponseWriter, r *http.Request) {
 	result, err := server.db.Exec(r.Context(),
 		`delete from app.diagrams where id = $1 and user_id = $2`,
 		r.PathValue("id"), currentSession(r).User.ID,

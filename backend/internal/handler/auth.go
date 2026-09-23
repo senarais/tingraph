@@ -1,4 +1,4 @@
-package api
+package handler
 
 import (
 	"errors"
@@ -16,7 +16,7 @@ type sessionResponse struct {
 	CSRFToken string     `json:"csrf_token,omitempty"`
 }
 
-func (server *Server) session(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) Session(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
 	session, err := server.auth.Authenticate(r.Context(), server.auth.CookieToken(r))
 	if err != nil {
@@ -35,7 +35,7 @@ func (server *Server) session(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (server *Server) register(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
 	var input struct {
 		Name     string `json:"name"`
@@ -66,7 +66,7 @@ func (server *Server) register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (server *Server) verifyEmail(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) VerifyEmail(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
 	var input struct {
 		Token string `json:"token"`
@@ -86,7 +86,7 @@ func (server *Server) verifyEmail(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"notice": "Email confirmed. You can sign in."})
 }
 
-func (server *Server) login(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
 	var input struct {
 		Email    string `json:"email"`
@@ -125,7 +125,7 @@ func (server *Server) login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (server *Server) logout(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
 	if err := server.auth.Logout(r.Context(), currentSession(r).ID); err != nil {
 		server.log.Error("logout failed", "error", err)
@@ -136,7 +136,7 @@ func (server *Server) logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (server *Server) forgotPassword(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) ForgotPassword(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
 	var input struct {
 		Email string `json:"email"`
@@ -164,7 +164,7 @@ func (server *Server) forgotPassword(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (server *Server) resetPassword(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
 	var input struct {
 		Token    string `json:"token"`
@@ -187,7 +187,7 @@ func (server *Server) resetPassword(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"notice": "Password updated. Sign in again."})
 }
 
-func (server *Server) googleStart(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) GoogleStart(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
 	if server.limited(r.Context(), "google_start_ip", server.clientIP(r), 30, 10*time.Minute) {
 		http.Redirect(w, r, "/login?error=google", http.StatusFound)
@@ -202,7 +202,7 @@ func (server *Server) googleStart(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, destination, http.StatusFound)
 }
 
-func (server *Server) googleCallback(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
 	token, _, next, err := server.auth.FinishGoogle(r.Context(), r, server.clientIP(r))
 	server.auth.ClearOAuthCookie(w)

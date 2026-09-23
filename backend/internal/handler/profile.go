@@ -1,4 +1,4 @@
-package api
+package handler
 
 import (
 	"bytes"
@@ -44,7 +44,7 @@ type entitlements struct {
 	AITokenLimit    int64  `json:"ai_token_limit"`
 }
 
-func (server *Server) me(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
 	session := currentSession(r)
 	usage, err := server.entitlements(r, session.User.ID)
@@ -56,7 +56,7 @@ func (server *Server) me(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]any{"user": session.User, "entitlements": usage})
 }
 
-func (server *Server) entitlements(r *http.Request, userID string) (entitlements, error) {
+func (server *Handler) entitlements(r *http.Request, userID string) (entitlements, error) {
 	var result entitlements
 	err := server.db.QueryRow(r.Context(), `
 		select p.tier,
@@ -78,7 +78,7 @@ func (server *Server) entitlements(r *http.Request, userID string) (entitlements
 	return result, err
 }
 
-func (server *Server) updateProfile(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	var input auth.Profile
 	if err := httpx.ReadJSON(w, r, &input); err != nil {
 		httpx.Problem(w, http.StatusBadRequest, "invalid profile")
@@ -157,7 +157,7 @@ func validProfile(input auth.Profile) (auth.Profile, error) {
 	return input, nil
 }
 
-func (server *Server) uploadAvatar(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) UploadAvatar(w http.ResponseWriter, r *http.Request) {
 	userID := currentSession(r).User.ID
 	if server.limited(r.Context(), "avatar_user", userID, 20, time.Hour) {
 		w.Header().Set("Retry-After", "3600")
@@ -209,7 +209,7 @@ func (server *Server) uploadAvatar(w http.ResponseWriter, r *http.Request) {
 	httpx.JSON(w, http.StatusOK, map[string]string{"avatar_url": publicURL, "notice": "Picture updated."})
 }
 
-func (server *Server) storeAvatar(file multipart.File, header *multipart.FileHeader, userID string) (string, error) {
+func (server *Handler) storeAvatar(file multipart.File, header *multipart.FileHeader, userID string) (string, error) {
 	if header.Size > avatarLimit {
 		return "", errors.New("picture must be 1 MB or smaller")
 	}
@@ -264,7 +264,7 @@ func (server *Server) storeAvatar(file multipart.File, header *multipart.FileHea
 	return relative, nil
 }
 
-func (server *Server) avatar(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) Avatar(w http.ResponseWriter, r *http.Request) {
 	user := r.PathValue("user")
 	name := r.PathValue("file")
 	if !mediaPartPattern.MatchString(user) || !mediaFilePattern.MatchString(name) {
@@ -288,7 +288,7 @@ func (server *Server) avatar(w http.ResponseWriter, r *http.Request) {
 	http.ServeContent(w, r, name, info.ModTime(), file)
 }
 
-func (server *Server) consumeGeneration(w http.ResponseWriter, r *http.Request) {
+func (server *Handler) ConsumeGeneration(w http.ResponseWriter, r *http.Request) {
 	userID := currentSession(r).User.ID
 	var allowed bool
 	var used int
