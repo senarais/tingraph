@@ -15,7 +15,7 @@ const plexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Tingraph | Code to Diagrams",
+  title: "Tingraph | Editable Code to Diagram",
   description:
     "Write a simple DSL, get publication-ready black-and-white flowcharts and BPMN diagrams on an editable canvas.",
   icons: {

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import VerifyEmail from "@/components/account/verify-email";
 import { AccountCard, AccountPage } from "@/components/account/shell";
 
-export const metadata: Metadata = { title: "Confirm email — Tingraph" };
+export const metadata: Metadata = { title: "Confirm email | Tingraph" };
 
 export default async function VerifyEmailPage({ searchParams }: PageProps<"/verify-email">) {
   const { token, next } = await searchParams;

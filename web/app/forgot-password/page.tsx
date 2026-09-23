@@ -4,7 +4,7 @@ import { ForgotForm } from "@/components/account/forms";
 import { AccountCard, AccountPage } from "@/components/account/shell";
 
 export const metadata: Metadata = {
-  title: "Forgot your password — Tingraph",
+  title: "Forgot your password | Tingraph",
 };
 
 export default function ForgotPasswordPage() {

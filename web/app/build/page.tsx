@@ -6,7 +6,7 @@ import { SiteFooter, SiteNav } from "@/components/site/site-chrome";
 import { PLANNED_DIAGRAMS, READY_DIAGRAMS } from "@/lib/diagrams";
 
 export const metadata: Metadata = {
-  title: "Diagrams — Tingraph",
+  title: "Diagrams | Tingraph",
   description:
     "Every notation Tingraph can draw: flowcharts, BPMN 2.0, org charts and bar, line, pie and scatter charts today, with more on the way.",
 };

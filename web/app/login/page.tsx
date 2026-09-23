@@ -7,7 +7,7 @@ import { backendFetch } from "@/lib/api/server";
 import type { SessionResponse } from "@/lib/api/types";
 
 export const metadata: Metadata = {
-  title: "Sign in — Tingraph",
+  title: "Sign in | Tingraph",
   description: "Sign in to Tingraph, or create an account.",
 };
 

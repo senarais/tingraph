@@ -13,7 +13,7 @@ import { backendFetch } from "@/lib/api/server";
 import type { Entitlements, User } from "@/lib/api/types";
 
 export const metadata: Metadata = {
-  title: "Your profile — Tingraph",
+  title: "Your profile | Tingraph",
 };
 
 const SECTIONS = [

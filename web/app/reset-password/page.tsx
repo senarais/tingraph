@@ -4,7 +4,7 @@ import { PasswordForm } from "@/components/account/forms";
 import { AccountCard, AccountPage } from "@/components/account/shell";
 
 export const metadata: Metadata = {
-  title: "Set a new password — Tingraph",
+  title: "Set a new password | Tingraph",
 };
 
 /**
