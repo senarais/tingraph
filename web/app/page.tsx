@@ -5,6 +5,7 @@ import { ArrowRight } from "lucide-react";
 import { DiagramArt } from "@/components/site/diagram-art";
 import HeroDemo from "@/components/site/hero-demo";
 import HowItWorks from "@/components/site/how-it-works";
+import Pricing from "@/components/site/pricing";
 import { SiteFooter, SiteNav } from "@/components/site/site-chrome";
 import { ACCENTS, FEATURED_DIAGRAMS, READY_DIAGRAMS } from "@/lib/diagrams";
 
@@ -314,8 +315,11 @@ export default function Home() {
           </div>
         </section>
 
+        {/* --------------------------------------------------------- pricing */}
+        <Pricing />
+
         {/* ------------------------------------------------------------- faq */}
-        <section id="faq" className="scroll-mt-16 border-b-2 border-edge">
+        <section id="faq" className="scroll-mt-16 border-b-2 border-edge bg-white">
           <div className="mx-auto grid max-w-4xl gap-10 px-4 py-16 sm:px-6 sm:py-20">
             <div>
               <h2 className="text-balance font-mono text-3xl font-semibold tracking-[-0.03em] text-ink sm:text-4xl">

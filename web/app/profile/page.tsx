@@ -57,6 +57,7 @@ export default async function ProfilePage() {
   const tier = isPlanTier(storedTier) ? storedTier : "free";
   const limits = PLAN_LIMITS[tier];
   const generationLimit = usage?.generation_limit ?? limits.generations;
+  const aiUsagePercent = Math.round(100 * (usage?.ai_tokens_used ?? 0) / (usage?.ai_token_limit ?? limits.aiTokens));
   const number = (value: number) => value.toLocaleString("en-US");
 
   return (
@@ -115,10 +116,10 @@ export default async function ProfilePage() {
               </div>
               <div className="border-2 border-edge bg-bone p-3">
                 <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
-                  AI tokens today
+                  AI usage today
                 </p>
                 <p className="mt-2 text-xl font-semibold text-ink">
-                  {number(usage?.ai_tokens_used ?? 0)} / {number(usage?.ai_token_limit ?? limits.aiTokens)}
+                  {aiUsagePercent}% of daily limit
                 </p>
               </div>
             </div>

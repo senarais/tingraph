@@ -208,6 +208,41 @@ textarea,
   box-shadow: 1px 1px 0 var(--edge);
 }
 
+/* Pricing keeps the reference card's hover lift and drifting geometry, with hard edges. */
+.pricing-card {
+  transition: transform 700ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 700ms ease;
+}
+
+.pricing-card:hover,
+.pricing-card:focus-within {
+  transform: scale(1.025);
+  box-shadow: 9px 9px 0 var(--edge);
+}
+
+.pricing-art,
+.pricing-price {
+  transform-origin: top left;
+  transition: transform 700ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.pricing-card:hover .pricing-art,
+.pricing-card:focus-within .pricing-art {
+  transform: scale(1.2) translateY(-12px);
+}
+
+.pricing-card:hover .pricing-price,
+.pricing-card:focus-within .pricing-price {
+  transform: scale(1.09);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pricing-card,
+  .pricing-art,
+  .pricing-price {
+    transition: none;
+  }
+}
+
 /* Corner registration marks, the way a plotter sheet is pre-printed. */
 .bracket-grid {
   background-image: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='148'%20height='148'%3E%3Cpath%20d='M0%2022V0h22M126%200h22v22M148%20126v22h-22M22%20148H0v-22'%20fill='none'%20stroke='%23000'%20stroke-opacity='.14'%20stroke-width='1'/%3E%3C/svg%3E");
