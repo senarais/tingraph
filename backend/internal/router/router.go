@@ -15,6 +15,9 @@ func Setup(h *handler.Handler, authService *auth.Service, origin *url.URL, logge
 	protected := func(next http.HandlerFunc) http.Handler {
 		return middleware.RequireSession(authService, logger, next)
 	}
+	admin := func(next http.HandlerFunc) http.Handler {
+		return protected(middleware.RequireAdmin(next).ServeHTTP)
+	}
 	mux.HandleFunc("GET /health/live", h.Live)
 	mux.HandleFunc("GET /health/ready", h.Ready)
 	mux.HandleFunc("GET /api/v1/auth/session", h.Session)
@@ -37,6 +40,14 @@ func Setup(h *handler.Handler, authService *auth.Service, origin *url.URL, logge
 	mux.Handle("POST /api/v1/usage/generations", protected(h.ConsumeGeneration))
 	mux.HandleFunc("GET /media/avatars/{user}/{file}", h.Avatar)
 	mux.Handle("POST /api/v1/ai", protected(h.AI))
+	mux.Handle("GET /api/v1/admin/overview", admin(h.AdminOverview))
+	mux.Handle("GET /api/v1/admin/users", admin(h.AdminUsers))
+	mux.Handle("POST /api/v1/admin/users", admin(h.AdminCreateUser))
+	mux.Handle("GET /api/v1/admin/orders", admin(h.AdminOrders))
+	mux.Handle("GET /api/v1/admin/users/{id}", admin(h.AdminUser))
+	mux.Handle("PATCH /api/v1/admin/users/{id}", admin(h.AdminUpdateUser))
+	mux.Handle("PUT /api/v1/admin/users/{id}/password", admin(h.AdminPassword))
+	mux.Handle("DELETE /api/v1/admin/users/{id}", admin(h.AdminDeleteUser))
 	mux.Handle("GET /api/v1/billing/quote", protected(h.BillingQuote))
 	mux.Handle("POST /api/v1/billing/checkout", protected(h.BillingCheckout))
 	mux.Handle("GET /api/v1/billing/orders/{id}", protected(h.BillingOrder))

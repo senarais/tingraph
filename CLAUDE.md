@@ -706,6 +706,19 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
   function grants. Tables are split across `auth`, `app` and `ops`. Ownership
   predicates remain in every diagram query even though clients cannot reach
   PostgreSQL directly.
+- **Admin access is an application role, not a PostgreSQL login.** `auth.users.role`
+  defaults to `user`. The first admin is promoted by the database owner with
+  `update auth.users set role = 'admin' where email = '…'`; public registration
+  cannot request a role. Sessions read the role from the DB on each request;
+  `/api/v1/admin/*` passes both `requireSession` (including CSRF for writes)
+  and `RequireAdmin`. Sign-in and Google sign-in take admins to `/admin`.
+  Admin changes to users, profiles, plans and passwords are transactional and
+  recorded in `ops.admin_audit`; account disable/password changes revoke
+  sessions. The last active admin and the acting admin's own access cannot be
+  removed through the dashboard. Payment orders are provider-owned records:
+  paid revenue excludes refunded orders, admin cannot edit their status, and
+  an account with orders can be disabled but not deleted. Manual premium gets
+  an expiry because billing cannot extend a perpetual/legacy premium plan.
 - **The database is still the final validation.** Migrations carry text,
   category, document and quota constraints. `lib/auth.ts` repeats profile
   limits only to say them in words; change one and change the other.

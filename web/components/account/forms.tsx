@@ -21,6 +21,7 @@ import {
   type ProfileInput,
 } from "@/lib/auth";
 import { APIError, apiFetch, clearSessionCache, publicJSON } from "@/lib/api/client";
+import type { SessionResponse } from "@/lib/api/types";
 import { Avatar } from "@/components/account/account-button";
 import { Segmented, SlabButton, Tick } from "@/components/editor/ui";
 import { useLinkFragment } from "@/lib/link-fragment";
@@ -101,11 +102,11 @@ function actionError(cause: unknown, values?: Record<string, string>): FormState
   };
 }
 
-async function signIn(_: FormState, form: FormData): Promise<FormState> {
+async function signIn(_: FormState, form: FormData): Promise<FormState & { role?: string }> {
   const email = text(form, "email");
   try {
-    await publicJSON("/api/v1/auth/login", { email, password: secret(form, "password") });
-    return {};
+    const session = await publicJSON<SessionResponse>("/api/v1/auth/login", { email, password: secret(form, "password") });
+    return { role: session.user?.role };
   } catch (cause) {
     return actionError(cause, { email });
   }
@@ -171,7 +172,7 @@ function SignInForm({ next }: { next: string }) {
   const [state, action, pending] = useActionState(async (previous: FormState, form: FormData) => {
     const result = await signIn(previous, form);
     if (!result.error) {
-      router.push(safeNext(form.get("next")));
+      router.push(result.role === "admin" ? "/admin" : safeNext(form.get("next")));
     }
     return result;
   }, {});

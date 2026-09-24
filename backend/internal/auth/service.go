@@ -51,18 +51,23 @@ func (service *Service) NormalizeEmail(value string) (string, error) {
 	return local + "@" + strings.ToLower(domain), nil
 }
 
+// HashPassword applies the same password policy and Argon2id settings as registration.
+func (service *Service) HashPassword(password string) (string, error) {
+	if err := ValidatePassword(password); err != nil {
+		return "", err
+	}
+	return service.password.Hash(password)
+}
+
 func (service *Service) Register(ctx context.Context, email, password, name, next string) error {
 	normalized, err := service.NormalizeEmail(email)
 	if err != nil {
 		return err
 	}
-	if err := ValidatePassword(password); err != nil {
-		return err
-	}
 	if len([]rune(name)) > 80 {
 		return errors.New("name must be 80 characters or fewer")
 	}
-	hash, err := service.password.Hash(password)
+	hash, err := service.HashPassword(password)
 	if err != nil {
 		return err
 	}
@@ -243,6 +248,7 @@ func (service *Service) Authenticate(ctx context.Context, token string) (Session
 		  and s.expires_at > now()
 		  and s.last_seen_at > now() - $2::interval
 		  and u.disabled_at is null
+		  and u.email_verified_at is not null
 		  and (s.credential_version is null or s.credential_version = c.version)`,
 		hash, durationInterval(service.cfg.SessionIdle),
 	).Scan(&sessionID)
@@ -265,7 +271,7 @@ func (service *Service) sessionByID(ctx context.Context, sessionID string, token
 	var providers []string
 	var hasPassword bool
 	err := service.db.QueryRow(ctx, `
-		select s.id::text, u.id::text, u.email::text, u.email_verified_at is not null,
+		select s.id::text, u.id::text, u.email::text, u.role, u.email_verified_at is not null,
 		       u.created_at, s.authenticated_at,
 		       p.username, p.full_name, p.avatar_path, p.profession, p.affiliation,
 		       p.location, p.website, p.bio,
@@ -276,10 +282,10 @@ func (service *Service) sessionByID(ctx context.Context, sessionID string, token
 		join auth.users u on u.id = s.user_id
 		join app.profiles p on p.id = u.id
 		left join auth.oauth_accounts o on o.user_id = u.id
-		where s.id = $1
+		where s.id = $1 and u.disabled_at is null and u.email_verified_at is not null
 		group by s.id, u.id, p.id`, sessionID,
 	).Scan(
-		&session.ID, &session.User.ID, &session.User.Email, &session.User.EmailVerified,
+		&session.ID, &session.User.ID, &session.User.Email, &session.User.Role, &session.User.EmailVerified,
 		&session.User.CreatedAt, &session.User.AuthenticatedAt,
 		&session.User.Profile.Username, &session.User.Profile.FullName, &avatarPath,
 		&session.User.Profile.Profession, &session.User.Profile.Affiliation,
@@ -354,10 +360,7 @@ func (service *Service) RequestPasswordReset(ctx context.Context, email string) 
 }
 
 func (service *Service) ResetPassword(ctx context.Context, token, password string) error {
-	if err := ValidatePassword(password); err != nil {
-		return err
-	}
-	hash, err := service.password.Hash(password)
+	hash, err := service.HashPassword(password)
 	if err != nil {
 		return err
 	}

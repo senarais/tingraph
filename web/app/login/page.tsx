@@ -25,7 +25,7 @@ export default async function LoginPage({ searchParams }: PageProps<"/login">) {
   const response = await backendFetch("/api/v1/auth/session");
   const session = response.ok ? ((await response.json()) as SessionResponse) : null;
   if (session?.user) {
-    redirect(target.startsWith("/login") ? "/profile" : target);
+    redirect(session.user.role === "admin" ? "/admin" : target.startsWith("/login") ? "/profile" : target);
   }
 
   return (

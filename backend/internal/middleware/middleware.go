@@ -71,6 +71,16 @@ func RequireSession(service *auth.Service, logger *slog.Logger, next http.Handle
 	})
 }
 
+func RequireAdmin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if CurrentSession(r).User.Role != "admin" {
+			httpx.Problem(w, http.StatusForbidden, "admin access required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 func CurrentSession(r *http.Request) auth.Session {
 	return r.Context().Value(sessionKey{}).(auth.Session)
 }

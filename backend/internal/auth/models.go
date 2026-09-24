@@ -16,6 +16,7 @@ type Profile struct {
 type User struct {
 	ID              string    `json:"id"`
 	Email           string    `json:"email"`
+	Role            string    `json:"role"`
 	EmailVerified   bool      `json:"email_verified"`
 	CreatedAt       time.Time `json:"created_at"`
 	AuthenticatedAt time.Time `json:"authenticated_at"`

@@ -204,7 +204,7 @@ func (server *Handler) GoogleStart(w http.ResponseWriter, r *http.Request) {
 
 func (server *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
-	token, _, next, err := server.auth.FinishGoogle(r.Context(), r, server.clientIP(r))
+	token, session, next, err := server.auth.FinishGoogle(r.Context(), r, server.clientIP(r))
 	server.auth.ClearOAuthCookie(w)
 	if err != nil {
 		server.log.Warn("google sign-in callback rejected", "error", err)
@@ -216,5 +216,8 @@ func (server *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	server.auth.SetSessionCookie(w, token)
+	if session.User.Role == "admin" {
+		next = "/admin"
+	}
 	http.Redirect(w, r, next, http.StatusFound)
 }

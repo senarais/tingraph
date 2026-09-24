@@ -37,6 +37,7 @@ export function Avatar({
 interface Account {
   name: string;
   avatar: string | null;
+  role: "user" | "admin";
 }
 
 /** The ways in, which a sign-in should never be sent back to. */
@@ -72,6 +73,7 @@ export default function AccountButton({ detached = false }: { detached?: boolean
       setAccount({
         name: profile.full_name || profile.username || session.user.email,
         avatar: profile.avatar_url,
+        role: session.user.role,
       });
     };
     const refresh = () => void show();
@@ -103,10 +105,10 @@ export default function AccountButton({ detached = false }: { detached?: boolean
   }
   return (
     <Link
-      href="/profile"
+      href={account.role === "admin" ? "/admin" : "/profile"}
       {...away}
-      title={account.name || "Your profile"}
-      aria-label="Your profile"
+      title={account.role === "admin" ? "Admin dashboard" : account.name || "Your profile"}
+      aria-label={account.role === "admin" ? "Admin dashboard" : "Your profile"}
       className="press shrink-0 rounded-full shadow-[3px_3px_0_var(--edge)]"
     >
       <Avatar url={account.avatar} name={account.name} className="h-8 w-8 text-[12px]" />
