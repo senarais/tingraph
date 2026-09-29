@@ -18,17 +18,17 @@ export const ARCHITECTURE_TEMPLATES = [
   {
     label: "Nested systems",
     source: `architecture "Recipe Search Platform" {
-  zone APP "Recipe Search Platform" at 40 40 size 960 570
+  zone APP "Recipe Search Platform" at 40 40 size 960 700
   zone SEARCH "Search & discovery" at 270 100 size 290 210
-  zone DATA "Recipe management" at 620 100 size 310 210
-  zone ACCOUNT "Accounts" at 270 365 size 290 190
-  zone MEDIA "Media & files" at 620 365 size 310 190
-  client USER "Mobile app" at 70 240
+  zone DATA "Recipe management" at 620 100 size 310 320
+  zone ACCOUNT "Accounts" at 270 480 size 290 190
+  zone MEDIA "Media & files" at 620 480 size 310 190
+  client USER "Mobile app" at 70 270
   service FIND "Search engine" at 330 170
-  service RECIPE "Recipe service" at 690 170
-  database CATALOG "Recipes" at 690 250
-  service PROFILE "User profile" at 330 435
-  storage FILES "Image storage" at 690 435
+  service RECIPE "Recipe service" at 690 160
+  database CATALOG "Recipes" at 690 290
+  service PROFILE "User profile" at 330 540
+  storage FILES "Image storage" at 690 540
   USER -> FIND -> RECIPE -> CATALOG
   USER -> PROFILE
   PROFILE -> FILES
@@ -83,12 +83,12 @@ export const ARCHITECTURE_TEMPLATES = [
     label: "Cluster & network",
     source: `architecture "Kubernetes Infrastructure" {
   zone NETWORK "Virtual network" at 250 75 size 855 585
-  zone FRONT "Front end" at 285 150 size 280 220
+  zone FRONT "Front end" at 285 150 size 280 340
   zone BACK "Back end" at 605 150 size 460 220
   zone OPS "Operations" at 605 425 size 460 185
   client APP "Client apps" at 35 175
-  cloud BALANCER "Load balancer" at 285 185
-  service INGRESS "Ingress" at 350 270
+  cloud BALANCER "Load balancer" at 310 205
+  service INGRESS "Ingress" at 355 335
   service API "API pods" at 650 200
   service SEARCH "Search pods" at 860 200
   database SQL "SQL database" at 1150 180

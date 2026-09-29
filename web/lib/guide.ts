@@ -562,11 +562,11 @@ const FISHBONE_SECTIONS: GuideSection[] = [
 const ARCHITECTURE_SECTIONS: GuideSection[] = [
   { title: "Components", rows: [
     row('architecture "Title" {', "open an architecture diagram; close with }"),
-    row('zone REGION "Name"', "outlined region behind components"),
+    row('zone REGION "Name"', "outlined region that grows to fit components centred inside it"),
     ...["client", "service", "database", "storage", "queue", "cloud", "external"].map((type) =>
       row(`${type} ID "Name"`, `place a ${type} component`)),
-    row('at 120 200', "optional x and y after a component's name"),
-    row('size 300 180', "optional width and height after its name"),
+    row('at 120 200', "optional starting position; nearby nodes align when generated"),
+    row('size 300 180', "component size, or the minimum size of a zone"),
   ] },
   { title: "Connections", rows: [
     row("A -> B", "directed data flow; chain as A -> B -> C"),
@@ -602,7 +602,7 @@ export const GUIDE_INTRO: Record<DiagramCategory, string> = {
   usecase: "Declare the actors, then the use cases inside a system block, then join them. Actors that start something stand on the left, actors that only answer stand on the right.",
   activity: "Declare a partition, then the nodes inside it, then wire them. Partitions are drawn as columns and the flow reads down the page.",
   erd: "Declare every entity with its attributes, then the relations between them. The crow's foot at each end says how many, and a relation runs from the key it names to the key it names.",
-  architecture: "Place components at coordinates, outline groups with zones, then connect them. Move, resize, rename or replace any component with an image on the sheet.",
+  architecture: "Place components roughly inside zones, then connect them. Generate aligns nearby rows and columns, spaces them apart and sizes the zones. Afterwards edit freely on the sheet.",
   sequence: "Declare the participants across the top, then the messages in the order they are sent. The execution bars are read off the messages, so there is nothing to place.",
   bar: "Write the readings one to a line, then any settings you want. Everything here is also a control in the Chart panel, and the two always agree.",
   line: "Name the readings along the axis, then one series per line you want drawn. Everything here is also a control in the Chart panel.",
@@ -634,8 +634,8 @@ const FIGURE_RULES = (keyword: string, body: string[]): string[] => [
 const RULES: Record<DiagramCategory, string[]> = {
   architecture: [
     'The file is one `architecture "Title" { ... }` block.',
-    'Declare components with unique IDs. Optional `at x y` and `size width height` may follow the label in either order.',
-    'Declare zones before their contents; they are independent outlined backdrops, not nested blocks.',
+    'Declare components with unique IDs. Optional `at x y` and `size width height` may follow the label in either order. `at` suggests a starting row or column; Generate may move it to leave space.',
+    'Declare zones before their contents; they are independent outlined backdrops, not nested blocks. A component belongs to the smallest original zone containing its centre. With one zone, unplaced components belong to it too. The zone grows or, when unsized, fits its contents.',
     'Declare all nodes before their connections. `->` is a solid flow; `-.->` is a dashed event.',
     'Uploaded images belong to the saved sheet, not the source text.',
   ],

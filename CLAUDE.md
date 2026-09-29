@@ -340,8 +340,16 @@ side by side, the axis that separates them wins instead.
   right and meets the left.
 - **architecture** routes between freely placed boxes. Its `zone` is a large,
   independently editable backdrop, not a container that moves its contents.
-  `at x y` and `size w h` set the starting arrangement in source; subsequent
-  dragging/resizing on canvas is read back by the panel, never by the source.
+  At Generate, a node belongs to the smallest original zone containing its
+  centre (unplaced nodes belong to the only zone, when there is one). Nearby
+  left edges form columns, nearby top edges form rows. Each column leaves a
+  56px channel and each row shares a baseline; a second node in a column sits
+  at least 56px below the first. The layout grows zones from the inside out
+  before routing connectors, so aligned nodes get straight routes instead of
+  wraparounds caused by gaps too narrow for the router. `at x y` is an initial
+  position hint, not a pin; `size w h` is a zone's minimum, not a limit. An
+  unsized zone fits its contents. Only Generate does the arranging: zones do
+  not follow later manual moves, which the panel reads back from the canvas.
 - **flow** reads down the page, like org, but splits the channel at the
   midpoint instead of hanging it off a rail.
 - An org chart turned sideways (`direction: "right"`) reads across; that is why
@@ -422,9 +430,13 @@ the box. Architecture components carry their kind and optional uploaded image.
 
 Architecture's four starters in `lib/templates.ts` place zones and components
 as nested systems, build/release, event-driven cloud and cluster/network.
-Zones are independent backdrops, not parents that move their contents. `at x y`
-and `size w h` set starting positions and sizes; subsequent canvas moves and
-resizes are read into the panel, not written back to the source. The selected
+Zones are independent backdrops, not parents that move their contents. At
+Generate, components whose centres were inside a zone's original outline are
+packed into rows and columns with clear channels, then nested zones are sized
+from the inside out. An unpositioned component belongs to the only zone if
+there is one. Without `size`, a zone fits its contents; with `size`, that is its
+minimum. `at x y` suggests the initial arrangement. Subsequent canvas moves
+and resizes are read into the panel, not written back to the source. The selected
 component's Change image action lives on the sheet and in the panel. Its file
 is stored in Excalidraw's file map and travels with save and export; only its
 id belongs in the spec, never in the source. An image replaces the symbol, but

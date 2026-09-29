@@ -1056,8 +1056,103 @@ for (const variant of ARCHITECTURE_TEMPLATES) {
   const layout = computeLayout(ast);
   assert.equal(layout.nodes.length, ast.nodes.length);
   assert.ok(layout.edges.every((edge) => edge.points.length >= 2), variant.label);
+  assert.ok(layout.edges.every((edge) => edge.points.length <= 4), `${variant.label}: routes need no wraparound`);
   assert.equal(layout.nodes[0].type, "zone", "backdrops draw before their contents");
   assert.ok(buildSkeletons(layout).some((piece) => unitOf(piece)?.link), variant.label);
+  const components = layout.nodes.filter((node) => node.type !== "zone");
+  for (let i = 0; i < components.length; i++) {
+    for (const other of components.slice(i + 1)) {
+      const node = components[i];
+      const across = Math.max(other.x - node.x - node.width, node.x - other.x - other.width);
+      const down = Math.max(other.y - node.y - node.height, node.y - other.y - other.height);
+      assert.ok(across >= 40 || down >= 40, `${variant.label}: ${node.id} and ${other.id} need space`);
+    }
+  }
+  const zones = ast.nodes.filter((node) => node.type === "zone");
+  for (const node of ast.nodes) {
+    const center = { x: (node.at?.x ?? 0) + (node.width ?? 150) / 2, y: (node.at?.y ?? 0) + (node.height ?? 110) / 2 };
+    const parent = zones.filter((zone) => zone !== node &&
+      (node.type !== "zone" || (zone.width ?? 0) * (zone.height ?? 0) > (node.width ?? 0) * (node.height ?? 0)) &&
+      center.x >= zone.at!.x && center.x <= zone.at!.x + zone.width! &&
+      center.y >= zone.at!.y && center.y <= zone.at!.y + zone.height!
+    ).sort((a, b) => a.width! * a.height! - b.width! * b.height!)[0];
+    if (!parent) continue;
+    const childBox = layout.nodes.find((entry) => entry.id === node.id)!;
+    const zoneBox = layout.nodes.find((entry) => entry.id === parent.id)!;
+    assert.ok(
+      childBox.x >= zoneBox.x + 16 && childBox.y >= zoneBox.y + 44 &&
+      childBox.x + childBox.width <= zoneBox.x + zoneBox.width - 16 &&
+      childBox.y + childBox.height <= zoneBox.y + zoneBox.height - 16,
+      `${variant.label}: ${node.id} must fit inside ${parent.id}`,
+    );
+  }
+}
+const tight = computeLayout(parseDSL(`architecture "Growing zones" {
+  zone ROOT "Root" at 0 0 size 300 255
+  zone INNER "Inner" at 50 50 size 200 170
+  service A "API" at 165 145 size 150 110
+  external B "Outside" at 550 400
+}`));
+const rootZone = tight.nodes.find((node) => node.id === "ROOT")!;
+const innerZone = tight.nodes.find((node) => node.id === "INNER")!;
+const nestedComponent = tight.nodes.find((node) => node.id === "A")!;
+assert.ok(innerZone.x + innerZone.width >= 331 && innerZone.y + innerZone.height >= 271);
+assert.ok(rootZone.x + rootZone.width >= innerZone.x + innerZone.width + 16);
+assert.ok(rootZone.y + rootZone.height >= innerZone.y + innerZone.height + 16);
+assert.deepEqual([nestedComponent.x, nestedComponent.y], [165, 145], "nodes do not move when their zone grows");
+const outside = tight.nodes.find((node) => node.id === "B")!;
+assert.deepEqual([outside.x, outside.y], [550, 400], "external components stay outside zones");
+const crowded = computeLayout(parseDSL(`architecture "Crowded" {
+  zone Z "Services" at 0 0 size 200 120
+  service A "A" at 50 40
+  service B "B" at 55 45
+  service C "C" at 60 50
+  A -> B -> C
+}`));
+const [a, b, c] = ["A", "B", "C"].map((id) => crowded.nodes.find((node) => node.id === id)!);
+const group = crowded.nodes.find((node) => node.id === "Z")!;
+assert.equal(a.x, b.x, "nearby components align in a column");
+assert.equal(b.x, c.x);
+assert.ok(b.y - (a.y + a.height) >= 56 && c.y - (b.y + b.height) >= 56, "components have clear space between them");
+assert.ok(group.y + group.height >= c.y + c.height + 24, "zone grows with its component count");
+assert.ok(crowded.edges.every((edge) => edge.points.length === 2), "aligned connections run straight");
+const horizontal = computeLayout(parseDSL(`architecture "Row" {
+  zone Z "Services" at 0 0 size 400 180
+  service A "A" at 50 60
+  service B "B" at 110 66
+  service C "C" at 170 55
+  A -> B -> C
+}`));
+const [rowA, rowB, rowC] = ["A", "B", "C"].map((id) => horizontal.nodes.find((node) => node.id === id)!);
+assert.equal(rowA.y, rowB.y, "nearby components align in a row");
+assert.equal(rowB.y, rowC.y);
+assert.ok(rowB.x - rowA.x - rowA.width >= 56 && rowC.x - rowB.x - rowB.width >= 56);
+assert.ok(horizontal.nodes.find((node) => node.id === "Z")!.width >= rowC.x + rowC.width + 24);
+assert.ok(horizontal.edges.every((edge) => edge.points.length === 2));
+const automatic = computeLayout(parseDSL(`architecture "Automatic" {
+  zone Z "Services" at 40 40
+  ${Array.from({ length: 14 }, (_, index) => `service N${index} "Node ${index}"`).join("\n  ")}
+}`));
+const automaticZone = automatic.nodes.find((node) => node.id === "Z")!;
+assert.ok(automaticZone.width < 900 && automaticZone.height > 480, "an unsized zone fits its contents rather than keeping the placeholder size");
+assert.ok(automatic.nodes.filter((node) => node.type !== "zone").every((node) =>
+  node.x >= automaticZone.x + 24 && node.x + node.width + 24 <= automaticZone.x + automaticZone.width &&
+  node.y >= automaticZone.y + 44 && node.y + node.height + 24 <= automaticZone.y + automaticZone.height,
+), "even later unplaced components stay in the lone zone");
+const nested = computeLayout(parseDSL(ARCHITECTURE_TEMPLATES[0].source));
+const dataZone = nested.nodes.find((node) => node.id === "DATA")!;
+const mediaZone = nested.nodes.find((node) => node.id === "MEDIA")!;
+assert.ok(mediaZone.y - dataZone.y - dataZone.height >= 56, "a growing zone pushes the next zone away");
+assert.equal(mediaZone.y, nested.nodes.find((node) => node.id === "ACCOUNT")!.y, "sibling zones stay aligned");
+for (const [template, pairs] of [
+  [ARCHITECTURE_TEMPLATES[0], [["RECIPE", "CATALOG"]]],
+  [ARCHITECTURE_TEMPLATES[2], [["INGEST", "BUS"]]],
+  [ARCHITECTURE_TEMPLATES[3], [["BALANCER", "INGRESS"]]],
+] as const) {
+  const arranged = computeLayout(parseDSL(template.source));
+  for (const [from, to] of pairs) {
+    assert.equal(arranged.edges.find((edge) => edge.from === from && edge.to === to)?.points.length, 2, `${from} -> ${to} should not detour around a narrow gap`);
+  }
 }
 const arch = parseDSL(ARCHITECTURE_TEMPLATES[0].source);
 assert.deepEqual(arch.nodes[0].at, { x: 40, y: 40 });
