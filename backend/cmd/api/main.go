@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
+
 	"tingraph/backend/internal/ai"
 	"tingraph/backend/internal/auth"
 	"tingraph/backend/internal/billing"
@@ -37,6 +39,16 @@ func main() {
 		os.Exit(1)
 	}
 	defer db.Close()
+	var cache *redis.Client
+	if cfg.RedisURL != "" {
+		options, err := redis.ParseURL(cfg.RedisURL)
+		if err != nil {
+			logger.Error("Redis URL is invalid", "error", err)
+			os.Exit(1)
+		}
+		cache = redis.NewClient(options)
+		defer cache.Close()
+	}
 	if err := os.MkdirAll(filepath.Join(cfg.UploadsDir, "avatars"), 0o750); err != nil {
 		logger.Error("uploads directory startup failed", "error", err)
 		os.Exit(1)
@@ -62,7 +74,7 @@ func main() {
 	go database.RunCleanup(ctx, db, logger)
 	billingService := billing.New(db, cfg.Billing, cfg.PublicOrigin)
 	go billingService.RunExpiry(ctx)
-	handlers := handler.New(cfg, db, authService, aiService, billingService, logger)
+	handlers := handler.New(cfg, db, cache, authService, aiService, billingService, logger)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Address,

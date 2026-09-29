@@ -27,7 +27,7 @@ export function SiteNav() {
             sizes="28px"
             className="h-7 w-7 object-contain"
           />
-          tingraph
+          <span className="hidden min-[370px]:inline">tingraph</span>
         </Link>
 
         <div className="hidden items-center gap-5 md:flex">
@@ -42,17 +42,17 @@ export function SiteNav() {
           ))}
         </div>
 
-        <div className="ml-auto flex items-center gap-2 sm:gap-3">
+        <div className="ml-auto flex items-center gap-1.5 sm:gap-3">
           <Link
             href="/build?view=mine"
-            className="slab-tight press whitespace-nowrap bg-white px-3 py-1.5 text-[12.5px] font-medium text-ink"
+            className="slab-tight press flex min-h-10 items-center whitespace-nowrap bg-white px-2 text-[12.5px] font-medium text-ink sm:px-3"
           >
             <span className="sm:hidden">Mine</span>
             <span className="hidden sm:inline">My diagrams</span>
           </Link>
           <Link
             href="/editor"
-            className="slab-tight press whitespace-nowrap bg-edge px-3 py-1.5 font-mono text-[12.5px] font-semibold text-bone"
+            className="slab-tight press flex min-h-10 items-center whitespace-nowrap bg-edge px-2 font-mono text-[12.5px] font-semibold text-bone sm:px-3"
           >
             <span className="sm:hidden">Editor</span>
             <span className="hidden sm:inline">Open editor</span>

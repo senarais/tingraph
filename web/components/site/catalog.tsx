@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { FolderOpen, LayoutGrid, Search } from "lucide-react";
+import { FolderOpen, LayoutGrid, Search, SlidersHorizontal } from "lucide-react";
 import AccessDialog from "@/components/account/access-dialog";
 import { DiagramArt } from "@/components/site/diagram-art";
 import MyDiagrams from "@/components/site/my-diagrams";
@@ -141,6 +141,7 @@ export default function Catalog() {
   const [families, setFamilies] = useState<DiagramFamily[]>([...FAMILIES]);
   const [statuses, setStatuses] = useState<Status[]>([...STATUSES]);
   const [guestChoice, setGuestChoice] = useState<DiagramKind | null>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const openDiagram = async (kind: DiagramKind) => {
     const href = `/editor?type=${kind.id}`;
@@ -175,7 +176,7 @@ export default function Catalog() {
           <h2 className="border-b-2 border-edge bg-bone px-4 py-2.5 font-mono text-[12.5px] font-semibold text-ink">
             Diagrams
           </h2>
-          <nav aria-label="Diagram library" className="p-2">
+          <nav aria-label="Diagram library" className="grid grid-cols-2 gap-1 p-2 lg:block">
             <Link
               href="/build?view=mine"
               aria-current={view === "mine" ? "page" : undefined}
@@ -191,7 +192,7 @@ export default function Catalog() {
             <Link
               href="/build?view=browse"
               aria-current={view === "browse" ? "page" : undefined}
-              className={`mt-1 flex items-center gap-2.5 border-2 px-3 py-2.5 font-mono text-[12.5px] font-semibold transition-colors ${
+              className={`flex items-center gap-2.5 border-2 px-2 py-2.5 font-mono text-[12.5px] font-semibold transition-colors lg:mt-1 lg:px-3 ${
                 view === "browse"
                   ? "border-edge bg-edge text-bone"
                   : "border-transparent text-ink hover:border-edge hover:bg-bone"
@@ -202,47 +203,48 @@ export default function Catalog() {
             </Link>
           </nav>
 
-          <h2 className="border-y-2 border-edge bg-bone px-4 py-2.5 font-mono text-[12.5px] font-semibold text-ink">
-            Filters
-          </h2>
           {view === "browse" ? (
-            <div className="p-4">
-              <h3 className="text-[12px] font-semibold text-ink-soft">What it shows</h3>
-              <div className="mt-1">
-                {FAMILIES.map((family) => (
-                  <Check
-                    key={family}
-                    label={family}
-                    count={ALL_DIAGRAMS.filter((k) => k.family === family).length}
-                    checked={families.includes(family)}
-                    onChange={() => toggle(families, setFamilies, family)}
-                  />
-                ))}
-              </div>
+            <div className="border-t-2 border-edge">
+              <button type="button" aria-expanded={filtersOpen} aria-controls="catalog-filters" onClick={() => setFiltersOpen(!filtersOpen)} className="flex min-h-11 w-full items-center gap-2 bg-bone px-4 text-left font-mono text-[12.5px] font-semibold text-ink lg:hidden"><SlidersHorizontal size={15} /> Filters <span className="ml-auto">{filtersOpen ? "−" : "+"}</span></button>
+              <h2 className="hidden bg-bone px-4 py-2.5 font-mono text-[12.5px] font-semibold text-ink lg:block">Filters</h2>
+              <div id="catalog-filters" className={`${filtersOpen ? "block" : "hidden"} border-t-2 border-edge p-4 lg:block lg:border-t-2`}>
+                <h3 className="text-[12px] font-semibold text-ink-soft">What it shows</h3>
+                <div className="mt-1">
+                  {FAMILIES.map((family) => (
+                    <Check
+                      key={family}
+                      label={family}
+                      count={ALL_DIAGRAMS.filter((k) => k.family === family).length}
+                      checked={families.includes(family)}
+                      onChange={() => toggle(families, setFamilies, family)}
+                    />
+                  ))}
+                </div>
 
-              <h3 className="mt-5 text-[12px] font-semibold text-ink-soft">
-                Availability
-              </h3>
-              <div className="mt-1">
-                {STATUSES.map((status) => (
-                  <Check
-                    key={status}
-                    label={status}
-                    count={ALL_DIAGRAMS.filter((k) => statusOf(k) === status).length}
-                    checked={statuses.includes(status)}
-                    onChange={() => toggle(statuses, setStatuses, status)}
-                  />
-                ))}
+                <h3 className="mt-5 text-[12px] font-semibold text-ink-soft">
+                  Availability
+                </h3>
+                <div className="mt-1">
+                  {STATUSES.map((status) => (
+                    <Check
+                      key={status}
+                      label={status}
+                      count={ALL_DIAGRAMS.filter((k) => statusOf(k) === status).length}
+                      checked={statuses.includes(status)}
+                      onChange={() => toggle(statuses, setStatuses, status)}
+                    />
+                  ))}
+                </div>
               </div>
             </div>
           ) : (
-            <p className="p-4 text-[12.5px] leading-relaxed text-ink-soft">
+            <p className="border-t-2 border-edge p-4 text-[12.5px] leading-relaxed text-ink-soft">
               Search by saved title or notation. Only diagrams owned by your account appear.
             </p>
           )}
         </div>
 
-        <p className="mt-4 text-[12.5px] leading-relaxed text-ink-soft">
+        <p className="mt-4 hidden text-[12.5px] leading-relaxed text-ink-soft lg:block">
           {view === "mine"
             ? "Open a saved diagram to continue with its source, settings and canvas edits."
             : "More notations land here as they are built. Browsing never needs an account."}

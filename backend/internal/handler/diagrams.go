@@ -40,9 +40,18 @@ type diagramRow struct {
 }
 
 func (server *Handler) ListDiagrams(w http.ResponseWriter, r *http.Request) {
+	httpx.NoStore(w)
+	userID := currentSession(r).User.ID
+	version, cached := server.diagramListVersion(r.Context(), userID)
+	if cached {
+		if payload := server.cachedDiagramList(r.Context(), userID, version); payload != nil {
+			httpx.JSON(w, http.StatusOK, payload)
+			return
+		}
+	}
 	rows, err := server.db.Query(r.Context(), `
 		select id::text, title, category, created_at, updated_at
-		from app.diagrams where user_id = $1 order by updated_at desc`, currentSession(r).User.ID,
+		from app.diagrams where user_id = $1 order by updated_at desc`, userID,
 	)
 	if err != nil {
 		httpx.Problem(w, http.StatusInternalServerError, "diagrams could not be loaded")
@@ -62,7 +71,11 @@ func (server *Handler) ListDiagrams(w http.ResponseWriter, r *http.Request) {
 		httpx.Problem(w, http.StatusInternalServerError, "diagrams could not be loaded")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{"diagrams": diagrams})
+	result := map[string]any{"diagrams": diagrams}
+	if cached {
+		server.storeDiagramList(r.Context(), userID, version, result)
+	}
+	httpx.JSON(w, http.StatusOK, result)
 }
 
 func (server *Handler) GetDiagram(w http.ResponseWriter, r *http.Request) {
@@ -104,6 +117,7 @@ func (server *Handler) CreateDiagram(w http.ResponseWriter, r *http.Request) {
 		httpx.Problem(w, http.StatusInternalServerError, "diagram could not be saved")
 		return
 	}
+	server.invalidateDiagramList(currentSession(r).User.ID)
 	httpx.JSON(w, http.StatusCreated, map[string]string{"id": id})
 }
 
@@ -128,6 +142,7 @@ func (server *Handler) UpdateDiagram(w http.ResponseWriter, r *http.Request) {
 		httpx.Problem(w, http.StatusInternalServerError, "diagram could not be saved")
 		return
 	}
+	server.invalidateDiagramList(currentSession(r).User.ID)
 	httpx.JSON(w, http.StatusOK, map[string]string{"id": id})
 }
 
@@ -144,6 +159,7 @@ func (server *Handler) DeleteDiagram(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
+	server.invalidateDiagramList(currentSession(r).User.ID)
 	w.WriteHeader(http.StatusNoContent)
 }
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/redis/go-redis/v9"
 
 	"tingraph/backend/internal/ai"
 	"tingraph/backend/internal/auth"
@@ -21,6 +22,7 @@ import (
 type Handler struct {
 	cfg       config.Config
 	db        *pgxpool.Pool
+	redis     *redis.Client
 	auth      *auth.Service
 	aiService *ai.Service
 	billing   *billing.Service
@@ -28,8 +30,8 @@ type Handler struct {
 	log       *slog.Logger
 }
 
-func New(cfg config.Config, db *pgxpool.Pool, authService *auth.Service, aiService *ai.Service, billingService *billing.Service, logger *slog.Logger) *Handler {
-	return &Handler{cfg: cfg, db: db, auth: authService, aiService: aiService, billing: billingService, aiSlots: make(chan struct{}, 2), log: logger}
+func New(cfg config.Config, db *pgxpool.Pool, cache *redis.Client, authService *auth.Service, aiService *ai.Service, billingService *billing.Service, logger *slog.Logger) *Handler {
+	return &Handler{cfg: cfg, db: db, redis: cache, auth: authService, aiService: aiService, billing: billingService, aiSlots: make(chan struct{}, 2), log: logger}
 }
 
 func (server *Handler) Live(w http.ResponseWriter, _ *http.Request) {

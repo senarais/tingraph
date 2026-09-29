@@ -66,7 +66,7 @@ export default function TopBar({
       <Link
         href="/"
         title="Back to the Tingraph home page"
-        className="flex items-center gap-2.5 border-r-2 border-edge px-4 transition-colors hover:bg-white"
+        className="flex items-center gap-2.5 border-r-2 border-edge px-2 transition-colors hover:bg-white sm:px-4"
       >
         <Image
           src="/icon.png"
@@ -76,7 +76,7 @@ export default function TopBar({
           sizes="28px"
           className="h-7 w-7 object-contain"
         />
-        <span className="text-[14px] font-semibold tracking-tight text-ink">
+        <span className="hidden text-[14px] font-semibold tracking-tight text-ink min-[380px]:inline">
           tingraph
         </span>
       </Link>
@@ -100,13 +100,13 @@ export default function TopBar({
         {errorMessage ? "Syntax error" : "Parsed"}
       </Cell>
 
-      <div className="ml-auto flex items-center gap-3 px-4">
+      <div className="ml-auto flex items-center gap-2 px-2 sm:gap-3 sm:px-4">
         <button
           type="button"
           onClick={onSave}
           disabled={saveState === "saving"}
           title={saveMessage || "Save this diagram to your account"}
-          className={`slab-tight press flex items-center gap-2 px-3 py-2 text-[12.5px] font-semibold disabled:cursor-wait disabled:opacity-60 ${
+          className={`slab-tight press flex h-10 items-center gap-2 px-2 text-[12.5px] font-semibold disabled:cursor-wait disabled:opacity-60 sm:px-3 ${
             saveState === "error" ? "bg-alert-tint text-alert" : "bg-white text-ink"
           }`}
         >
@@ -128,10 +128,10 @@ export default function TopBar({
           type="button"
           onClick={() => setExportOpen(true)}
           disabled={empty}
-          className="slab-tight press flex items-center gap-2 bg-edge px-4 py-2 text-[12.5px] font-semibold text-bone disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none"
+          className="slab-tight press flex h-10 items-center gap-2 bg-edge px-2 text-[12.5px] font-semibold text-bone disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none sm:px-4"
         >
           <Download size={14} />
-          Export
+          <span className="hidden min-[370px]:inline">Export</span>
         </button>
         {/* in a tab of its own: the drawing lives in memory, and leaving would lose it */}
         <AccountButton detached />

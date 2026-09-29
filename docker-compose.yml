@@ -90,6 +90,26 @@ services:
       - internal
     logging: *default-logging
 
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    user: redis
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "32mb", "--maxmemory-policy", "noeviction"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging: *default-logging
+    mem_limit: 64m
+    networks:
+      - internal
+
   api:
     build:
       context: ./backend
@@ -100,6 +120,7 @@ services:
       HTTP_ADDRESS: :8080
       TRUST_PROXY: "true"
       DATABASE_URL_FILE: /run/secrets/database_url
+      REDIS_URL: redis://redis:6379
       RATE_LIMIT_SECRET_FILE: /run/secrets/rate_limit_secret
       UPLOADS_DIR: /var/lib/tingraph/uploads
       SESSION_COOKIE_NAME: ${SESSION_COOKIE_NAME:-__Host-tingraph_session}

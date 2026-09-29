@@ -270,7 +270,7 @@ function Label({ entry, shown }: { entry: Entry; shown: boolean }) {
     return null;
   }
   return (
-    <div className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 flex -translate-y-1/2 items-center gap-2 border-2 border-edge bg-edge px-2 py-1 text-bone shadow-[3px_3px_0_var(--edge)]">
+    <div className="pointer-events-none absolute left-full top-1/2 z-50 ml-2 hidden -translate-y-1/2 items-center gap-2 border-2 border-edge bg-edge px-2 py-1 text-bone shadow-[3px_3px_0_var(--edge)] sm:flex">
       <span className="whitespace-nowrap font-mono text-[11.5px] leading-none">
         {entry.label}
       </span>
@@ -318,7 +318,7 @@ function RailButton({
           leave();
           onPress();
         }}
-        className={`grid h-10 w-10 place-items-center border-2 transition-colors ${
+        className={`grid h-11 w-11 place-items-center border-2 transition-colors sm:h-10 sm:w-10 ${
           held
             ? "border-edge bg-edge text-bone"
             : "border-transparent text-ink hover:border-edge hover:bg-white"
@@ -469,7 +469,7 @@ export default function Rail({
   return (
     <nav
       aria-label="Editor tools"
-      className="flex w-14 shrink-0 flex-col items-center gap-1 border-r-2 border-edge bg-bone py-3"
+      className="order-2 flex h-14 w-full shrink-0 items-center gap-1 overflow-x-auto border-t-2 border-edge bg-bone px-2 sm:order-none sm:h-auto sm:w-14 sm:flex-col sm:overflow-visible sm:border-r-2 sm:border-t-0 sm:px-0 sm:py-3"
     >
       {instrumentsFor(category).map((entry) => (
         <RailButton
@@ -479,7 +479,7 @@ export default function Rail({
           onPress={() => press(entry)}
         >
           {entry.lines && lines && connector !== null && (
-            <div className="slab-tight absolute left-full top-0 z-50 ml-2 w-60 bg-white">
+              <div className="slab-tight fixed bottom-16 left-2 right-2 z-50 max-h-[65dvh] overflow-y-auto bg-white sm:absolute sm:bottom-auto sm:left-full sm:right-auto sm:top-0 sm:ml-2 sm:w-60">
               <p className="border-b-2 border-edge px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
                 Connector · hold space to pan
               </p>
@@ -516,7 +516,7 @@ export default function Rail({
           )}
         </RailButton>
       ))}
-      <hr className="my-2 w-7 border-t-2 border-edge" />
+      <hr className="mx-1 h-7 border-l-2 border-edge sm:mx-0 sm:my-2 sm:h-0 sm:w-7 sm:border-l-0 sm:border-t-2" />
       {PANELS.map((entry) => (
         <RailButton
           key={entry.label}

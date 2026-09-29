@@ -98,7 +98,7 @@ export default function Inspector({ picked, category, onPatch }: InspectorProps)
   return (
     <aside
       aria-label={`${controls.name} properties`}
-      className="slab absolute right-4 top-4 z-20 max-h-[calc(100%-2rem)] w-[228px] overflow-y-auto bg-white"
+      className="slab absolute inset-x-2 bottom-2 z-20 max-h-[min(42dvh,18rem)] overflow-y-auto bg-white sm:inset-x-auto sm:bottom-auto sm:right-4 sm:top-4 sm:max-h-[calc(100%-2rem)] sm:w-[228px]"
     >
       <header className="flex items-baseline gap-2 border-b-2 border-edge bg-bone px-3 py-2">
         <span className="text-[12.5px] font-semibold text-ink">{controls.name}</span>

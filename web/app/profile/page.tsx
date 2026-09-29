@@ -66,7 +66,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/profile"
       <TimeZoneSync known={usage.time_zone} />
       <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 sm:px-6 md:grid-cols-[250px_minmax(0,1fr)] md:items-start">
         <aside className="slab bg-white md:sticky md:top-20">
-          <div className="flex flex-col items-center gap-3 border-b-2 border-edge px-4 py-6 text-center">
+          <div className="flex items-center gap-3 border-b-2 border-edge px-4 py-3 text-left md:flex-col md:py-6 md:text-center">
             <AvatarUpload url={row.avatar_url} name={name} />
             <div className="w-full min-w-0">
               <p className="truncate text-[15px] font-semibold text-ink">
@@ -78,13 +78,13 @@ export default async function ProfilePage({ searchParams }: PageProps<"/profile"
               <p className="mt-1 truncate font-mono text-[11px] text-ink-faint">{user.email}</p>
             </div>
           </div>
-          <nav aria-label="Profile sections" className="flex flex-col p-2">
+          <nav aria-label="Profile sections" className="flex gap-1 overflow-x-auto p-2 md:flex-col md:overflow-visible">
             {SECTIONS.map((section) => (
               <a
                 key={section.key}
                 href={`/profile?view=${section.key}`}
                 aria-current={view === section.key ? "page" : undefined}
-                className={`border-2 px-3 py-2 text-[13px] transition-colors hover:border-edge hover:bg-bone hover:text-ink ${view === section.key ? "border-edge bg-bone font-semibold text-ink" : "border-transparent text-ink-soft"}`}
+                className={`shrink-0 border-2 px-3 py-2.5 text-[13px] transition-colors hover:border-edge hover:bg-bone hover:text-ink ${view === section.key ? "border-edge bg-bone font-semibold text-ink" : "border-transparent text-ink-soft"}`}
               >
                 {section.label}
               </a>

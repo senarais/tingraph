@@ -754,11 +754,11 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
         onSave={() => void saveDiagram()}
       />
 
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1 flex-col sm:flex-row">
         <Rail category={editorCategory} onOpenAi={() => void openAi()} />
 
         {drawer && (
-          <aside className="flex w-[352px] shrink-0 flex-col border-r-2 border-edge bg-bone">
+          <aside className="absolute inset-x-0 bottom-14 top-0 z-30 flex min-h-0 flex-col bg-bone sm:static sm:w-[352px] sm:shrink-0 sm:border-r-2 sm:border-edge">
             <header className="flex items-center gap-2 border-b-2 border-edge px-3 py-2.5">
               <Tick>
                 {drawer === "figure"
@@ -772,7 +772,7 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
                 onClick={closeDrawer}
                 aria-label="Close the panel"
                 title="Close the panel"
-                className="ml-auto border-2 border-transparent p-0.5 text-ink-faint transition-colors hover:border-edge hover:bg-white hover:text-ink"
+                className="ml-auto grid h-10 w-10 place-items-center border-2 border-transparent text-ink-faint transition-colors hover:border-edge hover:bg-white hover:text-ink"
               >
                 <X size={14} />
               </button>
@@ -889,7 +889,7 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
           </aside>
         )}
 
-        <main className="relative min-w-0 flex-1 bg-paper">
+        <main className="relative min-h-0 min-w-0 flex-1 bg-paper">
           <Canvas
             initialElements={seed.elements}
             initialFiles={seed.files}

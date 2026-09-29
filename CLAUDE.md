@@ -178,6 +178,9 @@ Consequences worth knowing before touching the canvas:
   is read from Excalidraw's own `appState` through `onChange` rather than from
   the DOM: measuring the wrapper would race Excalidraw's own resize observer
   and fit against a width it did not have yet.
+- **On narrow screens the tools dock below the sheet.** Opening a drawer covers
+  the canvas above that dock instead of shrinking the canvas by 352px; the
+  selection inspector sits along the bottom of the remaining sheet.
 - `window.__tingraphStore` and `window.__excalidrawAPI` are exposed on purpose,
   for driving the editor from a console or a browser agent.
 
@@ -766,6 +769,14 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
   canvas. Rows are private to `user_id`, capped at 10 MB, listed without
   fetching `document`, and read, changed or removed only with the user's id in
   the query.
+- **Redis accelerates only the small per-user saved-diagram list.** The Go API
+  authenticates every request against PostgreSQL first; Redis keys use that
+  authenticated user id and hold at most 32 KB of list metadata for 30 seconds.
+  A successful create, update or delete increments that user's list version,
+  so in-flight reads cannot refill a newly invalidated key. Redis failures fall
+  back to PostgreSQL; the list response remains `no-store` in the browser.
+  Never put full scenes, sessions, entitlements, usage or billing state there.
+  Compose supplies `REDIS_URL`; without it the API reads PostgreSQL directly.
 - **The profile row is made by a trigger**, `handle_new_user`. A trigger that
   fails fails sign-up with it. A username is chosen by the reader later, never
   generated.

@@ -43,7 +43,7 @@ func TestAdminLifecycle(t *testing.T) {
 		t.Fatal(err)
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	routes := Setup(handler.New(cfg, db, service, nil, nil, log), service, origin, log)
+	routes := Setup(handler.New(cfg, db, nil, service, nil, nil, log), service, origin, log)
 	hash, err := service.HashPassword("a-sufficiently-long-secret")
 	if err != nil {
 		t.Fatal(err)

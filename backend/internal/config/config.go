@@ -16,6 +16,7 @@ type Config struct {
 	Address           string
 	PublicOrigin      *url.URL
 	DatabaseURL       string
+	RedisURL          string
 	UploadsDir        string
 	SessionCookieName string
 	CookieSecure      bool
@@ -112,6 +113,7 @@ func Load() (Config, error) {
 		Address:           value("HTTP_ADDRESS", ":8080"),
 		PublicOrigin:      origin,
 		DatabaseURL:       databaseURL,
+		RedisURL:          value("REDIS_URL", ""),
 		UploadsDir:        value("UPLOADS_DIR", "/var/lib/tingraph/uploads"),
 		SessionCookieName: cookieName,
 		CookieSecure:      secure,
