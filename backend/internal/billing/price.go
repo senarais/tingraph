@@ -24,6 +24,85 @@ type Quote struct {
 	PayPal   bool       `json:"paypal"`
 }
 
+type Price struct {
+	Method    string     `json:"method"`
+	USD       string     `json:"usd"`
+	Discount  int64      `json:"discount_cents"`
+	Base      int64      `json:"base_cents"`
+	Tax       int64      `json:"tax_cents"`
+	Fee       int64      `json:"fee"`
+	Amount    int64      `json:"amount"`
+	Currency  string     `json:"currency"`
+	RateDate  *time.Time `json:"rate_date,omitempty"`
+	IDRBase   int64      `json:"idr_base,omitempty"`
+	Code      string     `json:"code,omitempty"`
+	Available bool       `json:"available"`
+}
+
+var ErrDiscount = errors.New("discount code is invalid or fully reserved")
+
+func grossFor(net int64, bps int, fixed int64) int64 {
+	return (net+fixed)*10000/(10000-int64(bps)) + boolInt((net+fixed)*10000%(10000-int64(bps)) != 0)
+}
+
+func boolInt(value bool) int64 {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func (service *Service) Price(ctx context.Context, method, code string) (Price, error) {
+	price := Price{Method: method, USD: "5.00", Base: monthlyUSD, Code: code}
+	var bps int
+	switch method {
+	case "paypal":
+		price.Currency, price.Available = "USD", service.payPalEnabled()
+		bps = service.cfg.PayPalFeeBPS
+	case "gopay", "qris":
+		price.Currency, price.Available = "IDR", service.midtransEnabled()
+		if method == "gopay" {
+			bps = service.cfg.GoPayFeeBPS
+		} else {
+			bps = service.cfg.QRISFeeBPS
+		}
+	default:
+		return price, errors.New("unknown payment method")
+	}
+	if !price.Available {
+		return price, ErrUnavailable
+	}
+	if code != "" {
+		var percent int
+		err := service.db.QueryRow(ctx, `select percent from ops.discount_codes c where c.code = $1 and c.enabled
+			and (select count(*) from ops.payment_orders o where o.discount_code = c.code
+			and o.status in ('paid', 'pending')) < c.max_uses`, code).Scan(&percent)
+		if err != nil {
+			return price, ErrDiscount
+		}
+		price.Discount = monthlyUSD * int64(percent) / 100
+		price.Base -= price.Discount
+	}
+	price.Tax = (price.Base*int64(service.cfg.ProductTaxBPS) + 9999) / 10000
+	payable := price.Base + price.Tax
+	if method == "paypal" {
+		price.Amount = grossFor(payable, bps, int64(service.cfg.PayPalFixedCents))
+	} else {
+		idr, day, err := service.idrAmount(ctx)
+		if err != nil {
+			return price, err
+		}
+		price.RateDate = &day
+		price.IDRBase = idr
+		net := (idr*payable + monthlyUSD - 1) / monthlyUSD
+		price.Amount = grossFor(net, bps, 0)
+		price.Fee = price.Amount - net
+		return price, nil
+	}
+	price.Fee = price.Amount - payable
+	return price, nil
+}
+
 type rates struct {
 	mu       sync.Mutex
 	day      string

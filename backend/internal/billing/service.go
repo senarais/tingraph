@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -21,6 +22,13 @@ import (
 var ErrUnavailable = errors.New("payment provider is not configured")
 var ErrPriceChanged = errors.New("exchange rate changed; refresh the price")
 var ErrInvalidWebhook = errors.New("invalid webhook authentication")
+var ErrTimeZone = errors.New("choose a valid time zone")
+
+type providerStatusError struct{ Status int }
+
+func (e providerStatusError) Error() string {
+	return fmt.Sprintf("payment provider returned HTTP %d", e.Status)
+}
 
 type Service struct {
 	db                *pgxpool.Pool
@@ -48,6 +56,14 @@ type Order struct {
 	PaymentID  string     `json:"-"`
 	PaidAt     *time.Time `json:"paid_at,omitempty"`
 	UserID     string     `json:"-"`
+	Method     string     `json:"method"`
+	ExpiresAt  time.Time  `json:"expires_at"`
+	Deeplink   string     `json:"deeplink,omitempty"`
+	Discount   string     `json:"discount_code,omitempty"`
+	BaseCents  int64      `json:"base_cents"`
+	TaxCents   int64      `json:"tax_cents"`
+	Fee        int64      `json:"fee"`
+	IDRBase    int64      `json:"idr_base,omitempty"`
 }
 
 func New(db *pgxpool.Pool, cfg config.Billing, origin *url.URL) *Service {
@@ -65,78 +81,183 @@ func (service *Service) payPalEnabled() bool {
 	return service.cfg.PayPalClientID != "" && service.cfg.PayPalClientSecret != "" && service.cfg.PayPalWebhookID != ""
 }
 
-func (service *Service) Checkout(ctx context.Context, userID, provider string, quotedAmount int64) (Checkout, error) {
-	var currency string
-	var amount int64
-	var rateDate any
-	switch provider {
-	case "midtrans":
-		if !service.midtransEnabled() {
-			return Checkout{}, ErrUnavailable
-		}
-		currency = "IDR"
-		var day time.Time
-		var err error
-		amount, day, err = service.idrAmount(ctx)
-		if err != nil {
-			return Checkout{}, err
-		}
-		if amount != quotedAmount {
-			return Checkout{}, ErrPriceChanged
-		}
-		rateDate = day
-	case "paypal":
-		if !service.payPalEnabled() {
-			return Checkout{}, ErrUnavailable
-		}
-		currency, amount = "USD", monthlyUSD
-	default:
-		return Checkout{}, errors.New("unknown payment provider")
+func (service *Service) ValidTimeZone(ctx context.Context, zone string) (bool, error) {
+	if len(zone) == 0 || len(zone) > 64 {
+		return false, nil
+	}
+	var valid bool
+	err := service.db.QueryRow(ctx, `select exists(select 1 from pg_timezone_names where name = $1)`, zone).Scan(&valid)
+	return valid, err
+}
+
+func (service *Service) Checkout(ctx context.Context, userID, method string, quotedAmount int64, code, timeZone string) (Checkout, error) {
+	price, err := service.Price(ctx, method, code)
+	if err != nil {
+		return Checkout{}, err
+	}
+	if quotedAmount != price.Amount {
+		return Checkout{}, ErrPriceChanged
+	}
+	valid, err := service.ValidTimeZone(ctx, timeZone)
+	if err != nil {
+		return Checkout{}, err
+	}
+	if !valid {
+		return Checkout{}, ErrTimeZone
+	}
+	provider := "midtrans"
+	if method == "paypal" {
+		provider = "paypal"
 	}
 	var id string
-	err := service.db.QueryRow(ctx, `
-		insert into ops.payment_orders (user_id, provider, currency, amount, rate_date)
-		select id, $2, $3, $4, $5 from app.profiles
+	err = service.db.QueryRow(ctx, `
+		insert into ops.payment_orders (user_id, provider, currency, amount, rate_date, method, base_cents, tax_cents, fee, idr_base, time_zone)
+		select id, $2, $3, $4, $5, $6, $7, $8, $9, nullif($10, 0), $11 from app.profiles
 		where id = $1 and not (tier = 'premium' and premium_until is null)
-		returning id::text`, userID, provider, currency, amount, rateDate,
+		returning id::text`, userID, provider, price.Currency, price.Amount, price.RateDate, method, price.Base, price.Tax, price.Fee, price.IDRBase, timeZone,
 	).Scan(&id)
 	if err != nil {
 		return Checkout{}, fmt.Errorf("create payment order: %w", err)
 	}
 
-	var providerID, checkoutURL string
+	if code != "" {
+		var reserved bool
+		if err := service.db.QueryRow(ctx, `select ops.reserve_discount($1, $2)`, id, code).Scan(&reserved); err != nil || !reserved {
+			_, _ = service.db.Exec(ctx, `update ops.payment_orders set status = 'failed' where id = $1`, id)
+			if err != nil {
+				return Checkout{}, err
+			}
+			return Checkout{}, ErrDiscount
+		}
+	}
+	var providerID, checkoutURL, deeplink string
 	if provider == "midtrans" {
-		providerID, checkoutURL, err = service.createMidtrans(ctx, id, amount)
+		providerID, checkoutURL, deeplink, err = service.createMidtrans(ctx, id, price.Amount)
 	} else {
-		providerID, checkoutURL, err = service.createPayPal(ctx, id)
+		providerID, checkoutURL, err = service.createPayPal(ctx, id, price.Amount)
 	}
 	if err != nil {
+		_, _ = service.db.Exec(ctx, `update ops.payment_orders set status = 'failed' where id = $1 and provider_id is null`, id)
 		return Checkout{}, err
 	}
 	if _, err := service.db.Exec(ctx, `update ops.payment_orders
-		set provider_id = $2, checkout_url = $3 where id = $1`, id, providerID, checkoutURL); err != nil {
+		set provider_id = $2, checkout_url = $3, deeplink_url = $4 where id = $1`, id, providerID, checkoutURL, deeplink); err != nil {
 		return Checkout{}, fmt.Errorf("save payment order: %w", err)
+	}
+	if provider == "midtrans" {
+		checkoutURL = "/checkout?order=" + id
 	}
 	return Checkout{ID: id, URL: checkoutURL}, nil
 }
 
 func (service *Service) Order(ctx context.Context, id, userID string) (Order, error) {
+	if _, err := service.db.Exec(ctx, `select ops.expire_payments()`); err != nil {
+		return Order{}, err
+	}
 	var order Order
 	err := service.db.QueryRow(ctx, `select id::text, user_id::text, provider, status,
-		currency, amount, coalesce(provider_id, ''), coalesce(payment_id, ''), paid_at
+		currency, amount, coalesce(provider_id, ''), coalesce(payment_id, ''), paid_at,
+		method, expires_at, coalesce(deeplink_url, ''), coalesce(discount_code, ''), base_cents, tax_cents, fee, coalesce(idr_base, 0)
 		from ops.payment_orders where id = $1 and user_id = $2`, id, userID,
 	).Scan(&order.ID, &order.UserID, &order.Provider, &order.Status, &order.Currency,
-		&order.Amount, &order.ProviderID, &order.PaymentID, &order.PaidAt)
+		&order.Amount, &order.ProviderID, &order.PaymentID, &order.PaidAt,
+		&order.Method, &order.ExpiresAt, &order.Deeplink, &order.Discount, &order.BaseCents, &order.TaxCents, &order.Fee, &order.IDRBase)
 	return order, err
+}
+
+func (service *Service) RunExpiry(ctx context.Context) {
+	ticker := time.NewTicker(time.Minute)
+	defer ticker.Stop()
+	for {
+		if _, err := service.db.Exec(ctx, `select ops.expire_payments()`); err != nil && ctx.Err() == nil {
+			slog.Error("payment expiry sweep failed", "error", err)
+		}
+		rows, err := service.db.Query(ctx, `select id::text from ops.payment_orders
+			where status = 'pending' and provider_id is not null and expires_at <= now()
+			order by expires_at limit 50`)
+		if err != nil && ctx.Err() == nil {
+			slog.Error("payment expiry lookup failed", "error", err)
+		}
+		ids := []string{}
+		if err == nil {
+			for rows.Next() {
+				var id string
+				if err = rows.Scan(&id); err != nil {
+					break
+				}
+				ids = append(ids, id)
+			}
+			if err == nil {
+				err = rows.Err()
+			}
+			rows.Close()
+		}
+		if err != nil && ctx.Err() == nil {
+			slog.Error("payment expiry scan failed", "error", err)
+		}
+		for _, id := range ids {
+			if err := service.expireOne(ctx, id); err != nil && ctx.Err() == nil {
+				slog.Warn("payment expiry verification failed", "order", id, "error", err)
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func (service *Service) expireOne(ctx context.Context, id string) error {
+	order, err := service.lookup(ctx, id)
+	if err != nil || order.Status != "pending" {
+		return err
+	}
+	if order.Provider == "midtrans" {
+		return service.confirmMidtrans(ctx, order)
+	}
+	// A PayPal capture started just before the deadline can still be in flight.
+	// Allow its bounded provider request to complete before freeing its code.
+	if time.Since(order.ExpiresAt) < time.Minute {
+		return nil
+	}
+	var result payPalOrder
+	if err := service.payPal(ctx, http.MethodGet, "/v2/checkout/orders/"+url.PathEscape(order.ProviderID), nil, "", &result); err != nil {
+		var status providerStatusError
+		if !errors.As(err, &status) || status.Status != http.StatusNotFound {
+			return err
+		}
+		// PayPal no longer has an unpaid expired order; no capture can be initiated here.
+		var expired bool
+		return service.db.QueryRow(ctx, `select ops.expire_confirmed_payment($1, $2)`, id, order.ProviderID).Scan(&expired)
+	}
+	if result.ID != order.ProviderID {
+		return errors.New("PayPal expiry lookup does not match order")
+	}
+	if result.Status == "COMPLETED" {
+		captureID, err := service.validateCapture(order, result)
+		if err != nil {
+			return err
+		}
+		_, err = service.settle(ctx, order, captureID, false)
+		return err
+	}
+	if result.Status != "CREATED" && result.Status != "APPROVED" && result.Status != "PAYER_ACTION_REQUIRED" && result.Status != "VOIDED" {
+		return fmt.Errorf("PayPal order has unexpected status %q", result.Status)
+	}
+	var expired bool
+	return service.db.QueryRow(ctx, `select ops.expire_confirmed_payment($1, $2)`, id, order.ProviderID).Scan(&expired)
 }
 
 func (service *Service) lookup(ctx context.Context, id string) (Order, error) {
 	var order Order
 	err := service.db.QueryRow(ctx, `select id::text, user_id::text, provider, status,
-		currency, amount, coalesce(provider_id, ''), coalesce(payment_id, ''), paid_at
+		currency, amount, coalesce(provider_id, ''), coalesce(payment_id, ''), paid_at,
+		method, expires_at, coalesce(deeplink_url, ''), coalesce(discount_code, ''), base_cents, tax_cents, fee, coalesce(idr_base, 0)
 		from ops.payment_orders where id = $1`, id,
 	).Scan(&order.ID, &order.UserID, &order.Provider, &order.Status, &order.Currency,
-		&order.Amount, &order.ProviderID, &order.PaymentID, &order.PaidAt)
+		&order.Amount, &order.ProviderID, &order.PaymentID, &order.PaidAt,
+		&order.Method, &order.ExpiresAt, &order.Deeplink, &order.Discount, &order.BaseCents, &order.TaxCents, &order.Fee, &order.IDRBase)
 	return order, err
 }
 
@@ -187,7 +308,7 @@ func (service *Service) do(ctx context.Context, method, endpoint, user, password
 	}
 	defer res.Body.Close()
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
-		return fmt.Errorf("payment provider returned HTTP %d", res.StatusCode)
+		return providerStatusError{Status: res.StatusCode}
 	}
 	if target != nil {
 		return json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(target)
@@ -200,8 +321,7 @@ func checkoutLink(raw, provider string) (string, error) {
 	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" {
 		return "", errors.New("invalid payment checkout link")
 	}
-	allowed := provider == "midtrans" && (u.Hostname() == "app.midtrans.com" || u.Hostname() == "app.sandbox.midtrans.com") ||
-		provider == "paypal" && (u.Hostname() == "www.paypal.com" || u.Hostname() == "www.sandbox.paypal.com")
+	allowed := provider == "paypal" && (u.Hostname() == "www.paypal.com" || u.Hostname() == "www.sandbox.paypal.com")
 	if !allowed || !strings.HasPrefix(u.Path, "/") {
 		return "", errors.New("invalid payment checkout host")
 	}

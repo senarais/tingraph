@@ -13,6 +13,98 @@ export const FLOWCHART_TEMPLATE = `flow "Chart Title" {
 }
 `;
 
+/** Four editable starting points, matching common architecture drawing conventions. */
+export const ARCHITECTURE_TEMPLATES = [
+  {
+    label: "Nested systems",
+    source: `architecture "Recipe Search Platform" {
+  zone APP "Recipe Search Platform" at 40 40 size 960 570
+  zone SEARCH "Search & discovery" at 270 100 size 290 210
+  zone DATA "Recipe management" at 620 100 size 310 210
+  zone ACCOUNT "Accounts" at 270 365 size 290 190
+  zone MEDIA "Media & files" at 620 365 size 310 190
+  client USER "Mobile app" at 70 240
+  service FIND "Search engine" at 330 170
+  service RECIPE "Recipe service" at 690 170
+  database CATALOG "Recipes" at 690 250
+  service PROFILE "User profile" at 330 435
+  storage FILES "Image storage" at 690 435
+  USER -> FIND -> RECIPE -> CATALOG
+  USER -> PROFILE
+  PROFILE -> FILES
+  RECIPE -> FILES
+}
+`,
+  },
+  {
+    label: "Build & release",
+    source: `architecture "Build & Release Pipeline" {
+  zone CI "Continuous integration" at 60 165 size 1030 230
+  zone PROD "Production & telemetry" at 60 470 size 1030 240
+  external REPO "Source repository" at 85 210
+  service TRIGGER "Build trigger" at 290 210
+  service BUILD "Build & test" at 495 210
+  storage ARTIFACT "Artifacts" at 700 210
+  service DEPLOY "Release pipeline" at 900 210
+  cloud WEB "Web application" at 470 535
+  database DB "Database" at 700 535
+  external USERS "Users" at 85 535
+  service METRICS "Monitoring" at 900 535
+  REPO -> TRIGGER -> BUILD -> ARTIFACT -> DEPLOY
+  DEPLOY -> WEB -> DB
+  USERS -> WEB
+  WEB -.-> METRICS
+}
+`,
+  },
+  {
+    label: "Event-driven cloud",
+    source: `architecture "Event-Driven Cloud" {
+  zone REGION "Cloud region" at 250 40 size 1000 680
+  zone COMPUTE "Application layer" at 645 130 size 530 210
+  zone PERSIST "Data layer" at 645 420 size 530 220
+  client USERS "Users" at 40 285
+  cloud CDN "CDN & routing" at 285 285
+  service GATEWAY "API gateway" at 470 285
+  storage INGEST "Ingestion" at 330 90
+  queue BUS "Event bus" at 490 90
+  service API "Serverless API" at 690 190
+  service WORKER "Worker" at 920 190
+  database RECORDS "Records" at 690 485
+  storage LAKE "Data lake" at 920 485
+  USERS -> CDN -> GATEWAY -> API -> RECORDS
+  INGEST -.-> BUS -.-> WORKER
+  WORKER -> LAKE
+  API -.-> BUS
+}
+`,
+  },
+  {
+    label: "Cluster & network",
+    source: `architecture "Kubernetes Infrastructure" {
+  zone NETWORK "Virtual network" at 250 75 size 855 585
+  zone FRONT "Front end" at 285 150 size 280 220
+  zone BACK "Back end" at 605 150 size 460 220
+  zone OPS "Operations" at 605 425 size 460 185
+  client APP "Client apps" at 35 175
+  cloud BALANCER "Load balancer" at 285 185
+  service INGRESS "Ingress" at 350 270
+  service API "API pods" at 650 200
+  service SEARCH "Search pods" at 860 200
+  database SQL "SQL database" at 1150 180
+  storage OBJECTS "Object storage" at 1150 390
+  service MONITOR "Monitoring" at 680 475
+  service SECRETS "Secrets" at 875 475
+  APP -> BALANCER -> INGRESS -> API -> SEARCH
+  API -> SQL
+  SEARCH -> OBJECTS
+  API -.-> MONITOR
+  API -> SECRETS
+}
+`,
+  },
+] as const;
+
 export const BPMN_TEMPLATE = `bpmn "Vacation Request" {
   pool P1 "Request" {
     lane L1 "Employee" {
@@ -352,6 +444,7 @@ export const TEMPLATES: Record<DiagramCategory, string> = {
   matrix: MATRIX_TEMPLATE,
   venn: VENN_TEMPLATE,
   fishbone: FISHBONE_TEMPLATE,
+  architecture: ARCHITECTURE_TEMPLATES[0].source,
 };
 
 export const TEMPLATE_LABELS: Record<DiagramCategory, string> = {
@@ -370,4 +463,5 @@ export const TEMPLATE_LABELS: Record<DiagramCategory, string> = {
   matrix: "matrix table",
   venn: "Venn diagram",
   fishbone: "Fishbone",
+  architecture: "Architecture diagram",
 };

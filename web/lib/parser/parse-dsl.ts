@@ -34,6 +34,12 @@ const FLOW_NODE_TYPES = new Map<string, NodeType>([
   ["end", "end"],
 ]);
 
+const ARCHITECTURE_NODE_TYPES = new Map<string, NodeType>(
+  ["zone", "client", "service", "database", "storage", "queue", "cloud", "external"].map(
+    (type) => [type, type as NodeType],
+  ),
+);
+
 const BPMN_NODE_TYPES = new Map<string, NodeType>([
   ["start", "start"],
   ["end", "end"],
@@ -106,6 +112,7 @@ const OPENERS: Partial<Record<DiagramCategory, string>> = {
   usecase: "usecase U1",
   activity: "action A1",
   erd: "entity E1",
+  architecture: "service API",
 };
 
 interface EdgeEndpoint {
@@ -492,6 +499,9 @@ class Parser {
     let entries: DSLEntry[] | undefined;
     let fields: DSLField[] | undefined;
     let side: "left" | "right" | undefined;
+    let at: { x: number; y: number } | undefined;
+    let width: number | undefined;
+    let height: number | undefined;
     if (this.category === "org") {
       if (this.peekIs("string")) {
         name = this.advance().value;
@@ -518,6 +528,28 @@ class Parser {
         side = where.value as "left" | "right";
       }
     }
+    if (this.category === "architecture") {
+      while (this.tokens[this.pos]?.kind === "id") {
+        const setting = this.tokens[this.pos];
+        if (setting.value !== "at" && setting.value !== "size") break;
+        this.advance();
+        const first = this.eat("number", `"${setting.value}" needs two numbers`);
+        const second = this.eat("number", `"${setting.value}" needs two numbers`);
+        const x = Number(first.value);
+        const y = Number(second.value);
+        if (setting.value === "at") {
+          if (at) throw new DSLError('"at" was already set', setting.line);
+          at = { x, y };
+        } else {
+          if (width !== undefined) throw new DSLError('"size" was already set', setting.line);
+          if (x < 80 || y < 60 || x > 3000 || y > 2000) {
+            throw new DSLError('"size" needs width 80–3000 and height 60–2000', setting.line);
+          }
+          width = x;
+          height = y;
+        }
+      }
+    }
     const lane = this.openLaneIds.length > 0 ? this.openLaneIds[this.openLaneIds.length - 1] : undefined;
     this.nodes.set(idTok.value, {
       id: idTok.value,
@@ -528,6 +560,8 @@ class Parser {
       ...(entries && entries.length > 0 ? { entries } : {}),
       ...(fields && fields.length > 0 ? { fields } : {}),
       ...(side ? { side } : {}),
+      ...(at ? { at } : {}),
+      ...(width !== undefined ? { width, height } : {}),
     });
   }
 
@@ -655,7 +689,7 @@ export function detectCategory(code: string): DiagramCategory | null {
     .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
     .trimStart();
   const head = stripped.match(
-    /^(flow|bpmn|org|usecase|activity|erd|bar|line|pie|scatter|mind|matrix|venn|fishbone|sequence)\b/,
+    /^(flow|bpmn|org|usecase|activity|erd|architecture|bar|line|pie|scatter|mind|matrix|venn|fishbone|sequence)\b/,
   );
   return head ? (head[1] as DiagramCategory) : null;
 }
@@ -664,7 +698,7 @@ export function parseDSL(code: string): AST {
   const category = detectCategory(code);
   if (!category) {
     throw new DSLError(
-      'A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are flow, bpmn, org, usecase, activity, erd, sequence, bar, line, pie, scatter, mind, matrix, venn and fishbone',
+      'A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are flow, bpmn, org, usecase, activity, erd, architecture, sequence, bar, line, pie, scatter, mind, matrix, venn and fishbone',
       1,
     );
   }
@@ -691,8 +725,10 @@ export function parseDSL(code: string): AST {
           ? USECASE_NODE_TYPES
           : category === "activity"
             ? ACTIVITY_NODE_TYPES
-            : category === "erd"
-              ? ERD_NODE_TYPES
-              : BPMN_NODE_TYPES;
+      : category === "erd"
+        ? ERD_NODE_TYPES
+        : category === "architecture"
+          ? ARCHITECTURE_NODE_TYPES
+        : BPMN_NODE_TYPES;
   return new Parser(tokenize(code), category, nodeTypes).parse();
 }

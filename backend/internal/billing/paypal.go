@@ -97,13 +97,15 @@ func (service *Service) payPal(ctx context.Context, method, path string, body an
 	return service.do(ctx, method, service.paypalBase()+path, "", "", body, result, headers)
 }
 
-func (service *Service) createPayPal(ctx context.Context, id string) (string, string, error) {
+func usd(cents int64) string { return fmt.Sprintf("%d.%02d", cents/100, cents%100) }
+
+func (service *Service) createPayPal(ctx context.Context, id string, amount int64) (string, string, error) {
 	request := map[string]any{
 		"intent": "CAPTURE",
 		"purchase_units": []any{map[string]any{
 			"reference_id": id, "invoice_id": id,
 			"description": "Tingraph Premium — 30 days",
-			"amount":      map[string]string{"currency_code": "USD", "value": "5.00"},
+			"amount":      map[string]string{"currency_code": "USD", "value": usd(amount)},
 		}},
 		"payment_source": map[string]any{"paypal": map[string]any{
 			"experience_context": map[string]string{
@@ -135,11 +137,11 @@ func (service *Service) validateCapture(order Order, result payPalOrder) (string
 	}
 	unit := result.PurchaseUnits[0]
 	if unit.ReferenceID != order.ID || unit.InvoiceID != order.ID || unit.Amount.Currency != "USD" ||
-		unit.Amount.Value != "5.00" || len(unit.Payments.Captures) != 1 {
+		unit.Amount.Value != usd(order.Amount) || len(unit.Payments.Captures) != 1 {
 		return "", errors.New("PayPal order does not match purchase")
 	}
 	capture := unit.Payments.Captures[0]
-	if capture.ID == "" || capture.Status != "COMPLETED" || capture.Amount.Currency != order.Currency || capture.Amount.Value != "5.00" {
+	if capture.ID == "" || capture.Status != "COMPLETED" || capture.Amount.Currency != order.Currency || capture.Amount.Value != usd(order.Amount) {
 		return "", errors.New("PayPal capture does not match purchase")
 	}
 	return capture.ID, nil
@@ -156,7 +158,7 @@ func (service *Service) CapturePayPal(ctx context.Context, id, userID, token str
 	if order.Status == "paid" {
 		return nil
 	}
-	if order.Status != "pending" {
+	if order.Status != "pending" || !time.Now().Before(order.ExpiresAt) {
 		return errors.New("payment is no longer payable")
 	}
 	var result payPalOrder
@@ -270,11 +272,11 @@ func (service *Service) HandlePayPal(ctx context.Context, headers http.Header, b
 		return err
 	}
 	if event.EventType != "PAYMENT.CAPTURE.COMPLETED" &&
-		(resource.Status == "PARTIALLY_REFUNDED" || resource.Status == "COMPLETED" && resource.Amount.Value != "5.00") {
+		(resource.Status == "PARTIALLY_REFUNDED" || resource.Status == "COMPLETED" && resource.Amount.Value != usd(order.Amount)) {
 		return nil
 	}
 	if order.Provider != "paypal" || event.EventType == "PAYMENT.CAPTURE.COMPLETED" && order.ProviderID != resource.SupplementaryData.RelatedIDs.OrderID ||
-		resource.Amount.Currency != order.Currency || resource.Amount.Value != "5.00" {
+		resource.Amount.Currency != order.Currency || resource.Amount.Value != usd(order.Amount) {
 		return errors.New("PayPal webhook does not match order")
 	}
 	if event.EventType == "PAYMENT.CAPTURE.COMPLETED" && resource.Status == "COMPLETED" {

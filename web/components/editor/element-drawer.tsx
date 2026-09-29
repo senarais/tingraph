@@ -1,6 +1,6 @@
 "use client";
 
-import { Columns3, Rows3, SquareDashed, Table2, type LucideIcon } from "lucide-react";
+import { Boxes, Columns3, Rows3, SquareDashed, Table2, type LucideIcon } from "lucide-react";
 import type { ElementOnSheet, LinkOnSheet } from "@/lib/canvas/elements";
 import type { LinkMark } from "@/lib/canvas/units";
 import type { DiagramCategory, DSLNode } from "@/lib/types";
@@ -10,6 +10,7 @@ import BpmnDrawer from "@/components/editor/bpmn-drawer";
 import ErdDrawer from "@/components/editor/erd-drawer";
 import UseCaseDrawer from "@/components/editor/usecase-drawer";
 import ActivityDrawer from "@/components/editor/activity-drawer";
+import ArchitectureDrawer from "@/components/editor/architecture-drawer";
 
 /**
  * The panel for a graph whose elements are set rather than only drawn, and the
@@ -47,6 +48,11 @@ const PANELS: Partial<Record<DiagramCategory, ElementPanel>> = {
     hint: "The partitions and the steps standing in them",
     icon: Columns3,
   },
+  architecture: {
+    label: "Architecture",
+    hint: "Components, zones, connections and starting layouts",
+    icon: Boxes,
+  },
 };
 
 export function elementPanel(category: DiagramCategory): ElementPanel | null {
@@ -82,6 +88,12 @@ export interface ElementDrawerProps {
   onRemovePool: (pool: PoolBox) => void;
   onAddPoolLane: (pool: PoolBox) => void;
   onRemovePoolLane: (pool: PoolBox) => void;
+  held: string | null;
+  onImage: (unit: string, file: File) => void;
+  imageMessage: string;
+  onTemplate: (source: string) => void;
+  generating: boolean;
+  onConnect: (from: string, to: string) => void;
 }
 
 export default function ElementDrawer(props: ElementDrawerProps) {
@@ -104,6 +116,8 @@ export default function ElementDrawer(props: ElementDrawerProps) {
       );
     case "usecase":
       return <UseCaseDrawer {...props} />;
+    case "architecture":
+      return <ArchitectureDrawer {...props} />;
     default:
       return <ActivityDrawer {...props} />;
   }

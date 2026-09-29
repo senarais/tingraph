@@ -25,6 +25,7 @@ type Worker struct {
 	db     *pgxpool.Pool
 	config config.SMTP
 	log    *slog.Logger
+	origin string
 }
 
 type message struct {
@@ -35,8 +36,8 @@ type message struct {
 	Attempts  int
 }
 
-func NewWorker(db *pgxpool.Pool, cfg config.SMTP, logger *slog.Logger) *Worker {
-	return &Worker{db: db, config: cfg, log: logger}
+func NewWorker(db *pgxpool.Pool, cfg config.SMTP, logger *slog.Logger, origin string) *Worker {
+	return &Worker{db: db, config: cfg, log: logger, origin: origin}
 }
 
 func (worker *Worker) Run(ctx context.Context) {
@@ -91,7 +92,7 @@ func (worker *Worker) deliverOne(ctx context.Context) error {
 		return err
 	}
 
-	subject, plain, markup, err := render(item.Template, item.Payload)
+	subject, plain, markup, err := render(item.Template, item.Payload, worker.origin)
 	if err == nil {
 		err = worker.send(ctx, item.Recipient, subject, plain, markup)
 	}
@@ -220,38 +221,45 @@ func (worker *Worker) send(ctx context.Context, recipient, subject, plain, marku
 	return client.Quit()
 }
 
-func render(template string, payload map[string]string) (string, string, string, error) {
+func render(template string, payload map[string]string, origin string) (string, string, string, error) {
 	link := payload["link"]
-	var subject, action, intro string
+	var subject, action, intro, eyebrow, outro string
 	switch template {
 	case "verify_email":
-		subject = "Confirm your Tingraph account"
-		action = "Confirm email"
+		subject, action = "Confirm your Tingraph account", "Confirm email"
 		intro = "Confirm this email address to finish creating your Tingraph account."
+		eyebrow, outro = "01 / GET STARTED", "If you did not sign up, you can ignore this email."
 	case "reset_password":
-		subject = "Reset your Tingraph password"
-		action = "Set a new password"
+		subject, action = "Reset your Tingraph password", "Set a new password"
 		intro = "Use this link within 30 minutes to choose a new Tingraph password."
+		eyebrow, outro = "02 / ACCOUNT SECURITY", "Did not request a reset? You can safely ignore this email."
 	case "password_changed":
 		subject = "Your Tingraph password changed"
-		plain := "Your Tingraph password was changed. If this was not you, contact the site operator immediately."
-		return subject, plain, emailHTML(subject, plain, "", ""), nil
+		intro = "Your account password was updated. All existing sessions have been signed out."
+		eyebrow, outro = "03 / SECURITY NOTICE", "If this was not you, contact the site operator immediately."
 	default:
 		return "", "", "", errors.New("unknown email template")
 	}
-	if link == "" {
+	if action != "" && link == "" {
 		return "", "", "", errors.New("email link is missing")
 	}
-	plain := intro + "\n\n" + link + "\n\nIf you did not request this, ignore this email."
-	return subject, plain, emailHTML(subject, intro, action, link), nil
+	if action == "" {
+		link = ""
+	}
+	plain := intro
+	if action != "" {
+		plain += "\n\n" + action + ": " + link
+	}
+	plain += "\n\n" + outro + "\n\nTingraph — make your thinking visible."
+	return subject, plain, emailHTML(subject, intro, action, link, eyebrow, outro, origin), nil
 }
 
-func emailHTML(title, intro, action, link string) string {
+func emailHTML(title, intro, action, link, eyebrow, outro, origin string) string {
 	button := ""
 	if link != "" {
-		button = `<p style="margin:24px 0"><a href="` + html.EscapeString(link) + `" style="display:inline-block;background:#1e1e1e;color:#efede6;padding:12px 16px;text-decoration:none;font-family:monospace">` + html.EscapeString(action) + `</a></p>`
+		button = `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:30px 0"><tr><td bgcolor="#14171a" style="border:2px solid #14171a;padding:14px 22px"><a href="` + html.EscapeString(link) + `" style="font:600 13px Arial,sans-serif;color:#ffffff;text-decoration:none">` + html.EscapeString(action) + ` &nbsp;→</a></td></tr></table><p style="font:12px/1.6 Arial,sans-serif;color:#565d64;word-break:break-all">Or copy this link:<br><a href="` + html.EscapeString(link) + `" style="color:#1a4f6b">` + html.EscapeString(link) + `</a></p>`
 	}
-	return `<!doctype html><html><body style="margin:0;background:#efede6;color:#1e1e1e"><div style="max-width:560px;margin:32px auto;background:#fff;border:2px solid #1e1e1e;padding:28px"><h1 style="font:600 22px sans-serif;margin:0 0 18px">` + html.EscapeString(title) + `</h1><p style="font:14px/1.6 sans-serif">` + html.EscapeString(intro) + `</p>` + button + `<p style="font:12px/1.5 monospace;color:#666">If you did not request this, ignore this email.</p></div></body></html>`
+	return `<!doctype html><html lang="en"><head><meta name="viewport" content="width=device-width,initial-scale=1"><meta charset="utf-8"><title>` + html.EscapeString(title) + `</title></head><body style="margin:0;padding:0;background:#efede6;color:#14171a"><div style="display:none;max-height:0;overflow:hidden;opacity:0">` + html.EscapeString(intro) + `</div><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#efede6"><tr><td align="center" style="padding:32px 16px"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border:2px solid #14171a"><tr><td style="padding:22px 30px;border-bottom:2px solid #14171a"><table role="presentation" width="100%" cellpadding="0" cellspacing="0"><tr><td style="font:700 19px/1.2 'IBM Plex Mono',monospace;color:#14171a"><img src="` + html.EscapeString(strings.TrimRight(origin, "/")) + `/icon.png" width="28" height="28" alt="Tingraph icon" style="vertical-align:middle;border:0">&nbsp; tingraph<span style="color:#1a4f6b">.</span></td><td align="right" style="font:10px monospace;letter-spacing:2px;color:#565d64">ACCOUNT</td></tr></table></td></tr><tr><td style="padding:34px 30px 30px"><p style="margin:0 0 18px;font:11px monospace;letter-spacing:2px;color:#1a4f6b">` + html.EscapeString(eyebrow) + `</p><h1 style="margin:0 0 16px;font:600 27px/1.2 Arial,sans-serif;letter-spacing:-0.5px">` + html.EscapeString(title) + `</h1><p style="margin:0;font:15px/1.7 Arial,sans-serif;color:#565d64">` + html.EscapeString(intro) + `</p>` + button + `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin-top:30px;border-top:1px solid #c8ccc5"><tr><td style="padding-top:20px;font:12px/1.6 Arial,sans-serif;color:#565d64">` + html.EscapeString(outro) + `</td></tr></table></td></tr><tr><td style="padding:18px 30px;background:#f2f3f0;border-top:2px solid #14171a;font:11px/1.5 monospace;color:#565d64">TINGRAPH / Make your thinking visible.</td></tr></table></td></tr></table></body></html>`
 }
 
 func retryDelay(attempts int) time.Duration {

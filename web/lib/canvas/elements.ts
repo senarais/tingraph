@@ -169,9 +169,12 @@ export function elementsOn(elements: Elements): ElementOnSheet[] {
   const bound = boundCaptions(elements);
   return [...carriers].map(([unit, { mark, shape }]) => {
     const mine = pieces.get(unit) ?? [];
+    const spec = readSpec(mark.spec as DSLNode, mine, bound);
     return {
       unit,
-      spec: readSpec(mark.spec as DSLNode, mine, bound),
+      spec: unit.startsWith("arch-")
+        ? { ...spec, at: { x: shape.x, y: shape.y }, width: shape.width, height: shape.height }
+        : spec,
       box: { x: shape.x, y: shape.y, width: shape.width, height: shape.height },
       pieces: mine,
     };
@@ -257,9 +260,9 @@ export function redrawElement(
         category,
         {
           ...spec,
-          x: Math.round(at.x),
-          y: Math.round(at.y),
-          width: Math.max(size.width, Math.round(at.width ?? 0)),
+          x: Math.round(category === "architecture" ? (spec.at?.x ?? at.x) : at.x),
+          y: Math.round(category === "architecture" ? (spec.at?.y ?? at.y) : at.y),
+          width: category === "architecture" ? size.width : Math.max(size.width, Math.round(at.width ?? 0)),
           height: size.height,
           rank: 0,
         },

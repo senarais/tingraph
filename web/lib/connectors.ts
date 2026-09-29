@@ -75,6 +75,11 @@ const FLOW: ConnectorKind[] = [
   },
 ];
 
+const ARCHITECTURE: ConnectorKind[] = [
+  { id: "data-flow", label: "Data flow", hint: "request or transfer", strokeStyle: "solid", startArrowhead: null, endArrowhead: "triangle" },
+  { id: "event", label: "Event / async", hint: "dashed event path", strokeStyle: "dashed", startArrowhead: null, endArrowhead: "triangle_outline" },
+];
+
 const ORG: ConnectorKind[] = [
   {
     id: "report",
@@ -236,6 +241,7 @@ export const CONNECTORS: Record<DiagramCategory, ConnectorKind[]> = {
   usecase: USECASE,
   activity: ACTIVITY,
   erd: ERD,
+  architecture: ARCHITECTURE,
   sequence: [],
   bar: [],
   line: [],
@@ -247,7 +253,7 @@ export const CONNECTORS: Record<DiagramCategory, ConnectorKind[]> = {
   fishbone: [],
 };
 
-const ALL = [...BPMN, ...FLOW, ...ORG, ...USECASE, ...ACTIVITY, ...ERD];
+const ALL = [...BPMN, ...FLOW, ...ORG, ...USECASE, ...ACTIVITY, ...ERD, ...ARCHITECTURE];
 
 /** The line a notation draws unless the reader picks another, if it draws any. */
 export function defaultConnector(category: DiagramCategory): string | null {

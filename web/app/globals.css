@@ -175,6 +175,11 @@ textarea,
   }
 }
 
+@keyframes checkout-enter {
+  from { opacity: 0; transform: translateY(5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* ---------------------------------------------------------- public pages */
 /*
  * Landing and catalogue chrome. Three rules hold the whole look together:

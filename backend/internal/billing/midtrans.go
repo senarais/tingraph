@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -45,33 +46,81 @@ func (service *Service) midtransBase(snap bool) string {
 	return "https://api.sandbox.midtrans.com"
 }
 
-func (service *Service) createMidtrans(ctx context.Context, id string, amount int64) (string, string, error) {
+func (service *Service) createMidtrans(ctx context.Context, id string, amount int64) (string, string, string, error) {
 	request := map[string]any{
+		"payment_type":        "gopay", // Both GoPay deeplink and dynamic QRIS use Core API's GoPay charge.
 		"transaction_details": map[string]any{"order_id": id, "gross_amount": amount},
-		"credit_card":         map[string]bool{"secure": true},
-		"callbacks":           map[string]string{"finish": service.returnURL(id, "midtrans")},
+		"custom_expiry":       map[string]any{"order_time": time.Now().Format("2006-01-02 15:04:05 -0700"), "expiry_duration": 24, "unit": "hour"},
 	}
 	var response struct {
-		Token string `json:"token"`
-		URL   string `json:"redirect_url"`
+		OrderID string `json:"order_id"`
+		Status  string `json:"transaction_status"`
+		Actions []struct {
+			Name string `json:"name"`
+			URL  string `json:"url"`
+		} `json:"actions"`
 	}
-	if err := service.do(ctx, http.MethodPost, service.midtransBase(true)+"/snap/v1/transactions",
+	if err := service.do(ctx, http.MethodPost, service.midtransBase(false)+"/v2/charge",
 		service.cfg.MidtransServerKey, "", request, &response, map[string]string{"Accept": "application/json"}); err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
-	if response.Token == "" {
-		return "", "", errors.New("Midtrans did not return a Snap token")
+	if response.OrderID != id || response.Status != "pending" {
+		return "", "", "", errors.New("Midtrans did not return a pending Core API charge")
 	}
-	link, err := checkoutLink(response.URL, "midtrans")
+	var qr, deeplink string
+	for _, action := range response.Actions {
+		u, err := url.Parse(action.URL)
+		if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" {
+			continue
+		}
+		if action.Name == "generate-qr-code" &&
+			(u.Hostname() == "api.midtrans.com" || u.Hostname() == "api.sandbox.midtrans.com" || u.Hostname() == "api.sandbox.veritrans.co.id") &&
+			strings.HasPrefix(u.Path, "/v2/gopay/") && strings.HasSuffix(u.Path, "/qr-code") {
+			qr = action.URL
+		}
+		if action.Name == "deeplink-redirect" &&
+			(u.Hostname() == "gojek.link" || u.Hostname() == "simulator.sandbox.midtrans.com" || u.Hostname() == "app.gopay.co.id") {
+			deeplink = action.URL
+		}
+	}
+	if qr == "" {
+		return "", "", "", errors.New("Midtrans QR action is missing")
+	}
+	return id, qr, deeplink, nil
+}
+
+func (service *Service) QR(ctx context.Context, id, userID string) ([]byte, error) {
+	order, err := service.Order(ctx, id, userID)
+	if err != nil || order.Provider != "midtrans" || order.Status != "pending" || !time.Now().Before(order.ExpiresAt) {
+		return nil, errors.New("QR payment is unavailable")
+	}
+	var raw string
+	if err := service.db.QueryRow(ctx, `select checkout_url from ops.payment_orders where id = $1 and user_id = $2`, id, userID).Scan(&raw); err != nil {
+		return nil, err
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.User != nil || u.Port() != "" ||
+		(u.Hostname() != "api.midtrans.com" && u.Hostname() != "api.sandbox.midtrans.com" && u.Hostname() != "api.sandbox.veritrans.co.id") ||
+		!strings.HasPrefix(u.Path, "/v2/gopay/") || !strings.HasSuffix(u.Path, "/qr-code") {
+		return nil, errors.New("invalid QR address")
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, raw, nil)
 	if err != nil {
-		return "", "", err
+		return nil, err
 	}
-	u, _ := url.Parse(link)
-	if u.Scheme+"://"+u.Host != service.midtransBase(true) ||
-		(u.Path != "/snap/v4/redirection/"+response.Token && u.Path != "/snap/v2/vtweb/"+response.Token) {
-		return "", "", errors.New("Midtrans checkout link is for the wrong environment")
+	res, err := service.client.Do(req)
+	if err != nil {
+		return nil, err
 	}
-	return id, link, nil
+	defer res.Body.Close()
+	if res.StatusCode != 200 || !strings.HasPrefix(res.Header.Get("Content-Type"), "image/png") {
+		return nil, errors.New("QR image is unavailable")
+	}
+	image, err := io.ReadAll(io.LimitReader(res.Body, 1<<20+1))
+	if err != nil || len(image) > 1<<20 || len(image) < 8 || string(image[:4]) != "\x89PNG" {
+		return nil, errors.New("invalid QR image")
+	}
+	return image, nil
 }
 
 func parseIDR(value string) (int64, error) {
@@ -139,7 +188,11 @@ func (service *Service) confirmMidtrans(ctx context.Context, order Order) error 
 			_, err = service.settle(ctx, order, status.TransactionID, true)
 		} else if order.Status == "pending" {
 			var changed bool
-			err = service.db.QueryRow(ctx, `select ops.fail_payment($1, $2, $3)`, order.ID, order.Provider, order.ProviderID).Scan(&changed)
+			if status.TransactionStatus == "expire" {
+				err = service.db.QueryRow(ctx, `select ops.expire_confirmed_payment($1, $2)`, order.ID, order.ProviderID).Scan(&changed)
+			} else {
+				err = service.db.QueryRow(ctx, `select ops.fail_payment($1, $2, $3)`, order.ID, order.Provider, order.ProviderID).Scan(&changed)
+			}
 		}
 	}
 	return err

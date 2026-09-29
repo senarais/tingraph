@@ -39,6 +39,11 @@ type Billing struct {
 	PayPalWebhookID    string
 	PayPalMode         string
 	FXBaseURL          string
+	GoPayFeeBPS        int
+	QRISFeeBPS         int
+	PayPalFeeBPS       int
+	PayPalFixedCents   int
+	ProductTaxBPS      int
 }
 
 type SMTP struct {
@@ -134,6 +139,22 @@ func Load() (Config, error) {
 			PayPalMode:      value("PAYPAL_MODE", "sandbox"),
 			FXBaseURL:       value("FX_BASE_URL", "https://api.frankfurter.dev"),
 		},
+	}
+	for _, fee := range []struct {
+		name     string
+		fallback int
+		target   *int
+	}{
+		{"GOPAY_FEE_BPS", 222, &cfg.Billing.GoPayFeeBPS},
+		{"QRIS_FEE_BPS", 78, &cfg.Billing.QRISFeeBPS},
+		{"PAYPAL_FEE_BPS", 499, &cfg.Billing.PayPalFeeBPS},
+		{"PAYPAL_FIXED_CENTS", 49, &cfg.Billing.PayPalFixedCents},
+		{"PRODUCT_TAX_BPS", 0, &cfg.Billing.ProductTaxBPS},
+	} {
+		*fee.target, err = integer(fee.name, fee.fallback)
+		if err != nil || *fee.target < 0 || *fee.target >= 5000 {
+			return Config{}, fmt.Errorf("%s must be between 0 and 4999", fee.name)
+		}
 	}
 	cfg.GeminiAPIKey, err = secret("GEMINI_API_KEY")
 	if err != nil {

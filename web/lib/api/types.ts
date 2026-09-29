@@ -36,6 +36,9 @@ export interface Entitlements {
   generation_limit: number | null;
   ai_tokens_used: number;
   ai_token_limit: number;
+  generation_reset: string | null;
+  ai_reset: string | null;
+  time_zone: string | null;
 }
 
 export interface DiagramSummary {

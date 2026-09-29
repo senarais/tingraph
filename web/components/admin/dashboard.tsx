@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useState, type FormEvent, type ReactNode } from "react";
 import {
   Activity, ArrowLeft, ArrowRight, Check, CreditCard, LayoutDashboard,
-  LogOut, Plus, Search, ShieldCheck, Users, X,
+  LogOut, Plus, Search, ShieldCheck, TicketPercent, Users, X,
 } from "lucide-react";
 import { APIError, apiFetch } from "@/lib/api/client";
 import type { Profile, User } from "@/lib/api/types";
@@ -49,11 +49,12 @@ export type AdminOverview = {
   revenue: { currency: "IDR" | "USD"; amount: number; orders: number }[];
   orders: Order[];
   daily: { day: string; currency: "IDR" | "USD"; amount: number }[];
-  activity: { action: string; email: string; actor: string | null; created_at: string }[];
+  activity: { action: string; email: string; actor: string | null; details: string | null; created_at: string }[];
 };
 
 export type AdminUsers = { users: AdminUser[]; total: number; page: number };
 type AdminOrders = { orders: Order[]; total: number; page: number };
+type Discount = { code: string; percent: number; max_uses: number; paid: number; reserved: number; enabled: boolean };
 type Detail = {
   user: AdminUser;
   profile: Profile;
@@ -104,9 +105,10 @@ export default function AdminDashboard({ initialOverview, initialUsers, admin }:
   const [overview, setOverview] = useState(initialOverview);
   const [users, setUsers] = useState(initialUsers);
   const [orders, setOrders] = useState<AdminOrders | null>(null);
+  const [discounts, setDiscounts] = useState<Discount[]>([]);
   const [orderFilter, setOrderFilter] = useState("");
   const [orderStatus, setOrderStatus] = useState("");
-  const [section, setSection] = useState<"overview" | "users" | "orders" | "activity">("overview");
+  const [section, setSection] = useState<"overview" | "users" | "orders" | "discounts" | "activity">("overview");
   const [search, setSearch] = useState("");
   const [detail, setDetail] = useState<Detail | null>(null);
   const [creating, setCreating] = useState(false);
@@ -148,6 +150,42 @@ export default function AdminDashboard({ initialOverview, initialUsers, admin }:
     await loadOrders(1, user, "");
     setSection("orders");
   });
+  const loadDiscounts = async () => {
+    const result = await json<{ codes: Discount[] }>("/api/v1/admin/discounts");
+    setDiscounts(result.codes);
+  };
+  const openDiscounts = () => run(async () => {
+    await loadDiscounts();
+    setSection("discounts");
+  });
+  const setDiscountEnabled = (item: Discount) => run(async () => {
+    await json(`/api/v1/admin/discounts/${encodeURIComponent(item.code)}`, {
+      method: "PATCH", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ enabled: !item.enabled }),
+    });
+    await loadDiscounts();
+    setMessage(`${item.code} ${item.enabled ? "deactivated" : "reactivated"}.`);
+  });
+  const deleteDiscount = (item: Discount) => {
+    if (!window.confirm(`Delete ${item.code}? Existing payment records will be retained.`)) return;
+    run(async () => {
+      await json(`/api/v1/admin/discounts/${encodeURIComponent(item.code)}`, { method: "DELETE" });
+      await loadDiscounts();
+      setMessage(`${item.code} deleted.`);
+    });
+  };
+  const createDiscount = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = new FormData(form);
+    run(async () => {
+      await json("/api/v1/admin/discounts", { method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ code: values.get("code"), percent: Number(values.get("percent")), max_uses: Number(values.get("max_uses")) }) });
+      form.reset();
+      await loadDiscounts();
+      setMessage("Discount code created.");
+    });
+  };
 
   const createUser = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -222,10 +260,11 @@ export default function AdminDashboard({ initialOverview, initialUsers, admin }:
           <Link href="/" className="font-mono text-[19px] font-bold tracking-tight">tingraph<span className="text-[#bda0ff]">.</span></Link>
           <span className="mt-1 font-mono text-[10px] uppercase tracking-[0.2em] text-white/50">Admin workspace</span>
           <div className="mt-6 border-t border-white/20 pt-4 font-mono text-[10px] uppercase tracking-widest text-white/50">Navigation</div>
-          <nav aria-label="Admin sections" className="mt-2 grid grid-cols-2 gap-1 sm:grid-cols-4 lg:grid-cols-1">
+          <nav aria-label="Admin sections" className="mt-2 grid grid-cols-2 gap-1 sm:grid-cols-5 lg:grid-cols-1">
             {tab("overview", "Overview", <LayoutDashboard size={15} />)}
             {tab("users", "Users", <Users size={15} />)}
             {tab("orders", "Transactions", <CreditCard size={15} />, () => { void openOrders(); })}
+            {tab("discounts", "Discounts", <TicketPercent size={15} />, () => { void openDiscounts(); })}
             {tab("activity", "Activity", <Activity size={15} />)}
           </nav>
           <div className="mt-auto hidden border-t border-white/20 pt-5 lg:block">
@@ -237,7 +276,7 @@ export default function AdminDashboard({ initialOverview, initialUsers, admin }:
 
         <div className="min-w-0 flex-1 bg-[#faf9f6]">
           <header className="flex min-h-16 flex-wrap items-center justify-between gap-3 border-b-2 border-edge bg-white px-5 py-3 sm:px-8">
-            <div><p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-soft">Control center / {section}</p>
+             <div><p className="font-mono text-[10px] uppercase tracking-[0.15em] text-ink-soft">Control center / {section}</p>
               <h1 className="mt-1 font-mono text-lg font-bold capitalize tracking-tight sm:text-xl">{section === "orders" ? "Transactions" : section}</h1></div>
             <div className="flex items-center gap-2">
               <span className="hidden items-center gap-1.5 font-mono text-[10px] sm:flex"><ShieldCheck size={14} /> Admin access</span>
@@ -266,7 +305,7 @@ export default function AdminDashboard({ initialOverview, initialUsers, admin }:
               </div>
 
               <div className="grid gap-4 xl:grid-cols-[1.4fr_1fr]">
-                <Panel title="Revenue · settled, excluding refunds" side={<button className="font-mono text-[10px] underline" onClick={() => void openOrders()} type="button">View transactions →</button>}>
+                <Panel title="Gross payments · settled, excluding refunds" side={<button className="font-mono text-[10px] underline" onClick={() => void openOrders()} type="button">View transactions →</button>}>
                   <div className="grid grid-cols-2 gap-3 p-4">
                     {(["IDR", "USD"] as const).map((currency) => {
                       const total = overview.revenue.find((item) => item.currency === currency);
@@ -343,7 +382,7 @@ export default function AdminDashboard({ initialOverview, initialUsers, admin }:
                 <div className="flex flex-wrap gap-2 p-4">
                   {orderFilter && <button type="button" className={action} onClick={() => { setOrderFilter(""); void run(() => loadOrders(1, "", orderStatus)); }}>User filter ×</button>}
                   <select aria-label="Filter by payment status" className={`${control} max-w-48`} value={orderStatus} onChange={(event) => { setOrderStatus(event.target.value); void run(() => loadOrders(1, orderFilter, event.target.value)); }}>
-                    <option value="">All statuses</option><option value="paid">Paid</option><option value="pending">Pending</option><option value="refunded">Refunded</option><option value="failed">Failed</option>
+                    <option value="">All statuses</option><option value="paid">Paid</option><option value="pending">Pending</option><option value="expired">Expired</option><option value="refunded">Refunded</option><option value="failed">Failed</option>
                   </select>
                 </div>
                 <OrdersPanel orders={orders?.orders ?? []} onUser={(id) => void run(() => loadDetail(id))} title="Transactions" compact />
@@ -355,10 +394,32 @@ export default function AdminDashboard({ initialOverview, initialUsers, admin }:
               </Panel>
             </>}
 
+            {section === "discounts" && <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+              <Panel title="New discount code" side={<Badge tone="purple">Premium</Badge>}>
+                <form onSubmit={createDiscount} className="space-y-4 p-5">
+                  <p className="text-[12px] leading-relaxed text-ink-soft">A slot is reserved while payment is pending. Unpaid slots return after 24 hours; only successful payments use a code. Deleting a used code keeps its payment history and retires its name.</p>
+                  <Field label="Code"><input name="code" required pattern="[A-Za-z0-9_-]{3,32}" maxLength={32} placeholder="WELCOME20" className={`${control} uppercase`} /></Field>
+                  <div className="grid grid-cols-2 gap-3"><Field label="Discount %"><input name="percent" type="number" min={1} max={99} required className={control} /></Field><Field label="Usage limit"><input name="max_uses" type="number" min={1} max={1000000} required className={control} /></Field></div>
+                  <button disabled={busy} className={primary}><Plus size={14} /> Create code</button>
+                </form>
+              </Panel>
+              <Panel title="Codes" side={<Badge>{discounts.length} shown</Badge>}>
+                <div className="divide-y divide-edge/20">{discounts.map((item) => <div key={item.code} className="flex flex-wrap items-center gap-3 px-5 py-4">
+                  <span className="min-w-0 flex-1"><strong className="block truncate font-mono text-[13px]">{item.code}</strong><small className="text-[11px] text-ink-soft">{item.percent}% off · {item.max_uses} total uses</small></span>
+                  <span className="text-right font-mono text-[11px]"><b>{item.paid} paid</b><small className="block text-ink-soft">{item.reserved} reserved</small></span>
+                  <div className="flex w-full items-center justify-between gap-2 border-t border-edge/15 pt-2 font-mono text-[11px]">
+                    <Badge tone={item.enabled ? "green" : "neutral"}>{item.enabled ? "Active" : "Inactive"}</Badge>
+                    <div className="flex gap-2"><button type="button" disabled={busy} onClick={() => void setDiscountEnabled(item)} className={action}>{item.enabled ? "Deactivate" : "Activate"}</button>
+                      <button type="button" disabled={busy} onClick={() => deleteDiscount(item)} className={`${action} text-alert`}>Delete</button></div>
+                  </div>
+                </div>)}{!discounts.length && <p className="p-6 text-[12px] text-ink-soft">No codes yet. Create one to get started.</p>}</div>
+              </Panel>
+            </div>}
+
             {section === "activity" && <Panel title="Recent admin activity" side={<Badge tone="purple">Audit trail</Badge>}>
               <div className="divide-y divide-edge/25">{overview.activity.map((event, index) => <div key={`${event.created_at}-${index}`} className="flex flex-wrap items-center gap-3 px-4 py-3">
                 <Badge tone={event.action === "delete" ? "red" : event.action === "create" ? "green" : "purple"}>{event.action}</Badge>
-                <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{event.email} <span className="text-ink-soft">by {event.actor ?? "deleted admin"}</span></span>
+                <span className="min-w-0 flex-1 truncate font-mono text-[11px]">{event.details ?? event.email} <span className="text-ink-soft">by {event.actor ?? "deleted admin"}</span></span>
                 <time className="font-mono text-[10px] text-ink-soft">{date(event.created_at)}</time>
               </div>)}{!overview.activity.length && <p className="p-5 font-mono text-[11px] text-ink-soft">No admin changes yet.</p>}</div>
             </Panel>}

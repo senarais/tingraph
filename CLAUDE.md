@@ -7,11 +7,12 @@ paths in this file are relative to `web/`.
 
 A diagram editor. The reader writes a small DSL, Tingraph parses it, lays it
 out, and draws it onto an Excalidraw canvas; from that moment the sheet is
-theirs to edit by hand. Fifteen notations ship today, in two families:
+theirs to edit by hand. Sixteen notations ship today, in two families:
 
 - **graphs** — `flow` (flowchart), `bpmn` (BPMN 2.0 with pools and lanes),
   `org` (org chart), `usecase` (UML use case), `activity` (UML activity with
-  partitions) and `erd` (entity relationship): elements joined by connectors,
+  partitions), `erd` (entity relationship) and `architecture` (placed systems
+  and components): elements joined by connectors,
   edited one at a time.
 - **figures** — `bar`, `line`, `pie`, `scatter`, `mind` (mind map), `matrix`
   (matrix table), `venn`, `fishbone` and `sequence` (UML sequence): one object,
@@ -26,7 +27,7 @@ element for the reader to drag that would mean anything on its own.
 
 `isGraph()`, `isFigure()` and `isChart()` in `lib/types.ts` are what tell them
 apart, and almost everything in the editor asks one of them. A fourth,
-`isSettable()`, marks the three graphs whose elements carry a spec of their
+`isSettable()`, marks the graphs whose elements carry a spec of their
 own and are set from a panel as well as drawn — see **A settable graph**. The
 architecture is built so the next notation is a folder and a row, not a new
 subsystem.
@@ -208,7 +209,7 @@ Two rules follow from this and are easy to break by accident:
   the same element. Never copy a mark onto something new without renaming it.
 - The unit name each notation stamps a node with comes from `nodeUnit` in
   `lib/canvas/units.ts`: `bpmn-<id>`, `org-<id>`, `uc-<id>`, `act-<id>`,
-  `erd-<id>`, `flow-node-<id>`. Connectors from the source use `flow-<index>`;
+  `erd-<id>`, `arch-<id>`, `flow-node-<id>`. Connectors from the source use `flow-<index>`;
   ones drawn by hand use `line-<random>`.
 - A `UnitKind` of `frame` is chrome a notation draws round its elements but
   does not edit on the sheet: a use case boundary, an activity's partitions.
@@ -337,6 +338,10 @@ side by side, the axis that separates them wins instead.
   boxes on one level are joined by a straight rule across.
 - **bpmn** reads left to right along its lanes, so a sequence flow leaves the
   right and meets the left.
+- **architecture** routes between freely placed boxes. Its `zone` is a large,
+  independently editable backdrop, not a container that moves its contents.
+  `at x y` and `size w h` set the starting arrangement in source; subsequent
+  dragging/resizing on canvas is read back by the panel, never by the source.
 - **flow** reads down the page, like org, but splits the channel at the
   midpoint instead of hanging it off a rail.
 - An org chart turned sideways (`direction: "right"`) reads across; that is why
@@ -408,11 +413,22 @@ rings a fork, so `many` stands for zero-or-many.
 
 ## A settable graph: the element carries its own spec
 
-`erd`, `usecase` and `activity` are graphs — their elements go anywhere and
-join anything — but each has something a flowchart does not: an inside the
-reader cannot place by hand. A use case stands *inside* a boundary, an action
-stands *in* a partition, and an ERD table has columns with keys, in an order,
-each one a row whose height decides where a relation meets the box.
+`erd`, `usecase`, `activity` and `architecture` are graphs — their elements go
+anywhere and join anything — but each has something a flowchart does not:
+properties the reader can set per element. A use case stands *inside* a
+boundary, an action stands *in* a partition, and an ERD table has columns with
+keys, in an order, each one a row whose height decides where a relation meets
+the box. Architecture components carry their kind and optional uploaded image.
+
+Architecture's four starters in `lib/templates.ts` place zones and components
+as nested systems, build/release, event-driven cloud and cluster/network.
+Zones are independent backdrops, not parents that move their contents. `at x y`
+and `size w h` set starting positions and sizes; subsequent canvas moves and
+resizes are read into the panel, not written back to the source. The selected
+component's Change image action lives on the sheet and in the panel. Its file
+is stored in Excalidraw's file map and travels with save and export; only its
+id belongs in the spec, never in the source. An image replaces the symbol, but
+the label, outline and connector unit remain.
 
 So they borrow the figure's mechanism one level down: **one spec per element
 rather than one per diagram**. `UnitMark.spec` on the shape that carries an
@@ -476,6 +492,11 @@ dispatchers, built exactly like `figure-drawer.tsx` and `figure-controls.tsx`
 and holding nothing but the switch. The rail's fourth panel (`elements` in
 `lib/store.ts`) is offered only where `elementPanel()` has a row.
 
+- **architecture** — the panel edits the kind, name, position, size and image
+  of each component, plus connector ends, labels and style. Four starters can
+  replace the sheet after a second press. On canvas the same components can be
+  moved, resized, renamed, joined or deleted, with Change image beside the
+  selected component.
 - **erd** — the panel lists every table, its columns, and the relations
   between them: the two columns each joins, the crow's foot at each end, and
   what it is called. On the sheet the picked table shows a hit box per row, a
@@ -753,12 +774,32 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
   `FOR UPDATE SKIP LOCKED`, renders repository-owned templates and sends over
   authenticated TLS SMTP. Provider outages retry without rolling back account
   state or exposing whether an email exists.
-- **Quota changes are SQL functions.** Generation counters and AI token
-  reservations lock the relevant daily row, so concurrent requests cannot
-  exceed a plan. Keep policy in migrations, not only in React.
+- **Quota changes are SQL functions.** Generation and AI token allowances have
+  separate 24-hour windows starting at each feature's first use. Reservations
+  lock the AI window; late settlements from previous windows cannot consume a
+  new allowance. The profile shows exact reset instants in the reader's local
+  time. Keep policy in migrations, not only in React.
 - **Premium is prepaid for 30 days, without automatic renewal.**
-  `backend/internal/billing/` creates hosted Midtrans Snap Redirect (daily IDR conversion of
-  USD 5) and PayPal (USD 5) checkouts. Midtrans callbacks verify SHA-512 using
+  `/checkout` selects GoPay, QRIS or PayPal and shows product, discount, estimated
+  processing fee and final IDR charge. Credit/debit cards remain unavailable.
+  `backend/internal/billing/` creates Midtrans Core API GoPay charges (the same
+  charge provides a QRIS image, proxied for authenticated buyers) and PayPal
+  Orders v2 checkouts. Fees are grossed up *before* either provider is called:
+  `GOPAY_FEE_BPS`, `QRIS_FEE_BPS`, `PAYPAL_FEE_BPS`,
+  `PAYPAL_FIXED_CENTS` must match merchant terms including fee taxes; optional
+  `PRODUCT_TAX_BPS` adds product tax after discounts, before processing fees. Defaults
+  are estimates, not a guarantee against FX or provider-specific adjustments.
+  Discounts lower the USD product price first; `ops.reserve_discount` serializes
+  checkout reservations per code, counts paid + pending orders, and releases
+  failed/expired orders. Admins can deactivate/reactivate codes; deletion
+  physically removes unused codes but archives codes referenced by orders, so
+  payment history remains intact. Paid Premium expires at the midnight after
+  its 30th local calendar day; each checkout stores the browser's IANA timezone
+  on its order for settlement and renewals. On first account visit, the browser
+  supplies a timezone for pre-existing payments with no stored zone. Core API
+  is told to expire after 24 hours; a minute
+  sweep checks provider-owned orders before releasing their reserved codes, so
+  a delayed webhook cannot silently overbook a code. Midtrans callbacks verify SHA-512 using
   the Server Key and re-fetch transaction status before crediting anything.
   Only verified provider responses and webhooks may settle an
   `ops.payment_orders` row; `ops.settle_payment` applies

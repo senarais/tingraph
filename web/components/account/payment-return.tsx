@@ -28,6 +28,7 @@ export default function PaymentReturn({ order, provider, token }: { order: strin
           const payment = (await response.json()) as { status: string };
           if (payment.status === "paid") { setMessage("Premium is active. Your payment is confirmed."); return; }
           if (payment.status === "refunded") { setMessage("This payment was refunded."); return; }
+          if (payment.status === "expired") { setMessage("This payment expired. Start a new checkout to try again."); return; }
           if (payment.status === "failed") { setMessage("Payment did not complete. You can try again from your profile."); return; }
           await new Promise((resolve) => setTimeout(resolve, 3000));
         }
@@ -43,7 +44,7 @@ export default function PaymentReturn({ order, provider, token }: { order: strin
   return (
     <div className="space-y-4 text-[13px] text-ink-soft">
       <p role="status">{message}</p>
-      <Link href="/profile#plan" className="slab-tight press block bg-edge px-3 py-2 text-center text-[12px] font-semibold text-bone">
+      <Link href="/profile?view=plan" className="slab-tight press block bg-edge px-3 py-2 text-center text-[12px] font-semibold text-bone">
         View profile
       </Link>
     </div>

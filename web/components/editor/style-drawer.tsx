@@ -32,6 +32,7 @@ const FIXED: Record<DiagramCategory, string> = {
   usecase: "The oval, the stick figure and the hollow head of a generalisation come from the notation.",
   activity: "The filled initial dot, the bullseye, the fork bar and the rounded action box come from the notation.",
   erd: "The crow's feet come from the notation. The ink writes the rules; the wash fills the band an entity is named in.",
+  architecture: "Components have distinct symbols; zones and routed connections use the sheet's ink.",
   sequence: FIGURE_FIXED,
   bar: CHART_FIXED,
   line: CHART_FIXED,

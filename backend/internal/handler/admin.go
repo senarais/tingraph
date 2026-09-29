@@ -141,9 +141,10 @@ func (server *Handler) AdminOverview(w http.ResponseWriter, r *http.Request) {
 		Action    string    `json:"action"`
 		Email     string    `json:"email"`
 		Actor     *string   `json:"actor"`
+		Details   *string   `json:"details"`
 		CreatedAt time.Time `json:"created_at"`
 	}
-	rows, err = server.db.Query(r.Context(), `select a.action, a.target_email::text, u.email::text, a.created_at
+	rows, err = server.db.Query(r.Context(), `select a.action, a.target_email::text, u.email::text, a.details, a.created_at
 		from ops.admin_audit a left join auth.users u on u.id = a.actor_id order by a.id desc limit 12`)
 	if err != nil {
 		server.adminError(w, "activity could not be loaded", err)
@@ -152,7 +153,7 @@ func (server *Handler) AdminOverview(w http.ResponseWriter, r *http.Request) {
 	activities := []activity{}
 	for rows.Next() {
 		var a activity
-		if err = rows.Scan(&a.Action, &a.Email, &a.Actor, &a.CreatedAt); err != nil {
+		if err = rows.Scan(&a.Action, &a.Email, &a.Actor, &a.Details, &a.CreatedAt); err != nil {
 			break
 		}
 		activities = append(activities, a)
@@ -268,7 +269,7 @@ func (server *Handler) AdminOrders(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	status := r.URL.Query().Get("status")
-	if status != "" && status != "pending" && status != "paid" && status != "refunded" && status != "failed" {
+	if status != "" && status != "pending" && status != "paid" && status != "refunded" && status != "failed" && status != "expired" {
 		httpx.Problem(w, 400, "invalid status")
 		return
 	}
@@ -558,7 +559,10 @@ func (server *Handler) AdminUpdateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err == nil {
-		_, err = tx.Exec(r.Context(), `update app.profiles set tier = $2, premium_until = $3,
+		_, err = tx.Exec(r.Context(), `update app.profiles set tier = $2,
+		premium_until = case when $2 = 'premium' and $3::timestamptz is not null then
+		  ops.end_of_local_day($3::timestamptz, coalesce(time_zone, 'UTC'))
+		  else $3::timestamptz end,
 		username = $4, full_name = $5, profession = $6, affiliation = $7,
 		location = $8, website = $9, bio = $10 where id = $1`, id, input.Tier,
 			input.PremiumUntil, profile.Username, profile.FullName, profile.Profession,

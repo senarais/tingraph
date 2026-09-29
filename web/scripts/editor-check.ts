@@ -23,6 +23,7 @@ import {
   BPMN_TEMPLATE,
   ORG_TEMPLATE,
   TEMPLATES,
+  ARCHITECTURE_TEMPLATES,
 } from "../lib/templates";
 import { isSettable, type DiagramCategory, type DSLNode } from "../lib/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
@@ -1048,6 +1049,33 @@ assert.equal(
   "a malformed image file map is refused",
 );
 assert.equal(Array.from(diagramTitle(` ${"x".repeat(140)} `)).length, 120);
+
+// Placed architecture variants, spec round-trip and image replacement.
+for (const variant of ARCHITECTURE_TEMPLATES) {
+  const ast = parseDSL(variant.source);
+  const layout = computeLayout(ast);
+  assert.equal(layout.nodes.length, ast.nodes.length);
+  assert.ok(layout.edges.every((edge) => edge.points.length >= 2), variant.label);
+  assert.equal(layout.nodes[0].type, "zone", "backdrops draw before their contents");
+  assert.ok(buildSkeletons(layout).some((piece) => unitOf(piece)?.link), variant.label);
+}
+const arch = parseDSL(ARCHITECTURE_TEMPLATES[0].source);
+assert.deepEqual(arch.nodes[0].at, { x: 40, y: 40 });
+assert.equal(arch.nodes[0].width, 960);
+const component = arch.nodes.find((node) => node.id === "FIND")!;
+const archShape = fake("rectangle", { unit: "arch-FIND", kind: "node", core: true, spec: component },
+  { id: "find", x: 400, y: 220, width: 185, height: 130 });
+const edited = elements.elementsOn([archShape])[0];
+assert.deepEqual(edited.spec.at, { x: 400, y: 220 }, "the panel reads a canvas move");
+assert.equal(edited.spec.width, 185, "the panel reads a canvas resize");
+const pictured = elements.redrawElement([archShape], "arch-FIND",
+  { ...edited.spec, image: { fileId: "uploaded-logo", width: 400, height: 200 } }, edited.box, "architecture", inkFor("mono"));
+const picture = pictured.find((piece) => piece.type === "image" && piece.fileId === "uploaded-logo");
+assert.ok(picture);
+assert.equal(picture.width / picture.height, 2, "a wide logo keeps its aspect ratio");
+assert.equal(elements.elementsOn(pictured)[0].spec.image?.fileId, "uploaded-logo", "the file id survives redraw");
+assert.equal(elements.elementsOn(pictured)[0].box.x, 400, "the pictured component stays put");
+assert.throws(() => parseDSL('architecture "Bad" { service A "A" size 0 1 }'), /size/);
 
 checkPdf().then(() => {
   console.log("editor self-check: all assertions passed");

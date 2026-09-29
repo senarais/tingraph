@@ -27,6 +27,7 @@ import {
 import { computeUseCaseLayout, usecaseNodeSize } from "@/lib/layout/layout-usecase";
 import { computeActivityLayout, activityShapeSize } from "@/lib/layout/layout-activity";
 import { computeErdLayout, erdShapeSize } from "@/lib/layout/layout-erd";
+import { computeArchitectureLayout } from "@/lib/layout/layout-architecture";
 
 export { textWidth, wrapByWidth } from "@/lib/layout/text";
 
@@ -112,6 +113,9 @@ export function shapeFamily(
   if (category === "org" || category === "erd") {
     return "box";
   }
+  if (category === "architecture") {
+    return type === "zone" ? "box" : "task";
+  }
   if (category === "usecase") {
     return type === "actor" ? "box" : "ellipse";
   }
@@ -160,6 +164,8 @@ export function nodeSize(
       return activityShapeSize(node.type, node.label);
     case "erd":
       return erdShapeSize(node);
+    case "architecture":
+      return { width: node.width ?? (node.type === "zone" ? 900 : 150), height: node.height ?? (node.type === "zone" ? 480 : 110) };
     default:
       return bpmnShapeSize(node.type as NodeType, node.label);
   }
@@ -1231,6 +1237,8 @@ export function computeLayout(
       return computeActivityLayout(ast);
     case "erd":
       return computeErdLayout(ast, direction);
+    case "architecture":
+      return computeArchitectureLayout(ast, direction);
     default:
       return computeFlowLayout(ast, direction);
   }

@@ -7,9 +7,11 @@ import {
 } from "@/components/account/forms";
 import SignOutButton from "@/components/account/sign-out-button";
 import PremiumCheckout from "@/components/account/premium-checkout";
+import UsagePanel from "@/components/account/usage-panel";
+import TimeZoneSync from "@/components/account/time-zone-sync";
 import { AccountPage } from "@/components/account/shell";
 import { PROFILE_FIELDS, type ProfileField, type ProfileInput } from "@/lib/auth";
-import { isPlanTier, PLAN_LIMITS, planName } from "@/lib/plans";
+import { isPlanTier, planName } from "@/lib/plans";
 import { backendFetch } from "@/lib/api/server";
 import type { Entitlements, User } from "@/lib/api/types";
 
@@ -18,10 +20,11 @@ export const metadata: Metadata = {
 };
 
 const SECTIONS = [
-  { href: "#plan", label: "Plan & usage" },
-  { href: "#details", label: "Details" },
-  { href: "#security", label: "Security" },
-  { href: "#accounts", label: "Connected accounts" },
+  { key: "plan", label: "Plan" },
+  { key: "usage", label: "Usage" },
+  { key: "details", label: "Details" },
+  { key: "security", label: "Security" },
+  { key: "accounts", label: "Connected accounts" },
 ];
 
 const PROVIDER_NAMES: Record<string, string> = { email: "Email", google: "Google" };
@@ -36,7 +39,9 @@ function since(timestamp: string | undefined): string {
     : "";
 }
 
-export default async function ProfilePage() {
+export default async function ProfilePage({ searchParams }: PageProps<"/profile">) {
+  const params = await searchParams;
+  const view = typeof params.view === "string" && SECTIONS.some((s) => s.key === params.view) ? params.view : "plan";
   const response = await backendFetch("/api/v1/me");
   if (response.status === 401) {
     redirect("/login?next=/profile");
@@ -55,13 +60,10 @@ export default async function ProfilePage() {
   const name = profile.full_name || profile.username || user.email;
   const storedTier = usage.tier;
   const tier = isPlanTier(storedTier) ? storedTier : "free";
-  const limits = PLAN_LIMITS[tier];
-  const generationLimit = usage?.generation_limit ?? limits.generations;
-  const aiUsagePercent = Math.round(100 * (usage?.ai_tokens_used ?? 0) / (usage?.ai_token_limit ?? limits.aiTokens));
-  const number = (value: number) => value.toLocaleString("en-US");
 
   return (
     <AccountPage>
+      <TimeZoneSync known={usage.time_zone} />
       <div className="mx-auto grid max-w-6xl gap-6 px-4 py-10 sm:px-6 md:grid-cols-[250px_minmax(0,1fr)] md:items-start">
         <aside className="slab bg-white md:sticky md:top-20">
           <div className="flex flex-col items-center gap-3 border-b-2 border-edge px-4 py-6 text-center">
@@ -79,9 +81,10 @@ export default async function ProfilePage() {
           <nav aria-label="Profile sections" className="flex flex-col p-2">
             {SECTIONS.map((section) => (
               <a
-                key={section.href}
-                href={section.href}
-                className="border-2 border-transparent px-3 py-2 text-[13px] text-ink-soft transition-colors hover:border-edge hover:bg-bone hover:text-ink"
+                key={section.key}
+                href={`/profile?view=${section.key}`}
+                aria-current={view === section.key ? "page" : undefined}
+                className={`border-2 px-3 py-2 text-[13px] transition-colors hover:border-edge hover:bg-bone hover:text-ink ${view === section.key ? "border-edge bg-bone font-semibold text-ink" : "border-transparent text-ink-soft"}`}
               >
                 {section.label}
               </a>
@@ -91,47 +94,20 @@ export default async function ProfilePage() {
         </aside>
 
         <div className="min-w-0 space-y-6">
-          <section id="plan" className="slab scroll-mt-20 bg-white">
-            <SectionHead title="Plan & usage">
+          {view === "usage" && <UsagePanel usage={usage} />}
+          {view === "plan" && <section id="plan" className="slab scroll-mt-20 bg-white">
+            <SectionHead title="Your plan">
               <span className="border-2 border-edge bg-edge px-2 py-1 font-mono text-[10px] uppercase tracking-[0.12em] text-bone">
                 {planName(tier)}
               </span>
             </SectionHead>
-            <div className="grid gap-3 p-5 sm:grid-cols-3">
-              <div className="border-2 border-edge bg-bone p-3">
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
-                  Saved diagrams
-                </p>
-                <p className="mt-2 text-xl font-semibold text-ink">
-                  {number(usage?.diagram_count ?? 0)} / {number(usage?.diagram_limit ?? limits.diagrams)}
-                </p>
-              </div>
-              <div className="border-2 border-edge bg-bone p-3">
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
-                  Generations today
-                </p>
-                <p className="mt-2 text-xl font-semibold text-ink">
-                  {number(usage?.generation_used ?? 0)} / {generationLimit === null ? "Unlimited" : number(generationLimit)}
-                </p>
-              </div>
-              <div className="border-2 border-edge bg-bone p-3">
-                <p className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
-                  AI usage today
-                </p>
-                <p className="mt-2 text-xl font-semibold text-ink">
-                  {aiUsagePercent}% of daily limit
-                </p>
-              </div>
-            </div>
-            <p className="border-t-2 border-edge px-5 py-3 text-[11.5px] text-ink-soft">
-              Daily allowances reset at 00:00 UTC. Export options are available on every plan.
-            </p>
+            <p className="p-5 text-[13px] text-ink-soft">30 days of Premium. One-time payment; no automatic renewal. <a href="/profile?view=usage" className="font-semibold text-blueprint underline">See usage →</a></p>
             <PremiumCheckout active={tier === "premium"} until={usage.premium_until ?? null} />
-          </section>
+          </section>}
 
-          <ProfileDetails profile={profile} />
+          {view === "details" && <ProfileDetails profile={profile} />}
 
-          <section id="security" className="slab scroll-mt-20 bg-bone">
+          {view === "security" && <section id="security" className="slab scroll-mt-20 bg-bone">
             <SectionHead title="Security" />
             <div className="p-5">
               <p className="max-w-prose text-[13px] leading-relaxed text-ink-soft">
@@ -144,9 +120,9 @@ export default async function ProfilePage() {
                 </a>
               )}
             </div>
-          </section>
+          </section>}
 
-          <section id="accounts" className="slab scroll-mt-20 bg-white">
+          {view === "accounts" && <section id="accounts" className="slab scroll-mt-20 bg-white">
             <SectionHead title="Connected accounts" />
             <ul className="divide-y-2 divide-edge">
               {user.providers.map((provider) => (
@@ -165,7 +141,7 @@ export default async function ProfilePage() {
                 </li>
               ))}
             </ul>
-          </section>
+          </section>}
         </div>
       </div>
     </AccountPage>

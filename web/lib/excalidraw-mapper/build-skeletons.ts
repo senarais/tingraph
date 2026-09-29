@@ -16,6 +16,7 @@ import { marked, nodeUnit, unitOf, type UnitMark } from "@/lib/canvas/units";
 export { nodeUnit };
 import { connectorInk, connectorKind, defaultConnector } from "@/lib/connectors";
 import { buildFigure } from "@/lib/figures/registry";
+import { architectureNodeSkeletons } from "@/lib/excalidraw-mapper/build-architecture";
 import {
   BPMN_EXTERNAL_LABEL_DISTANCE,
   BPMN_LABEL_FONT_SIZE,
@@ -425,6 +426,7 @@ const DASHED: Partial<Record<DiagramCategory, string>> = {
   usecase: "include",
   activity: "object-flow",
   erd: "non-identifying",
+  architecture: "event",
 };
 
 function lineFor(category: DiagramCategory, edge: PositionedEdge): string {
@@ -884,6 +886,9 @@ function specOf(node: PositionedNode): DSLNode {
     ...(node.entries ? { entries: node.entries } : {}),
     ...(node.fields ? { fields: node.fields } : {}),
     ...(node.side ? { side: node.side } : {}),
+    ...(node.at ? { at: node.at } : {}),
+    ...(node.width ? { width: node.width, height: node.height } : {}),
+    ...(node.image ? { image: node.image } : {}),
   };
 }
 
@@ -921,6 +926,8 @@ function drawNode(
       return activityNodeSkeletons(node, theme);
     case "erd":
       return erdNodeSkeletons(node, theme);
+    case "architecture":
+      return architectureNodeSkeletons(node, theme);
     default:
       return flowNodeSkeletons(node, theme);
   }

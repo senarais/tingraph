@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { getSession } from "@/lib/api/client";
+import { useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { APIError, apiFetch, clearSessionCache, getSession } from "@/lib/api/client";
 
 /** A face, or the first letter of a name when there is no picture. */
 export function Avatar({
@@ -57,6 +58,12 @@ const ACCOUNT_PATHS = ["/login", "/forgot-password", "/reset-password", "/auth"]
  */
 export default function AccountButton({ detached = false }: { detached?: boolean }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const menu = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const [problem, setProblem] = useState("");
+  const [busy, setBusy] = useState(false);
   // undefined until the session has been read, so nothing flicks from "Sign in" to a face
   const [account, setAccount] = useState<Account | null | undefined>(undefined);
 
@@ -85,6 +92,15 @@ export default function AccountButton({ detached = false }: { detached?: boolean
     };
   }, []);
 
+  useEffect(() => {
+    if (!open) return;
+    const outside = (event: PointerEvent) => { if (!menu.current?.contains(event.target as Node)) setOpen(false); };
+    const escape = (event: KeyboardEvent) => { if (event.key === "Escape") { setOpen(false); trigger.current?.focus(); } };
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("keydown", escape);
+    return () => { document.removeEventListener("pointerdown", outside); document.removeEventListener("keydown", escape); };
+  }, [open]);
+
   if (account === undefined) {
     return <span aria-hidden="true" className="block h-8 w-8 shrink-0" />;
   }
@@ -103,15 +119,26 @@ export default function AccountButton({ detached = false }: { detached?: boolean
       </Link>
     );
   }
-  return (
-    <Link
-      href={account.role === "admin" ? "/admin" : "/profile"}
-      {...away}
-      title={account.role === "admin" ? "Admin dashboard" : account.name || "Your profile"}
-      aria-label={account.role === "admin" ? "Admin dashboard" : "Your profile"}
-      className="press shrink-0 rounded-full shadow-[3px_3px_0_var(--edge)]"
-    >
+  return <div ref={menu} className="relative shrink-0">
+    <button ref={trigger} type="button" aria-label="Account menu" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}
+      className="press rounded-full shadow-[3px_3px_0_var(--edge)]">
       <Avatar url={account.avatar} name={account.name} className="h-8 w-8 text-[12px]" />
-    </Link>
-  );
+    </button>
+    <div role="menu" className={`absolute right-0 top-full z-50 mt-3 w-52 origin-top-right border-2 border-edge bg-white p-1.5 shadow-[5px_5px_0_var(--edge)] transition-all duration-150 ${open ? "visible scale-100 opacity-100" : "invisible scale-95 opacity-0"}`}>
+      <p className="truncate border-b border-edge/25 px-2 py-2 font-mono text-[11px] text-ink-soft">{account.name}</p>
+      <Link role="menuitem" tabIndex={open ? 0 : -1} href="/profile" {...away} onClick={() => setOpen(false)} className="block px-2 py-2 text-[12px] hover:bg-bone">Profile</Link>
+      {account.role === "admin" && <Link role="menuitem" tabIndex={open ? 0 : -1} href="/admin" {...away} onClick={() => setOpen(false)} className="block px-2 py-2 text-[12px] hover:bg-bone">Admin dashboard</Link>}
+      <button role="menuitem" tabIndex={open ? 0 : -1} type="button" disabled={busy} className="w-full border-t border-edge/25 px-2 py-2 text-left text-[12px] hover:bg-bone disabled:opacity-50" onClick={async () => {
+        setBusy(true); setProblem("");
+        try {
+          const response = await apiFetch("/api/v1/auth/logout", { method: "POST" });
+          if (!response.ok && response.status !== 401) throw await APIError.from(response);
+          clearSessionCache(); setAccount(null); setOpen(false);
+          if (!detached) { router.replace("/"); router.refresh(); }
+        } catch (error) { setProblem(error instanceof Error ? error.message : "Sign out failed."); }
+        finally { setBusy(false); }
+      }}>{busy ? "Signing out…" : "Sign out"}</button>
+      {problem && <p role="alert" className="px-2 text-[11px] text-alert">{problem}</p>}
+    </div>
+  </div>;
 }

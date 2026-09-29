@@ -4,6 +4,7 @@ import type { ElementOnSheet } from "@/lib/canvas/elements";
 import type { FrameBox } from "@/lib/canvas/frames";
 import type { DiagramCategory, DSLNode } from "@/lib/types";
 import ErdHandles from "@/components/editor/erd-handles";
+import ArchitectureImage from "@/components/editor/architecture-image";
 import FrameControls from "@/components/editor/frame-controls";
 import type { CanvasView } from "@/components/editor/pool-controls";
 
@@ -30,6 +31,8 @@ interface ElementControlsProps {
   onAddLane: (frame: FrameBox) => void;
   onRemoveLane: (frame: FrameBox) => void;
   onResizeLane: (unit: string, boundary: number, at: number, settled: boolean) => void;
+  onImage: (unit: string, file: File) => void;
+  imageMessage: string;
 }
 
 export default function ElementControls({
@@ -47,7 +50,23 @@ export default function ElementControls({
   onAddLane,
   onRemoveLane,
   onResizeLane,
+  onImage,
+  imageMessage,
 }: ElementControlsProps) {
+  if (category === "architecture") {
+    const selected = elements.find((entry) => entry.unit === held);
+    if (!selected) return null;
+    return <div className="pointer-events-none absolute z-20" style={{
+      left: (selected.box.x + view.scrollX) * view.zoom,
+      top: (selected.box.y + view.scrollY) * view.zoom - 36,
+    }}><div className="pointer-events-auto flex items-center gap-1 border border-edge bg-white p-0.5 shadow-sm">
+      <select aria-label="Change component type" value={selected.spec.type} onChange={(event) => onChange(selected.unit, { ...selected.spec, type: event.target.value as DSLNode["type"], image: undefined })} className="max-w-28 bg-white px-1 py-1 text-[11px] capitalize text-ink">
+        {["zone", "client", "service", "database", "storage", "queue", "cloud", "external"].map((type) => <option key={type} value={type}>{type}</option>)}
+      </select>
+      {selected.spec.type !== "zone" && <ArchitectureImage onFile={(file) => onImage(selected.unit, file)} />}
+      {selected.spec.image && <button type="button" onClick={() => onChange(selected.unit, { ...selected.spec, image: undefined })} className="px-1 text-[11px] underline">Remove image</button>}
+    </div>{imageMessage && <p role="alert" className="bg-white px-2 py-1 text-[11px] text-alert">{imageMessage}</p>}</div>;
+  }
   if (category === "erd") {
     return (
       <ErdHandles

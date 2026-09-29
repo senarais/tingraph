@@ -43,6 +43,9 @@ type entitlements struct {
 	GenerationLimit *int       `json:"generation_limit"`
 	AITokensUsed    int64      `json:"ai_tokens_used"`
 	AITokenLimit    int64      `json:"ai_token_limit"`
+	GenerationReset *time.Time `json:"generation_reset"`
+	AIReset         *time.Time `json:"ai_reset"`
+	TimeZone        *string    `json:"time_zone"`
 }
 
 func (server *Handler) Me(w http.ResponseWriter, r *http.Request) {
@@ -64,20 +67,73 @@ func (server *Handler) entitlements(r *http.Request, userID string) (entitlement
 		       then 'premium' else 'free' end, p.premium_until,
 		       (select count(*) from app.diagrams d where d.user_id = p.id),
 		       case when p.tier = 'premium' and (p.premium_until is null or p.premium_until > now()) then 100 else 2 end,
-		       coalesce(u.generations, 0),
+		       case when g.started_at > now() - interval '24 hours' then g.used else 0 end,
 		       case when p.tier = 'premium' and (p.premium_until is null or p.premium_until > now()) then null else 10 end,
-		       coalesce(u.ai_tokens, 0),
-		       case when p.tier = 'premium' and (p.premium_until is null or p.premium_until > now()) then 100000::bigint else 2000::bigint end
+		       case when a.started_at > now() - interval '24 hours' then
+		         a.used + app.active_ai_reserved(p.id, a.started_at) else 0 end,
+		       case when p.tier = 'premium' and (p.premium_until is null or p.premium_until > now()) then 100000::bigint else 2000::bigint end,
+		       case when g.started_at > now() - interval '24 hours' then g.started_at + interval '24 hours' end,
+		       case when a.started_at > now() - interval '24 hours' then a.started_at + interval '24 hours' end,
+		       p.time_zone
 		from app.profiles p
-		left join app.daily_usage u
-		  on u.user_id = p.id and u.usage_date = (now() at time zone 'utc')::date
+		left join app.usage_windows g on g.user_id = p.id and g.kind = 'generation'
+		left join app.usage_windows a on a.user_id = p.id and a.kind = 'ai'
 		where p.id = $1`, userID,
 	).Scan(
 		&result.Tier, &result.PremiumUntil, &result.DiagramCount, &result.DiagramLimit,
 		&result.GenerationUsed, &result.GenerationLimit,
-		&result.AITokensUsed, &result.AITokenLimit,
+		&result.AITokensUsed, &result.AITokenLimit, &result.GenerationReset, &result.AIReset, &result.TimeZone,
 	)
 	return result, err
+}
+
+func (server *Handler) UpdateTimeZone(w http.ResponseWriter, r *http.Request) {
+	httpx.NoStore(w)
+	var input struct {
+		TimeZone string `json:"time_zone"`
+	}
+	if httpx.ReadJSON(w, r, &input) != nil {
+		httpx.Problem(w, http.StatusBadRequest, "invalid time zone")
+		return
+	}
+	valid, err := server.billing.ValidTimeZone(r.Context(), input.TimeZone)
+	if err != nil {
+		server.log.Error("time zone validation failed", "error", err)
+		httpx.Problem(w, 500, "time zone could not be saved")
+		return
+	}
+	if !valid {
+		httpx.Problem(w, 400, "choose a valid time zone")
+		return
+	}
+	tx, err := server.db.Begin(r.Context())
+	if err != nil {
+		server.log.Error("time zone update failed", "error", err)
+		httpx.Problem(w, 500, "time zone could not be saved")
+		return
+	}
+	defer tx.Rollback(r.Context())
+	userID := currentSession(r).User.ID
+	var stored *string
+	var tier string
+	var until *time.Time
+	err = tx.QueryRow(r.Context(), `select time_zone, tier, premium_until from app.profiles where id = $1 for update`, userID).Scan(&stored, &tier, &until)
+	if err == nil && stored == nil {
+		_, err = tx.Exec(r.Context(), `update app.profiles set time_zone = $2 where id = $1`, userID, input.TimeZone)
+		if err == nil && (tier == "premium" || until != nil) {
+			_, err = tx.Exec(r.Context(), `select ops.refresh_premium($1)`, userID)
+		}
+		stored = &input.TimeZone
+	}
+	if err == nil {
+		err = tx.Commit(r.Context())
+	}
+	if err != nil {
+		server.log.Error("time zone update failed", "error", err)
+		httpx.Problem(w, 500, "time zone could not be saved")
+		return
+	}
+	httpx.JSON(w, 200, map[string]string{"time_zone": *stored})
 }
 
 func (server *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {

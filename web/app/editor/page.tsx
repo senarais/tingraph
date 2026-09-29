@@ -17,6 +17,7 @@ const CATEGORIES: DiagramCategory[] = [
   "activity",
   "sequence",
   "erd",
+  "architecture",
   "bar",
   "line",
   "pie",

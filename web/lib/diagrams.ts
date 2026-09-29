@@ -1,4 +1,5 @@
 import { DiagramCategory } from "@/lib/types";
+import { ARCHITECTURE_TEMPLATES } from "@/lib/templates";
 
 /**
  * The notations the site offers, and the ones it has promised. The landing page
@@ -329,6 +330,16 @@ export const READY_DIAGRAMS: DiagramKind[] = [
     parts: ["Entities", "Attributes", "Primary and foreign keys", "Crow's feet"],
     accent: "forest",
     sample: ERD_SAMPLE,
+  },
+  {
+    id: "architecture",
+    name: "Architecture diagram",
+    family: "Structure",
+    keyword: "architecture",
+    summary: "Place systems, services, data stores and regions freely; connect them, label flows and replace symbols with your own logos.",
+    parts: ["Zones", "Services & data", "Flows & events", "Custom images"],
+    accent: "navy",
+    sample: ARCHITECTURE_TEMPLATES[0].source,
   },
   {
     id: "bar",

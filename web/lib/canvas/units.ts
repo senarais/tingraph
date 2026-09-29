@@ -105,6 +105,8 @@ export function nodeUnit(category: DiagramCategory, id: string): string {
       return `act-${id}`;
     case "erd":
       return `erd-${id}`;
+    case "architecture":
+      return `arch-${id}`;
     default:
       return `flow-node-${id}`;
   }

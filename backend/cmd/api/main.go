@@ -58,9 +58,11 @@ func main() {
 		logger.Error("AI startup failed", "error", err)
 		os.Exit(1)
 	}
-	go mailworker.NewWorker(db, cfg.SMTP, logger).Run(ctx)
+	go mailworker.NewWorker(db, cfg.SMTP, logger, cfg.PublicOrigin.String()).Run(ctx)
 	go database.RunCleanup(ctx, db, logger)
-	handlers := handler.New(cfg, db, authService, aiService, billing.New(db, cfg.Billing, cfg.PublicOrigin), logger)
+	billingService := billing.New(db, cfg.Billing, cfg.PublicOrigin)
+	go billingService.RunExpiry(ctx)
+	handlers := handler.New(cfg, db, authService, aiService, billingService, logger)
 
 	httpServer := &http.Server{
 		Addr:              cfg.Address,

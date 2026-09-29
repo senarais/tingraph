@@ -854,6 +854,24 @@ export function ErdArt({ accent = "forest", className }: ArtProps) {
   );
 }
 
+export function ArchitectureArt({ accent = "navy", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <rect x="72" y="13" width="235" height="153" rx="13" stroke={ink} strokeDasharray="5 3" />
+      <text x="85" y="32" fontSize="10" fill={ink}>Cloud region</text>
+      <path d="M20 93h62M142 93h27M229 93h27M201 113v24" stroke={ink} strokeWidth="2" />
+      {[[11, 70, "APP"], [82, 70, "API"], [169, 70, "BUS"], [256, 70, "DB"], [169, 137, "LOG"]].map(([x, y, label]) => (
+        <g key={String(label)}>
+          <rect x={Number(x)} y={Number(y)} width="49" height="46" rx="5" fill="white" stroke={ink} strokeWidth="1.5" />
+          <rect x={Number(x) + 12} y={Number(y) + 6} width="25" height="21" rx="3" fill={ink} />
+          <text x={Number(x) + 24} y={Number(y) + 39} fontSize="9" fill={ink} textAnchor="middle">{label}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 export function DiagramArt({
   id,
   accent,
@@ -878,6 +896,7 @@ export function DiagramArt({
   if (id === "activity") return <ActivityArt accent={accent} className={className} />;
   if (id === "sequence") return <SequenceArt accent={accent} className={className} />;
   if (id === "erd") return <ErdArt accent={accent} className={className} />;
+  if (id === "architecture") return <ArchitectureArt accent={accent} className={className} />;
   return <PlannedArt id={id} className={className} />;
 }
 

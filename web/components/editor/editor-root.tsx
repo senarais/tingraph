@@ -10,8 +10,8 @@ import {
   serializeAsJSON,
   viewportCoordsToSceneCoords,
 } from "@excalidraw/excalidraw";
-import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
-import type { BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
+import type { ExcalidrawElement, FileId } from "@excalidraw/excalidraw/element/types";
+import type { BinaryFileData, BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import { X } from "lucide-react";
 import AccessDialog from "@/components/account/access-dialog";
 import { useTingraphStore, type Drawer } from "@/lib/store";
@@ -35,6 +35,7 @@ import {
 import { applyStyle, reink, restyle, type StylePatch } from "@/lib/canvas/restyle";
 import {
   addLane,
+  newConnector,
   addPoolBelow,
   newFigure,
   redrawFigure,
@@ -211,6 +212,7 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
   const [saveMessage, setSaveMessage] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generationMessage, setGenerationMessage] = useState("");
+  const [imageMessage, setImageMessage] = useState("");
   const [accountGate, setAccountGate] = useState<{
     title: string;
     message: string;
@@ -430,6 +432,46 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
       style,
     );
     selectUnit(unit, next);
+  };
+
+  /** Image bytes live in Excalidraw's file map; the element spec keeps only their id. */
+  const changeElementImage = async (unit: string, file: File) => {
+    if (!api) return;
+    setImageMessage("");
+    if (!["image/png", "image/jpeg", "image/webp"].includes(file.type) || file.size > 4_000_000) {
+      setImageMessage("Choose a PNG, JPEG or WebP image under 4 MB.");
+      return;
+    }
+    try {
+      const dataURL = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+      const dimensions = await new Promise<{ width: number; height: number }>((resolve, reject) => {
+        const image = new window.Image();
+        image.onload = () => image.naturalWidth && image.naturalHeight
+          ? resolve({ width: image.naturalWidth, height: image.naturalHeight })
+          : reject(new Error("Invalid image"));
+        image.onerror = () => reject(new Error("Invalid image"));
+        image.src = dataURL;
+      });
+      const entry = elementOn(api.getSceneElements(), unit);
+      if (!entry || entry.spec.type === "zone") return;
+      const id = `arch-${crypto.randomUUID()}`;
+      api.addFiles([{ id: id as FileId, dataURL: dataURL as BinaryFileData["dataURL"], mimeType: file.type as BinaryFileData["mimeType"], created: Date.now() }]);
+      changeElement(unit, { ...entry.spec, image: { fileId: id, ...dimensions } });
+    } catch {
+      setImageMessage("Image could not be opened. Choose another file.");
+    }
+  };
+
+  const connectElements = (from: string, to: string) => {
+    if (from === to) return;
+    edit((elements) => newConnector(elements, {
+      line: "data-flow", from: { unit: from }, to: { unit: to },
+    }, { category: editorCategory, direction }, connectorStyle(ink, editorCategory, style)) ?? elements.slice());
   };
 
   /** A figure on a sheet that has none yet, in the notation that was chosen. */
@@ -754,7 +796,13 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
                 frames={parts.frames}
                 pools={parts.pools}
                 onSelect={selectUnit}
+                held={parts.held}
                 onChange={changeElement}
+                onImage={(unit, file) => void changeElementImage(unit, file)}
+                imageMessage={imageMessage}
+                onTemplate={(source) => void generate(source, true)}
+                generating={generating}
+                onConnect={connectElements}
                 onAdd={(type) => placeShape(type, centre())}
                 onRemove={(unit) => edit((elements) => removeUnits(elements, [unit]))}
                 onLink={(id, patch) =>
@@ -846,6 +894,8 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
             initialElements={seed.elements}
             initialFiles={seed.files}
             category={editorCategory}
+            onElementImage={(unit, file) => void changeElementImage(unit, file)}
+            imageMessage={imageMessage}
             dragging={dragging}
             connectorStyle={connectorStyle(ink, editorCategory, style)}
             rules={{ category: editorCategory, direction }}

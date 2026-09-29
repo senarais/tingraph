@@ -34,7 +34,7 @@ func TestPricesAndCheckoutHosts(t *testing.T) {
 	if err != nil || quote.IDR != 89220 {
 		t.Fatalf("unexpected daily quote: %+v, %v", quote, err)
 	}
-	if _, err := service.Checkout(context.Background(), "user-123", "midtrans", 1); !errors.Is(err, ErrPriceChanged) {
+	if _, err := service.Checkout(context.Background(), "user-123", "gopay", 1, "", "UTC"); !errors.Is(err, ErrPriceChanged) {
 		t.Fatal("checkout accepted a price different from what the buyer saw")
 	}
 	// A stale rate must fail closed; it must not silently charge an outdated IDR price.
@@ -50,8 +50,33 @@ func TestPricesAndCheckoutHosts(t *testing.T) {
 			t.Fatalf("unsafe redirect accepted: %s", raw)
 		}
 	}
-	if _, err := checkoutLink("https://app.sandbox.midtrans.com/snap/v2/vtweb/test", "midtrans"); err != nil {
-		t.Fatal(err)
+	if _, err := checkoutLink("https://app.sandbox.midtrans.com/snap/v2/vtweb/test", "midtrans"); err == nil {
+		t.Fatal("Snap URL accepted as a checkout method")
+	}
+}
+
+func TestGrossPriceCoversConfiguredFees(t *testing.T) {
+	for _, test := range []struct {
+		net   int64
+		bps   int
+		fixed int64
+	}{
+		{500, 499, 49}, {400, 499, 49}, {89220, 222, 0}, {17844, 78, 0},
+	} {
+		gross := grossFor(test.net, test.bps, test.fixed)
+		if gross*(10000-int64(test.bps))/10000-test.fixed < test.net ||
+			(gross-1)*(10000-int64(test.bps))/10000-test.fixed >= test.net {
+			t.Fatalf("gross %d did not minimally cover net %d at %d basis points + %d", gross, test.net, test.bps, test.fixed)
+		}
+	}
+}
+
+func TestPayPalQuoteIncludesProductTaxAndProcessing(t *testing.T) {
+	service := New(nil, config.Billing{PayPalClientID: "client", PayPalClientSecret: "secret", PayPalWebhookID: "webhook", PayPalFeeBPS: 499, PayPalFixedCents: 49, ProductTaxBPS: 1000}, nil)
+	price, err := service.Price(context.Background(), "paypal", "")
+	if err != nil || price.Base != 500 || price.Tax != 50 || price.Fee != price.Amount-550 ||
+		price.Amount*(10000-499)/10000-49 < 550 {
+		t.Fatalf("PayPal buyer total must cover product, tax and processing: %+v %v", price, err)
 	}
 }
 
@@ -63,6 +88,15 @@ func TestPayPalCaptureMustMatchTheOrder(t *testing.T) {
 	}
 	if _, err := (&Service{}).validateCapture(order, result); err != nil {
 		t.Fatal(err)
+	}
+	order.Amount = 450
+	if _, err := (&Service{}).validateCapture(order, result); err == nil {
+		t.Fatal("capture for full price accepted on discounted order")
+	}
+	result.PurchaseUnits[0].Amount.Value = "4.50"
+	result.PurchaseUnits[0].Payments.Captures[0].Amount.Value = "4.50"
+	if _, err := (&Service{}).validateCapture(order, result); err != nil {
+		t.Fatal("discounted capture rejected:", err)
 	}
 	result.PurchaseUnits[0].Payments.Captures[0].Amount.Value = "0.05"
 	if _, err := (&Service{}).validateCapture(order, result); err == nil {
@@ -99,12 +133,12 @@ func TestMidtransSignatureAndIDRAmounts(t *testing.T) {
 	}
 }
 
-func TestHostedCheckoutRequests(t *testing.T) {
+func TestCoreCheckoutRequests(t *testing.T) {
 	origin, _ := url.Parse("https://tingraph.example")
 	midtrans := New(nil, config.Billing{MidtransServerKey: "SB-Mid-server-secret", MidtransMode: "sandbox"}, origin)
 	midtrans.client.Transport = roundTrip(func(r *http.Request) (*http.Response, error) {
 		user, password, ok := r.BasicAuth()
-		if !ok || user != "SB-Mid-server-secret" || password != "" || r.URL.String() != "https://app.sandbox.midtrans.com/snap/v1/transactions" {
+		if !ok || user != "SB-Mid-server-secret" || password != "" || r.URL.String() != "https://api.sandbox.midtrans.com/v2/charge" {
 			t.Fatal("Midtrans request has incorrect credentials or endpoint")
 		}
 		var payload struct {
@@ -112,18 +146,20 @@ func TestHostedCheckoutRequests(t *testing.T) {
 				Amount  int64  `json:"gross_amount"`
 				OrderID string `json:"order_id"`
 			} `json:"transaction_details"`
-			Callbacks struct {
-				Finish string `json:"finish"`
-			} `json:"callbacks"`
+			PaymentType string `json:"payment_type"`
+			Expiry      struct {
+				Duration int    `json:"expiry_duration"`
+				Unit     string `json:"unit"`
+			} `json:"custom_expiry"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil || payload.TransactionDetails.Amount != 89220 ||
-			payload.TransactionDetails.OrderID != "order-123" || !strings.Contains(payload.Callbacks.Finish, "provider=midtrans") {
-			t.Fatal("Midtrans order amount, reference, or return URL is incorrect")
+			payload.TransactionDetails.OrderID != "order-123" || payload.PaymentType != "gopay" || payload.Expiry.Duration != 24 || payload.Expiry.Unit != "hour" {
+			t.Fatal("Midtrans Core API amount, reference, or expiry is incorrect")
 		}
-		return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"token":"snap-token","redirect_url":"https://app.sandbox.midtrans.com/snap/v4/redirection/snap-token"}`))}, nil
+		return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"order_id":"order-123","transaction_status":"pending","actions":[{"name":"generate-qr-code","url":"https://api.sandbox.midtrans.com/v2/gopay/tx-123/qr-code"},{"name":"deeplink-redirect","url":"https://simulator.sandbox.midtrans.com/gopay/ui/checkout?ref=123"}]}`))}, nil
 	})
-	if id, link, err := midtrans.createMidtrans(context.Background(), "order-123", 89220); err != nil || id != "order-123" || link != "https://app.sandbox.midtrans.com/snap/v4/redirection/snap-token" {
-		t.Fatalf("Midtrans Snap session rejected: %q, %q, %v", id, link, err)
+	if id, qr, deep, err := midtrans.createMidtrans(context.Background(), "order-123", 89220); err != nil || id != "order-123" || qr != "https://api.sandbox.midtrans.com/v2/gopay/tx-123/qr-code" || !strings.HasPrefix(deep, "https://simulator.sandbox.midtrans.com/") {
+		t.Fatalf("Midtrans Core API charge rejected: %q, %q, %q, %v", id, qr, deep, err)
 	}
 
 	paypal := New(nil, config.Billing{PayPalClientID: "client", PayPalClientSecret: "secret", PayPalMode: "sandbox"}, origin)
@@ -146,7 +182,7 @@ func TestHostedCheckoutRequests(t *testing.T) {
 		}
 		return &http.Response{StatusCode: 201, Body: io.NopCloser(strings.NewReader(`{"id":"paypal-123","status":"PAYER_ACTION_REQUIRED","links":[{"href":"https://www.sandbox.paypal.com/checkoutnow?token=paypal-123","rel":"payer-action"}]}`))}, nil
 	})
-	if id, link, err := paypal.createPayPal(context.Background(), "order-123"); err != nil || id != "paypal-123" || !strings.HasPrefix(link, "https://www.sandbox.paypal.com/") {
+	if id, link, err := paypal.createPayPal(context.Background(), "order-123", 500); err != nil || id != "paypal-123" || !strings.HasPrefix(link, "https://www.sandbox.paypal.com/") {
 		t.Fatalf("PayPal order rejected: %q, %q, %v", id, link, err)
 	}
 }

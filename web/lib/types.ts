@@ -51,6 +51,7 @@ export type ActivityNodeType =
 
 /** An entity, and the weak entity that cannot be told apart without its owner. */
 export type ErdNodeType = "entity" | "weak";
+export type ArchitectureNodeType = "zone" | "client" | "service" | "database" | "storage" | "queue" | "cloud" | "external";
 
 export type EdgeKind = "sequence" | "association";
 
@@ -60,7 +61,8 @@ export type NodeType =
   | OrgNodeType
   | UseCaseNodeType
   | ActivityNodeType
-  | ErdNodeType;
+  | ErdNodeType
+  | ArchitectureNodeType;
 
 /** A sub-role listed inside an org box, e.g. one lab under a lab head. */
 export interface DSLEntry {
@@ -97,6 +99,12 @@ export interface DSLNode {
   fields?: DSLField[];
   /** usecase: which side of the boundary the actor stands on, when it is pinned */
   side?: "left" | "right";
+  /** architecture: optional manual placement and size, in sheet units */
+  at?: { x: number; y: number };
+  width?: number;
+  height?: number;
+  /** picture filed with the Excalidraw scene, replacing the node's symbol */
+  image?: { fileId: string; width: number; height: number };
 }
 
 export interface DSLLane {
@@ -147,6 +155,7 @@ export const GRAPH_CATEGORIES = [
   "usecase",
   "activity",
   "erd",
+  "architecture",
 ] as const;
 
 export type GraphCategory = (typeof GRAPH_CATEGORIES)[number];
@@ -192,7 +201,7 @@ export function isGraph(category: DiagramCategory): category is GraphCategory {
  * (`UnitMark.spec`), which the panel reads and rewrites the way a figure's
  * panel reads and rewrites its one spec.
  */
-export const SETTABLE_CATEGORIES = ["bpmn", "usecase", "activity", "erd"] as const;
+export const SETTABLE_CATEGORIES = ["bpmn", "usecase", "activity", "erd", "architecture"] as const;
 
 export type SettableCategory = (typeof SETTABLE_CATEGORIES)[number];
 

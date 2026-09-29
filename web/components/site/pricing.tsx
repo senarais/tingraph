@@ -11,12 +11,12 @@ const FEATURES = [
   },
   {
     label: "Code to diagram",
-    free: `${PLAN_LIMITS.free.generations} per day`,
+    free: `${PLAN_LIMITS.free.generations} per 24 hours`,
     premium: "Unlimited",
   },
   {
     label: "AI generation",
-    free: "Limited daily use",
+    free: `${PLAN_LIMITS.free.aiTokens.toLocaleString()} tokens per 24 hours`,
     premium: `${PLAN_LIMITS.premium.aiTokens / PLAN_LIMITS.free.aiTokens}× more`,
   },
   {
@@ -97,7 +97,7 @@ export default function Pricing() {
                 </span>
                 <div className="mt-5 flex items-baseline gap-2 font-mono">
                   <span className="pricing-price inline-block bg-gradient-to-br from-[#FFF2C8] via-[#E8BC65] to-[#A86D2B] bg-clip-text text-5xl font-semibold tracking-[-0.06em] text-transparent">$5</span>
-                  <span className="text-[13px] text-white/65">/month</span>
+                  <span className="text-[13px] text-white/65">/30 days</span>
                 </div>
                 <p className="mt-2 min-h-10 text-[13px] leading-relaxed text-white/75">
                   More room for every idea, from first draft to final export.
@@ -110,7 +110,7 @@ export default function Pricing() {
                     </li>
                   ))}
                 </ul>
-                <Link href="/profile#plan" className="mt-5 flex w-full items-center justify-center gap-2 border-2 border-[#F2D89A] bg-gradient-to-r from-[#F8E2A1] via-[#D9AA53] to-[#BB8339] px-5 py-2.5 font-mono text-[12px] font-semibold uppercase tracking-[0.06em] text-[#11110f] transition-colors hover:from-[#FFF2C8] hover:to-[#D9AA53]">
+                <Link href="/checkout" className="mt-5 flex w-full items-center justify-center gap-2 border-2 border-[#F2D89A] bg-gradient-to-r from-[#F8E2A1] via-[#D9AA53] to-[#BB8339] px-5 py-2.5 font-mono text-[12px] font-semibold uppercase tracking-[0.06em] text-[#11110f] transition-colors hover:from-[#FFF2C8] hover:to-[#D9AA53]">
                   Get Premium <ArrowRight size={16} aria-hidden="true" />
                 </Link>
               </div>
@@ -119,7 +119,7 @@ export default function Pricing() {
         </div>
 
         <p className="mt-8 text-center font-mono text-[11px] text-ink-soft">
-          Premium is a one-time payment for 30 days. No automatic renewal.
+          Premium is a one-time payment for 30 days, plus applicable taxes and processing. No automatic renewal.
         </p>
       </div>
     </section>

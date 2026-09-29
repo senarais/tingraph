@@ -77,6 +77,8 @@ interface CanvasProps {
   onParts: (parts: SheetParts) => void;
   /** one element drawn again from its spec, keeping hold of what was picked */
   onElementChange: (unit: string, spec: DSLNode) => void;
+  onElementImage: (unit: string, file: File) => void;
+  imageMessage: string;
   /** whether there is anything left to fit or to export */
   onEmptyChange: (empty: boolean) => void;
   /** the figure the settings panel is looking at, or null when there is none */
@@ -138,6 +140,8 @@ export default function Canvas({
   onEdit,
   onParts,
   onElementChange,
+  onElementImage,
+  imageMessage,
   onEmptyChange,
   onFigure,
   figure,
@@ -569,6 +573,8 @@ export default function Canvas({
         onPick={onPart}
         view={view}
         onChange={onElementChange}
+        onImage={onElementImage}
+        imageMessage={imageMessage}
         onRenameFrame={(unit, label) =>
           onEdit((elements) => renameFrame(elements, unit, label))
         }

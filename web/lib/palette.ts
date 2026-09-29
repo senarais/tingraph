@@ -131,6 +131,19 @@ const ERD_GROUPS: PaletteGroup[] = [
   },
 ];
 
+const ARCHITECTURE_GROUPS: PaletteGroup[] = [
+  { title: "Boundaries", items: [{ type: "zone", label: "Zone / region", hint: "group related components", droppable: true }] },
+  { title: "Components", items: [
+    { type: "client", label: "Client", hint: "user or app", droppable: true },
+    { type: "service", label: "Service", hint: "API or compute", droppable: true },
+    { type: "database", label: "Database", hint: "persistent records", droppable: true },
+    { type: "storage", label: "Storage", hint: "files and objects", droppable: true },
+    { type: "queue", label: "Event bus", hint: "messages and events", droppable: true },
+    { type: "cloud", label: "Cloud", hint: "hosted platform", droppable: true },
+    { type: "external", label: "External", hint: "outside integration", droppable: true },
+  ] },
+];
+
 /**
  * A chart has no shapes to drop: what a reader adds to one is a reading, and
  * that is the Chart panel's job rather than the shape drawer's. The rail hides
@@ -143,6 +156,7 @@ export const PALETTE_GROUPS: Record<DiagramCategory, PaletteGroup[]> = {
   usecase: USECASE_GROUPS,
   activity: ACTIVITY_GROUPS,
   erd: ERD_GROUPS,
+  architecture: ARCHITECTURE_GROUPS,
   sequence: [],
   bar: [],
   line: [],
@@ -240,6 +254,9 @@ export function sampleNode(
       label:
         type === "action" ? `Action ${counter}` : type === "object" ? `Object ${counter}` : "",
     };
+  }
+  if (category === "architecture") {
+    return { id, type: type as NodeType, label: type === "zone" ? "New zone" : `${type[0].toUpperCase()}${type.slice(1)} ${counter}` };
   }
   const item = PALETTE_GROUPS[category]
     .flatMap((group) => group.items)

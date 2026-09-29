@@ -15,6 +15,7 @@ import {
   ACTIVITY_TEMPLATE,
   ERD_TEMPLATE,
   SEQUENCE_TEMPLATE,
+  ARCHITECTURE_TEMPLATES,
 } from "@/lib/templates";
 
 /**
@@ -558,6 +559,22 @@ const FISHBONE_SECTIONS: GuideSection[] = [
   },
 ];
 
+const ARCHITECTURE_SECTIONS: GuideSection[] = [
+  { title: "Components", rows: [
+    row('architecture "Title" {', "open an architecture diagram; close with }"),
+    row('zone REGION "Name"', "outlined region behind components"),
+    ...["client", "service", "database", "storage", "queue", "cloud", "external"].map((type) =>
+      row(`${type} ID "Name"`, `place a ${type} component`)),
+    row('at 120 200', "optional x and y after a component's name"),
+    row('size 300 180', "optional width and height after its name"),
+  ] },
+  { title: "Connections", rows: [
+    row("A -> B", "directed data flow; chain as A -> B -> C"),
+    row("A -.-> B", "dashed event or async flow"),
+    row("A [request] -> B", "caption on a connection"),
+  ] },
+];
+
 export const GUIDE_SECTIONS: Record<DiagramCategory, GuideSection[]> = {
   flow: FLOW_SECTIONS,
   bpmn: BPMN_SECTIONS,
@@ -569,6 +586,7 @@ export const GUIDE_SECTIONS: Record<DiagramCategory, GuideSection[]> = {
   usecase: USECASE_SECTIONS,
   activity: ACTIVITY_SECTIONS,
   erd: ERD_SECTIONS,
+  architecture: ARCHITECTURE_SECTIONS,
   sequence: SEQUENCE_SECTIONS,
   mind: MIND_SECTIONS,
   matrix: MATRIX_SECTIONS,
@@ -584,6 +602,7 @@ export const GUIDE_INTRO: Record<DiagramCategory, string> = {
   usecase: "Declare the actors, then the use cases inside a system block, then join them. Actors that start something stand on the left, actors that only answer stand on the right.",
   activity: "Declare a partition, then the nodes inside it, then wire them. Partitions are drawn as columns and the flow reads down the page.",
   erd: "Declare every entity with its attributes, then the relations between them. The crow's foot at each end says how many, and a relation runs from the key it names to the key it names.",
+  architecture: "Place components at coordinates, outline groups with zones, then connect them. Move, resize, rename or replace any component with an image on the sheet.",
   sequence: "Declare the participants across the top, then the messages in the order they are sent. The execution bars are read off the messages, so there is nothing to place.",
   bar: "Write the readings one to a line, then any settings you want. Everything here is also a control in the Chart panel, and the two always agree.",
   line: "Name the readings along the axis, then one series per line you want drawn. Everything here is also a control in the Chart panel.",
@@ -613,6 +632,13 @@ const FIGURE_RULES = (keyword: string, body: string[]): string[] => [
 ];
 
 const RULES: Record<DiagramCategory, string[]> = {
+  architecture: [
+    'The file is one `architecture "Title" { ... }` block.',
+    'Declare components with unique IDs. Optional `at x y` and `size width height` may follow the label in either order.',
+    'Declare zones before their contents; they are independent outlined backdrops, not nested blocks.',
+    'Declare all nodes before their connections. `->` is a solid flow; `-.->` is a dashed event.',
+    'Uploaded images belong to the saved sheet, not the source text.',
+  ],
   mind: FIGURE_RULES("mind", [
     "The title is the idea in the middle; everything else hangs off it.",
     "A branch is a caption in quotes on its own line. Give it a `{ ... }` block for whatever hangs off it, nested as deep as you like.",
@@ -698,6 +724,7 @@ export const KEYWORD: Record<DiagramCategory, string> = {
   usecase: "usecase",
   activity: "activity",
   erd: "erd",
+  architecture: "architecture",
   sequence: "sequence",
   bar: "bar",
   line: "line",
@@ -716,6 +743,7 @@ const EXAMPLE: Record<DiagramCategory, string> = {
   usecase: USECASE_TEMPLATE,
   activity: ACTIVITY_TEMPLATE,
   erd: ERD_TEMPLATE,
+  architecture: ARCHITECTURE_TEMPLATES[0].source,
   sequence: SEQUENCE_TEMPLATE,
   bar: BAR_TEMPLATE,
   line: LINE_TEMPLATE,
@@ -734,6 +762,7 @@ export const NOTATION_NAME: Record<DiagramCategory, string> = {
   usecase: "UML use case diagram",
   activity: "UML activity diagram",
   erd: "entity relationship diagram",
+  architecture: "software architecture diagram",
   sequence: "UML sequence diagram",
   bar: "bar chart",
   line: "line chart",
