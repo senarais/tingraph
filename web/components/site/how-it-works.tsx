@@ -11,20 +11,20 @@ import { useEffect, useRef, useState } from "react";
 const STEPS = [
   {
     n: "01",
-    title: "Write the source",
-    body: "Declare every element once, then wire the lines with an arrow. Comments, branch captions and dashed ties are part of the language.",
+    title: "Write or ask",
+    body: "Start from an example, write in the diagram's language, or ask Tingraph AI to draft the source. You decide when to Generate.",
     art: <SourceArt />,
   },
   {
     n: "02",
     title: "It lays itself out",
-    body: "Spacing, ranking, lane geometry and arrow routing are worked out for you. Errors come back with the line number that caused them.",
+    body: "Tingraph parses the source and draws the notation on the canvas. Spacing, geometry and connectors are worked out for you; errors point to the line that caused them.",
     art: <LayoutArt />,
   },
   {
     n: "03",
     title: "Edit, then export",
-    body: "The result is a live canvas, not a picture. Drag anything, add shapes from the palette, then take a PNG, JPG, SVG or PDF at the size you need.",
+    body: "The result is a live canvas, not a picture. Refine it by hand, save your work to your account, then export in the format your plan supports.",
     art: <ExportArt />,
   },
 ];

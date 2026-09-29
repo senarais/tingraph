@@ -3,18 +3,15 @@ import Image from "next/image";
 import AccountButton from "@/components/account/account-button";
 import { READY_DIAGRAMS } from "@/lib/diagrams";
 
-/** Anchors on the landing page, written absolute so the bar works from /build. */
-const SECTIONS = [
-  { href: "/#diagrams", label: "Diagrams" },
-  { href: "/#features", label: "Features" },
-  { href: "/#how", label: "How it works" },
-  { href: "/#faq", label: "FAQ" },
+const PAGES = [
+  { href: "/features", label: "Features" },
+  { href: "/support", label: "Support" },
 ] as const;
 
 export function SiteNav() {
   return (
     <header className="sticky top-0 z-30 border-b-2 border-edge bg-bone">
-      <nav className="mx-auto flex h-14 max-w-6xl items-center gap-3 px-4 sm:px-6 md:gap-6">
+      <nav className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2 sm:px-6 md:flex-nowrap md:gap-6 md:py-0">
         <Link
           href="/"
           className="flex shrink-0 items-center gap-2 font-mono text-[15px] font-semibold tracking-tight text-ink"
@@ -27,15 +24,15 @@ export function SiteNav() {
             sizes="28px"
             className="h-7 w-7 object-contain"
           />
-          <span className="hidden min-[370px]:inline">tingraph</span>
+          <span className="hidden sm:inline">tingraph</span>
         </Link>
 
-        <div className="hidden items-center gap-5 md:flex">
-          {SECTIONS.map((item) => (
+        <div className="order-3 flex w-full items-center gap-6 border-t border-edge/15 pt-2 md:order-none md:w-auto md:border-0 md:pt-0">
+          {PAGES.map((item) => (
             <Link
               key={item.href}
               href={item.href}
-              className="text-[13px] text-ink-soft underline-offset-4 hover:text-ink hover:underline"
+              className="py-1 font-mono text-[12px] font-medium text-ink-soft underline-offset-4 hover:text-ink hover:underline"
             >
               {item.label}
             </Link>
@@ -44,11 +41,12 @@ export function SiteNav() {
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-3">
           <Link
-            href="/build?view=mine"
-            className="slab-tight press flex min-h-10 items-center whitespace-nowrap bg-white px-2 text-[12.5px] font-medium text-ink sm:px-3"
+            href="/checkout"
+            className="slab-tight press flex min-h-10 items-center whitespace-nowrap bg-[#f1d483] px-2 font-mono text-[11px] font-semibold text-ink sm:px-3 sm:text-[12px]"
           >
-            <span className="sm:hidden">Mine</span>
-            <span className="hidden sm:inline">My diagrams</span>
+            <span aria-hidden="true" className="mr-1.5 text-[15px] leading-none">✦</span>
+            <span className="sm:hidden">Premium</span>
+            <span className="hidden sm:inline">Go Premium</span>
           </Link>
           <Link
             href="/editor"
@@ -81,8 +79,8 @@ export function SiteFooter() {
             tingraph
           </div>
           <p className="mt-3 max-w-sm text-[13px] leading-relaxed text-ink-soft">
-            Diagrams written as code, drawn to the conventions a journal, a
-            thesis or a course report expects. Runs in your browser.
+            Code to diagram, then yours to edit. Make clean figures for papers
+            and reports, or take a more playful direction.
           </p>
         </div>
 
@@ -123,10 +121,18 @@ export function SiteFooter() {
             </li>
             <li>
               <Link
-                href="/#faq"
+                href="/features"
                 className="text-[13px] text-ink-soft underline-offset-4 hover:text-ink hover:underline"
               >
-                Questions
+                Features
+              </Link>
+            </li>
+            <li>
+              <Link
+                href="/support"
+                className="text-[13px] text-ink-soft underline-offset-4 hover:text-ink hover:underline"
+              >
+                Support
               </Link>
             </li>
           </ul>
@@ -135,7 +141,7 @@ export function SiteFooter() {
 
       <div className="border-t-2 border-edge">
         <p className="mx-auto max-w-6xl px-4 py-4 font-mono text-[11px] text-ink-faint sm:px-6">
-          Nothing you write leaves the browser tab.
+          Start with code. Finish on your own terms.
         </p>
       </div>
     </footer>

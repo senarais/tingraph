@@ -20,23 +20,23 @@ const AUDIENCES = [
 const FEATURES = [
   {
     span: true,
-    title: "The diagram is a text file",
-    body: "One line declares an element, one arrow links two of them. The whole drawing is short enough to paste into a chat, keep in git next to the paper, or send to a supervisor who can read it without opening anything.",
+    title: "Source starts the drawing",
+    body: "Write a compact description of the diagram, keep it beside your project or ask Tingraph AI to draft it. Generate when you're ready; edits you make afterwards belong to the canvas and can be saved with the sheet.",
   },
   {
     span: false,
-    title: "Made for print, not for slides",
-    body: "Black on white, 2px strokes, plain sans labels. A figure drops into a journal template without looking like it came from somewhere else.",
+    title: "Ready for the page",
+    body: "Formal black-on-white figures and consistent labels make a natural fit for a paper, thesis or report. Want something less formal? Switch inks and styles to give the same diagram a different feel.",
   },
   {
     span: false,
     title: "Layout you never manage",
-    body: "Ranking, spacing and orthogonal routing come from the layout engine. One control flips the whole drawing from top-down to left-right.",
+    body: "Ranking, spacing and connector routing come from the layout engine. Where the notation supports it, you can choose the direction the drawing reads.",
   },
   {
     span: true,
     title: "It stays editable after it generates",
-    body: "What comes back is a live canvas, not a flat picture. Drag a box, retype a caption, drop another shape from the palette, draw an arrow in the same stroke as the generated ones. Generation gets you 90% there; the last 10% is yours.",
+    body: "What comes back is a live canvas, not a flat picture. Drag a box, retype a caption, add another shape or draw a connector. Generation handles the first draft; the finishing touches are yours.",
   },
   {
     span: false,
@@ -51,14 +51,19 @@ const FEATURES = [
   {
     span: false,
     title: "Export exactly what the document needs",
-    body: "One dialog with the picture in it: PNG, JPG, SVG or PDF, at a scale you set or a pixel size you type, with the margin and the background decided before anything is written.",
+    body: "Preview the output before you download it. Choose format, scale, margins and background to suit the document; available export options depend on your plan.",
+  },
+  {
+    span: false,
+    title: "Ask Tingraph AI for a first draft",
+    body: "Describe what you need in plain language. Tingraph AI writes diagram source in the notation you chose; review the reply, then press Generate when you're ready.",
   },
 ];
 
 const FAQ = [
   {
     q: "Do I need an account?",
-    a: "No. There is no sign-up and no upload — the editor runs in your browser tab and the source never leaves it.",
+    a: "You can explore the editor without signing in. Create an account to save diagrams to your private library and keep working on them later.",
   },
   {
     q: "Can I still edit the drawing after it generates?",
@@ -66,19 +71,23 @@ const FAQ = [
   },
   {
     q: "Is the output good enough for a journal or a thesis?",
-    a: "It is drawn for that: black on white, even stroke weights, a formal sans for labels, and BPMN shapes that follow the BPMN 2.0 conventions. Export a PNG or a JPG at whatever scale the submission asks for, an SVG when the template takes vectors, or a one-page PDF.",
+    a: "Formal styling is the default: clean outlines, considered spacing and readable labels. Adjust the figure by hand, then export in the format and dimensions your paper, report or journal asks for. Other inks and styles are there when you want a less formal look.",
   },
   {
-    q: "How much of a language do I have to learn?",
-    a: "About five rules. Open a diagram with its keyword and a title, declare each element on its own line, then wire them with arrows. A cheat sheet for the active notation sits in the editor's side panel.",
+    q: "Do I have to write the source myself?",
+    a: "No. Start from a working example, use the syntax guide, or describe your idea to Tingraph AI. AI suggests source you can review before choosing to generate it.",
   },
   {
     q: "Which notations can it draw today?",
-    a: "Flowcharts, BPMN 2.0 with pools and lanes, org charts with role bands and sub-role units, and bar, line, pie and scatter charts. Every one of them is listed on the diagrams page, which is where new ones appear first.",
+    a: `There are ${READY_DIAGRAMS.length} notations today, from flowcharts, BPMN, UML and ERDs to charts, mind maps and more. Browse the full catalogue to choose one and open an editable example.`,
   },
   {
     q: "Where is my work saved?",
-    a: "Nowhere but the tab you are in. Export the drawing and keep the source next to your document before you close it.",
+    a: "Sign in and save to your private diagram library to return to your work later. Saved diagrams include edits you made directly on the canvas, not just the original source.",
+  },
+  {
+    q: "What does Premium include?",
+    a: "Premium gives you more saved diagrams, unlimited code-to-diagram generations and a larger Tingraph AI allowance, plus the full range of export options. It is a 30-day prepaid plan with no automatic renewal.",
   },
 ];
 
@@ -128,15 +137,15 @@ export default function Home() {
               </div>
 
               <h1 className="mx-auto mt-8 max-w-3xl text-center font-mono text-[1.75rem] font-semibold leading-[1.06] tracking-[-0.035em] text-ink sm:text-5xl lg:text-6xl">
-                Write the diagram.
+                Write it. Shape it.
                 <br />
-                Tingraph draws it.
+                Make it yours.
               </h1>
 
               <p className="mx-auto mt-6 max-w-[46ch] text-center text-[15px] leading-relaxed text-ink-soft sm:text-base">
-                A small language for flowcharts, BPMN 2.0, org charts, charts,
-                mind maps and more. Spacing, routing and geometry are worked out
-                for you, and every shape stays editable once it lands on the sheet.
+                Turn code or a prompt into a diagram you can actually edit.
+                Keep it crisp for a paper or report, or switch styles and make
+                something more playful. Your canvas, your call.
               </p>
             </div>
 
@@ -237,12 +246,11 @@ export default function Home() {
         <section id="features" className="scroll-mt-16 border-b-2 border-edge">
           <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
             <h2 className="max-w-2xl text-balance font-mono text-3xl font-semibold tracking-[-0.03em] text-ink sm:text-4xl">
-              Why write a diagram instead of drawing one
+              Code to diagram. Then go beyond the code.
             </h2>
             <p className="mt-3 max-w-[56ch] text-[14.5px] leading-relaxed text-ink-soft">
-              Dragging boxes is fine until the fifth revision. Source text
-              survives revisions, and so does everything you changed by hand
-              afterwards.
+              Start with a few lines or ask Tingraph AI for help. Let the
+              layout take shape, then refine the details on the canvas.
             </p>
 
             <div className="mt-10 grid gap-5 md:grid-cols-3 md:grid-flow-dense">
@@ -293,6 +301,9 @@ export default function Home() {
                 </Fragment>
               ))}
             </div>
+            <Link href="/features" className="mt-8 inline-flex items-center gap-2 font-mono text-[13px] font-semibold text-ink underline underline-offset-4 hover:text-navy">
+              Explore all features <ArrowRight size={15} aria-hidden="true" />
+            </Link>
           </div>
         </section>
 
@@ -370,8 +381,8 @@ export default function Home() {
                 The sheet is already open.
               </h2>
               <p className="mt-4 max-w-[46ch] text-[14.5px] leading-relaxed text-white/70">
-                No account, no install, nothing uploaded. Change a line of the
-                example and watch the drawing follow.
+                Open an example, ask Tingraph AI, or write your own source.
+                When it lands on the canvas, make every last detail yours.
               </p>
             </div>
 
