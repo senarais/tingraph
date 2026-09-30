@@ -1,5 +1,7 @@
 "use client";
 
+import { POLICY_VERSION } from "@/lib/legal";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -115,12 +117,16 @@ async function signIn(_: FormState, form: FormData): Promise<FormState & { role?
 async function signUp(_: FormState, form: FormData): Promise<FormState> {
   const name = text(form, "name");
   const email = text(form, "email");
+  if (form.get("legal_accepted") !== "true") {
+    return { error: "Read the policies and agree to the Terms before creating an account.", values: { name, email } };
+  }
   try {
     return await publicJSON<FormState>("/api/v1/auth/register", {
       name,
       email,
       password: secret(form, "password"),
       next: safeNext(form.get("next")),
+      legal_consent: { accepted: form.get("legal_accepted") === "true", version: text(form, "legal_version") },
     });
   } catch (cause) {
     return actionError(cause, { name, email });
@@ -207,7 +213,7 @@ function SignInForm({ next }: { next: string }) {
   );
 }
 
-function SignUpForm({ next }: { next: string }) {
+function SignUpForm({ next, accepted }: { next: string; accepted: boolean }) {
   const [state, action, pending] = useActionState(signUp, {});
   if (state.notice) {
     return <Message state={state} />;
@@ -215,6 +221,8 @@ function SignUpForm({ next }: { next: string }) {
   return (
     <form action={action} className="space-y-4">
       <input type="hidden" name="next" value={next} />
+      <input type="hidden" name="legal_accepted" value={String(accepted)} />
+      <input type="hidden" name="legal_version" value={POLICY_VERSION} />
       <Input
         label="Name"
         name="name"
@@ -241,7 +249,7 @@ function SignUpForm({ next }: { next: string }) {
         hint={`At least ${PASSWORD_MIN} characters.`}
       />
       <Message state={state} />
-      <SlabButton type="submit" tone="solid" disabled={pending} className="w-full">
+      <SlabButton type="submit" tone="solid" disabled={pending || !accepted} className="w-full">
         {pending ? "Creating account…" : "Create account"}
       </SlabButton>
     </form>
@@ -259,6 +267,7 @@ export function AuthForm({
   problem?: string;
 }) {
   const [mode, setMode] = useState(initial);
+  const [accepted, setAccepted] = useState(false);
   return (
     <div className="space-y-5">
       {problem && <Message state={{ error: problem }} />}
@@ -268,11 +277,14 @@ export function AuthForm({
           { value: "signup" as const, label: "Create account" },
         ]}
         value={mode}
-        onChange={setMode}
+        onChange={(value) => { setMode(value); setAccepted(false); }}
       />
+      {mode === "signup" && <fieldset className="border-2 border-edge bg-bone p-4"><legend className="px-1 font-mono text-[11px] font-semibold">Before creating an account</legend><div className="flex items-start gap-3"><input id="legal-consent" type="checkbox" checked={accepted} onChange={(event) => setAccepted(event.target.checked)} className="mt-1 size-4 shrink-0 accent-black" /><label htmlFor="legal-consent" className="text-[12px] leading-[1.8] text-ink-soft">I am 18 or older, agree to the <Link href="/terms" target="_blank" rel="noopener noreferrer" className="font-semibold underline underline-offset-4">Terms of Service</Link> (including <Link href="/billing-policy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Billing & Refunds</Link> and <Link href="/acceptable-use" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Acceptable Use</Link>), and have read the <Link href="/privacy" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Privacy</Link> and <Link href="/cookies" target="_blank" rel="noopener noreferrer" className="underline underline-offset-4">Cookie</Link> policies.</label></div><p className="mt-3 text-[10px] text-ink-soft">Policy version {POLICY_VERSION}. Agreement is recorded when your account is created.</p></fieldset>}
       <form action="/api/v1/auth/google/start" method="get">
         <input type="hidden" name="next" value={next} />
-        <SlabButton type="submit" className="w-full">
+        <input type="hidden" name="mode" value={mode} />
+        {mode === "signup" && <><input type="hidden" name="legal_accepted" value={String(accepted)} /><input type="hidden" name="legal_version" value={POLICY_VERSION} /></>}
+        <SlabButton type="submit" disabled={mode === "signup" && !accepted} className="w-full">
           <svg viewBox="0 0 24 24" className="h-3.5 w-3.5" fill="currentColor" aria-hidden="true">
             <path d={GOOGLE_MARK} />
           </svg>
@@ -285,7 +297,7 @@ export function AuthForm({
         <span className="h-0.5 flex-1 bg-edge" />
       </div>
       {/* keyed by the tab, so switching drops whatever the other form said */}
-      {mode === "signin" ? <SignInForm key="in" next={next} /> : <SignUpForm key="up" next={next} />}
+      {mode === "signin" ? <SignInForm key="in" next={next} /> : <SignUpForm key="up" next={next} accepted={accepted} />}
     </div>
   );
 }

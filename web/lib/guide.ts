@@ -631,7 +631,7 @@ const FIGURE_RULES = (keyword: string, body: string[]): string[] => [
   "Do not invent settings. Every one the language has is listed above.",
 ];
 
-const RULES: Record<DiagramCategory, string[]> = {
+export const RULES: Record<DiagramCategory, string[]> = {
   architecture: [
     'The file is one `architecture "Title" { ... }` block.',
     'Declare components with unique IDs. Optional `at x y` and `size width height` may follow the label in either order. `at` suggests a starting row or column; Generate may move it to leave space.',
@@ -736,7 +736,7 @@ export const KEYWORD: Record<DiagramCategory, string> = {
   fishbone: "fishbone",
 };
 
-const EXAMPLE: Record<DiagramCategory, string> = {
+export const EXAMPLE: Record<DiagramCategory, string> = {
   flow: FLOWCHART_TEMPLATE,
   bpmn: BPMN_TEMPLATE,
   org: ORG_TEMPLATE,

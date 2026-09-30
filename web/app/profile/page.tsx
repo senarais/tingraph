@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import {
   AvatarUpload,
@@ -101,7 +102,7 @@ export default async function ProfilePage({ searchParams }: PageProps<"/profile"
                 {planName(tier)}
               </span>
             </SectionHead>
-            <p className="p-5 text-[13px] text-ink-soft">30 days of Premium. One-time payment; no automatic renewal. <a href="/profile?view=usage" className="font-semibold text-blueprint underline">See usage →</a></p>
+            <p className="p-5 text-[13px] text-ink-soft">30 days of Premium. One-time payment; no automatic renewal. <Link href="/profile?view=usage" className="font-semibold text-blueprint underline">See usage →</Link></p>
             <PremiumCheckout active={tier === "premium"} until={usage.premium_until ?? null} />
           </section>}
 
@@ -115,9 +116,9 @@ export default async function ProfilePage({ searchParams }: PageProps<"/profile"
                 signs every current device out.
               </p>
               {user.providers.includes("email") && (
-                <a href="/forgot-password" className="slab-tight press mt-4 inline-block bg-white px-3 py-2 text-[12px] font-semibold text-ink">
+                <Link href="/forgot-password" className="slab-tight press mt-4 inline-block bg-white px-3 py-2 text-[12px] font-semibold text-ink">
                   Send password reset link
-                </a>
+                </Link>
               )}
             </div>
           </section>}

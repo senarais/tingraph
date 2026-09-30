@@ -5,6 +5,7 @@ BASE_URL=${BASE_URL:-http://localhost:8080}
 BASE_URL=${BASE_URL%/}
 ORIGIN=${APP_ORIGIN:-$BASE_URL}
 PASSWORD='Smoke-test-passphrase-2026!'
+POLICY_VERSION='2026-09-30'
 stamp="$(date +%s)-$$"
 email1="smoke-$stamp-a@example.test"
 email2="smoke-$stamp-b@example.test"
@@ -44,7 +45,7 @@ register() {
   status=$(curl -sS -o "$work/response" -w '%{http_code}' \
     -X POST "$BASE_URL/api/v1/auth/register" \
     -H "Origin: $ORIGIN" -H 'Content-Type: application/json' \
-    --data "{\"name\":\"Smoke Test\",\"email\":\"$email\",\"password\":\"$PASSWORD\"}")
+    --data "{\"name\":\"Smoke Test\",\"email\":\"$email\",\"password\":\"$PASSWORD\",\"legal_consent\":{\"accepted\":true,\"version\":\"$POLICY_VERSION\"}}")
   expect 202 "$status" "register $email"
 }
 
@@ -66,6 +67,15 @@ status=$(curl -sS -o "$work/response" -w '%{http_code}' \
   -X POST "$BASE_URL/api/v1/auth/register" -H 'Content-Type: application/json' --data '{}')
 expect 403 "$status" "missing Origin"
 
+status=$(curl -sS -o "$work/response" -w '%{http_code}' \
+  -X POST "$BASE_URL/api/v1/auth/register" -H "Origin: $ORIGIN" \
+  -H 'Content-Type: application/json' --data '{"email":"not-accepted@example.test"}')
+expect 400 "$status" "missing policy agreement"
+status=$(curl -sS -o "$work/response" -w '%{http_code}' \
+  -X POST "$BASE_URL/api/v1/auth/register" -H "Origin: $ORIGIN" \
+  -H 'Content-Type: application/json' --data '{"legal_consent":{"accepted":true,"version":"2020-01-01"}}')
+expect 400 "$status" "outdated policy agreement"
+
 register "$email1"
 register "$email2"
 register "$email1"
@@ -77,6 +87,10 @@ if [ -z "$db_container" ]; then
 fi
 docker exec "$db_container" psql -U tingraph_owner -d tingraph -v ON_ERROR_STOP=1 \
   -c "update auth.users set email_verified_at = now() where email in ('$email1', '$email2');" >/dev/null
+
+acceptances=$(docker exec "$db_container" psql -U tingraph_owner -d tingraph -At \
+  -c "select count(*) from auth.legal_acceptances a join auth.users u on u.id = a.user_id where u.email in ('$email1', '$email2') and a.policy_version = '$POLICY_VERSION' and a.method = 'email';")
+[ "$acceptances" = '2' ] || { printf 'policy acceptance was not recorded once per account\n' >&2; exit 1; }
 
 token_state=$(docker exec "$db_container" psql -U tingraph_owner -d tingraph -At \
   -c "select count(*) = 1 from auth.one_time_tokens t join auth.users u on u.id = t.user_id where u.email = '$email1' and t.purpose = 'verify_email' and t.used_at is null; select bool_and(position('#' in payload->>'link') > 0 and position('?token=' in payload->>'link') = 0) from ops.email_outbox where recipient in ('$email1', '$email2');")
@@ -201,4 +215,4 @@ gone=$(docker exec "$db_container" psql -U tingraph_owner -d tingraph -At \
   -c "select count(*) from ops.discount_codes where code = '$unused_code'")
 [ "$gone" = '0' ] || { printf 'unused code was not deleted\n' >&2; exit 1; }
 
-printf 'Smoke test passed: routing, auth, Origin, CSRF, ownership, and quota.\n'
+printf 'Smoke test passed: routing, auth, legal acceptance, Origin, CSRF, ownership, and quota.\n'

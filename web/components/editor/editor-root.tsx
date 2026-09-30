@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { OnMount } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
@@ -730,12 +731,12 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
       <div className="flex h-dvh items-center justify-center bg-bone px-4 font-mono">
         <div className="slab max-w-md bg-white p-6 text-center">
           <p className="text-[14px] text-alert">{seed.error}</p>
-          <a
+          <Link
             href="/build?view=mine"
             className="slab-tight press mt-5 inline-block bg-edge px-3 py-2 text-[12px] font-semibold text-bone"
           >
             Back to My diagrams
-          </a>
+          </Link>
         </div>
       </div>
     );

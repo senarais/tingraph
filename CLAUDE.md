@@ -717,6 +717,27 @@ export — already asks `isFigure()` and needs no change. If you find yourself
 editing the rail or the canvas to add a notation, the abstraction has slipped
 and that is the thing to fix.
 
+## Public documentation and policies
+
+`/docs` starts with an overview and task-oriented guides. `/docs/<notation>`
+documents every ready notation from `lib/diagrams.ts`; syntax tables, rules,
+working examples and copy prompts come directly from `lib/guide.ts`, the same
+source the editor and AI use. `lib/docs.ts` adds use cases and canvas guidance,
+not a second language reference. Keep a new notation's editorial entry there
+alongside its catalogue entry. Documentation uses a responsive sidebar and
+keeps the public drafting-sheet styling.
+
+`lib/legal.ts` holds the published Privacy, Terms, Billing & Refunds, Cookie,
+Acceptable Use and Security pages. Operator identity is currently the service
+name “Tingraph, Indonesia” and the existing support contacts, not an invented
+personal identity or address. Statements about data processing must stay aligned
+with the backend and provider terms. Do not equate Tingraph Premium with a paid
+Gemini API tier, promise AI confidentiality or waive mandatory consumer rights.
+US$5 is the undiscounted product price; valid discounts lower it. Checkout adds
+lawful purchaser-borne purchase taxes and configured processing charges, while
+the operator's statutory obligations remain its own. Footer diagram guides use
+five rows and fill additional columns horizontally.
+
 ## Accounts and saved diagrams belong to the Go API
 
 A reader can sign up, sign in with a password or Google, reset a forgotten
@@ -737,6 +758,15 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
   cookie, PKCE and nonce. A Google email that already belongs to another login
   method is not silently linked. The only callback is
   `/api/v1/auth/google/callback`.
+- **New accounts require explicit legal agreement.** The unchecked registration
+  checkbox gates email and Google signup. The API validates `legal_consent`
+  against `auth.PolicyVersion` and records version, time and method in
+  `auth.legal_acceptances` in the account transaction. Google binds the accepted
+  version to its server-side OAuth transaction and refuses to create a new
+  account without it; existing Google users can still sign in without signup
+  consent. Existing accounts are never silently marked as having agreed.
+  Update `auth.PolicyVersion`, `lib/legal.ts` and the smoke-test version together
+  when publishing a policy release; `scripts/site-check.ts` checks their agreement.
 - **PostgreSQL has two credentials.** Migrations run as `tingraph_owner`; the
   API runs as `tingraph_app`, which receives only explicit schema, table and
   function grants. Tables are split across `auth`, `app` and `ops`. Ownership
@@ -835,7 +865,7 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
 
 ## Checks
 
-From `web/`, `npm run self-check` runs three assert-based scripts under `tsx`:
+From `web/`, `npm run self-check` runs four assert-based scripts under `tsx`:
 `scripts/self-check.ts` (parser, layout, connector geometry, copies, the ERD's
 port pairing, and every figure's own geometry — a Venn region really falls
 inside the right rings, a fishbone's causes really meet their bone, a sequence
@@ -845,6 +875,10 @@ inspector, export, and the settable graphs: column edits, reading a caption
 back off the sheet, redrawing an element in place, widening a frame by a
 column). No test framework. Anything that can be answered without a browser
 should be asserted there rather than clicked through.
+
+`scripts/site-check.ts` verifies documentation coverage, every displayed
+example and copy prompt, unique policy/guide anchors and agreement-version
+consistency across frontend, backend and the smoke test.
 
 `editor-check.ts` also covers Tingraph AI without calling anything: the
 chatbot's briefing carries every syntax row of its notation, and every

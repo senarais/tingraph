@@ -59,7 +59,10 @@ func (service *Service) HashPassword(password string) (string, error) {
 	return service.password.Hash(password)
 }
 
-func (service *Service) Register(ctx context.Context, email, password, name, next string) error {
+func (service *Service) Register(ctx context.Context, email, password, name, next string, consent LegalConsent) error {
+	if err := consent.Validate(); err != nil {
+		return err
+	}
 	normalized, err := service.NormalizeEmail(email)
 	if err != nil {
 		return err
@@ -95,6 +98,9 @@ func (service *Service) Register(ctx context.Context, email, password, name, nex
 		if verified {
 			return tx.Commit(ctx)
 		}
+		if err := recordAcceptance(ctx, tx, userID, consent.Version, "email"); err != nil {
+			return err
+		}
 		if _, err := tx.Exec(ctx, `
 			insert into auth.password_credentials (user_id, password_hash)
 			values ($1, $2) on conflict (user_id) do nothing`, userID, hash,
@@ -126,6 +132,9 @@ func (service *Service) Register(ctx context.Context, email, password, name, nex
 		`insert into auth.password_credentials (user_id, password_hash) values ($1, $2)`,
 		userID, hash,
 	); err != nil {
+		return err
+	}
+	if err := recordAcceptance(ctx, tx, userID, consent.Version, "email"); err != nil {
 		return err
 	}
 	if strings.TrimSpace(name) != "" {

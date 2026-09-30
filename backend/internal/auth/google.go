@@ -46,7 +46,14 @@ func (service *Service) GoogleEnabled() bool {
 	return service.google != nil
 }
 
-func (service *Service) BeginGoogle(ctx context.Context, w http.ResponseWriter, next string) (string, error) {
+func (service *Service) BeginGoogle(ctx context.Context, w http.ResponseWriter, next string, consent LegalConsent) (string, error) {
+	var legalVersion *string
+	if consent.Accepted || consent.Version != "" {
+		if err := consent.Validate(); err != nil {
+			return "", err
+		}
+		legalVersion = &consent.Version
+	}
 	if service.google == nil {
 		return "", errors.New("google sign-in is not configured")
 	}
@@ -68,9 +75,9 @@ func (service *Service) BeginGoogle(ctx context.Context, w http.ResponseWriter, 
 	}
 	if _, err := service.db.Exec(ctx, `
 		insert into auth.oauth_transactions (
-		  state_hash, browser_hash, nonce, pkce_verifier, next_path, expires_at
-		) values ($1, $2, $3, $4, $5, now() + interval '10 minutes')`,
-		stateHash, browserHash, nonce, verifier, SafeNext(next),
+		  state_hash, browser_hash, nonce, pkce_verifier, next_path, expires_at, legal_version
+		) values ($1, $2, $3, $4, $5, now() + interval '10 minutes', $6)`,
+		stateHash, browserHash, nonce, verifier, SafeNext(next), legalVersion,
 	); err != nil {
 		return "", err
 	}
@@ -113,13 +120,14 @@ func (service *Service) FinishGoogle(
 	}
 	defer tx.Rollback(ctx)
 	var nonce, verifier, next string
+	var legalVersion *string
 	err = tx.QueryRow(ctx, `
-		select nonce, pkce_verifier, next_path
+		select nonce, pkce_verifier, next_path, legal_version
 		from auth.oauth_transactions
 		where state_hash = $1 and browser_hash = $2
 		  and used_at is null and expires_at > now()
 		for update`, TokenHash(state), TokenHash(browserCookie.Value),
-	).Scan(&nonce, &verifier, &next)
+	).Scan(&nonce, &verifier, &next, &legalVersion)
 	if err != nil {
 		return "", Session{}, "/", errors.New("invalid or expired oauth transaction")
 	}
@@ -184,6 +192,9 @@ func (service *Service) FinishGoogle(
 		if !errors.Is(existingErr, pgx.ErrNoRows) {
 			return "", Session{}, "/", existingErr
 		}
+		if legalVersion == nil || *legalVersion != PolicyVersion {
+			return "", Session{}, SafeNext(next), ErrConsentRequired
+		}
 		err = dbTx.QueryRow(ctx, `
 			insert into auth.users (email, email_verified_at)
 			values ($1, now()) returning id::text`, email,
@@ -199,6 +210,9 @@ func (service *Service) FinishGoogle(
 			insert into auth.oauth_accounts (user_id, provider, provider_subject, provider_email)
 			values ($1, 'google', $2, $3)`, userID, claims.Subject, email,
 		); err != nil {
+			return "", Session{}, "/", err
+		}
+		if err := recordAcceptance(ctx, dbTx, userID, *legalVersion, "google"); err != nil {
 			return "", Session{}, "/", err
 		}
 	} else if err != nil {

@@ -38,13 +38,18 @@ func (server *Handler) Session(w http.ResponseWriter, r *http.Request) {
 func (server *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
 	var input struct {
-		Name     string `json:"name"`
-		Email    string `json:"email"`
-		Password string `json:"password"`
-		Next     string `json:"next"`
+		Name     string            `json:"name"`
+		Email    string            `json:"email"`
+		Password string            `json:"password"`
+		Next     string            `json:"next"`
+		Consent  auth.LegalConsent `json:"legal_consent"`
 	}
 	if err := httpx.ReadJSON(w, r, &input); err != nil {
 		httpx.Problem(w, http.StatusBadRequest, "invalid registration details")
+		return
+	}
+	if err := input.Consent.Validate(); err != nil {
+		httpx.Problem(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if server.limited(r.Context(), "register_ip", server.clientIP(r), 10, time.Hour) {
@@ -57,7 +62,7 @@ func (server *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		httpx.Problem(w, http.StatusTooManyRequests, "too many registration attempts")
 		return
 	}
-	if err := server.auth.Register(r.Context(), input.Email, input.Password, input.Name, input.Next); err != nil {
+	if err := server.auth.Register(r.Context(), input.Email, input.Password, input.Name, input.Next, input.Consent); err != nil {
 		httpx.Problem(w, http.StatusBadRequest, err.Error())
 		return
 	}
@@ -189,11 +194,19 @@ func (server *Handler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 
 func (server *Handler) GoogleStart(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
+	query := r.URL.Query()
+	consent := auth.LegalConsent{Accepted: query.Get("legal_accepted") == "true", Version: query.Get("legal_version")}
+	if query.Get("mode") == "signup" || consent.Accepted || consent.Version != "" {
+		if err := consent.Validate(); err != nil {
+			http.Redirect(w, r, "/login?mode=signup&error=consent&next="+url.QueryEscape(auth.SafeNext(query.Get("next"))), http.StatusFound)
+			return
+		}
+	}
 	if server.limited(r.Context(), "google_start_ip", server.clientIP(r), 30, 10*time.Minute) {
 		http.Redirect(w, r, "/login?error=google", http.StatusFound)
 		return
 	}
-	destination, err := server.auth.BeginGoogle(r.Context(), w, r.URL.Query().Get("next"))
+	destination, err := server.auth.BeginGoogle(r.Context(), w, query.Get("next"), consent)
 	if err != nil {
 		server.log.Error("google sign-in start failed", "error", err)
 		http.Redirect(w, r, "/login?error=google", http.StatusFound)
@@ -211,6 +224,10 @@ func (server *Handler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		code := "google"
 		if errors.Is(err, auth.ErrOAuthLinkRequired) {
 			code = "google-link"
+		}
+		if errors.Is(err, auth.ErrConsentRequired) {
+			http.Redirect(w, r, "/login?mode=signup&error=consent&next="+url.QueryEscape(auth.SafeNext(next)), http.StatusFound)
+			return
 		}
 		http.Redirect(w, r, "/login?error="+url.QueryEscape(code), http.StatusFound)
 		return

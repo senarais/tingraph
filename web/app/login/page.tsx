@@ -13,6 +13,7 @@ export const metadata: Metadata = {
 
 /** What went wrong on the way back from a link, said in words rather than as a code. */
 const PROBLEMS = {
+  consent: "To create a new account, read the policies and agree to the Terms first. Then continue with Google or email.",
   link: "That link has expired or was already used. Sign in, or ask for a new one.",
   google: "Signing in with Google could not start. Try again in a moment.",
   "google-link": "An account already uses that email. Sign in with its existing method.",
