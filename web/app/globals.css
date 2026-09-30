@@ -213,18 +213,43 @@ textarea,
   box-shadow: 1px 1px 0 var(--edge);
 }
 
-/* Page entrances are subtle; scroll-linked panels stay visible where unsupported. */
+.premium-nav {
+  background: linear-gradient(115deg, #11110f 45%, #382a16 78%, #6b4d22);
+}
+
+.premium-hero {
+  background: radial-gradient(ellipse at top right, #71502755, transparent 65%), #11110f;
+}
+
+.premium-cta {
+  background: linear-gradient(110deg, #f8e2a1, #d9aa53 60%, #bb8339);
+}
+
+.premium-cta:hover {
+  background: linear-gradient(110deg, #fff2c8, #e8bc65 60%, #d9aa53);
+}
+
+body:has(.premium-dialog[open]) {
+  overflow: hidden;
+}
+
+/* Reveal once on scroll; content stays visible without JavaScript. */
 @media (prefers-reduced-motion: no-preference) {
   .site-enter {
     animation: site-enter 650ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
   }
 
-  @supports (animation-timeline: view()) {
-    .site-reveal {
-      animation: site-enter linear both;
-      animation-timeline: view();
-      animation-range: entry 0% entry 90%;
-    }
+  .site-reveal[data-revealed] {
+    transition: opacity 500ms ease, transform 500ms cubic-bezier(0.2, 0.8, 0.3, 1);
+  }
+
+  .site-reveal[data-revealed="false"]:not(:focus-within) {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  .premium-dialog[open] {
+    animation: site-enter 220ms cubic-bezier(0.2, 0.8, 0.3, 1) both;
   }
 }
 

@@ -803,6 +803,8 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
   new allowance. The profile shows exact reset instants in the reader's local
   time. Keep policy in migrations, not only in React.
 - **Premium is prepaid for 30 days, without automatic renewal.**
+  The public navbar's Go Premium button opens a benefits preview in a native
+  dialog; only its checkout CTAs lead to `/checkout`.
   `/checkout` selects GoPay, QRIS or PayPal and shows product, discount, estimated
   processing fee and final IDR charge. Credit/debit cards remain unavailable.
   `backend/internal/billing/` creates Midtrans Core API GoPay charges (the same

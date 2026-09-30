@@ -1,6 +1,7 @@
 import Link from "next/link";
 import Image from "next/image";
 import AccountButton from "@/components/account/account-button";
+import PremiumPreview from "@/components/site/premium-preview";
 import { READY_DIAGRAMS } from "@/lib/diagrams";
 
 const PAGES = [
@@ -40,17 +41,10 @@ export function SiteNav() {
         </div>
 
         <div className="ml-auto flex items-center gap-1.5 sm:gap-3">
-          <Link
-            href="/checkout"
-            className="slab-tight press flex min-h-10 items-center whitespace-nowrap bg-[#f1d483] px-2 font-mono text-[11px] font-semibold text-ink sm:px-3 sm:text-[12px]"
-          >
-            <span aria-hidden="true" className="mr-1.5 text-[15px] leading-none">✦</span>
-            <span className="sm:hidden">Premium</span>
-            <span className="hidden sm:inline">Go Premium</span>
-          </Link>
+          <PremiumPreview />
           <Link
             href="/editor"
-            className="slab-tight press flex min-h-10 items-center whitespace-nowrap bg-edge px-2 font-mono text-[12.5px] font-semibold text-bone sm:px-3"
+            className="slab-tight press flex min-h-10 items-center whitespace-nowrap bg-white px-2 font-mono text-[12.5px] font-semibold text-ink sm:px-3"
           >
             <span className="sm:hidden">Editor</span>
             <span className="hidden sm:inline">Open editor</span>
