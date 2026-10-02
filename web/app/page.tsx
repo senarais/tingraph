@@ -375,7 +375,7 @@ export default function Home() {
 
         {/* ------------------------------------------------------------- cta */}
         <section className="bg-edge">
-          <div className="mx-auto flex max-w-6xl flex-col items-start gap-8 px-4 py-16 sm:px-6 sm:py-20 lg:flex-row lg:items-center lg:justify-between">
+          <div className="mx-auto flex max-w-6xl flex-col items-start gap-8 px-4 py-24 sm:px-6 sm:py-32 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="max-w-[18ch] text-balance font-mono text-3xl font-semibold leading-[1.08] tracking-[-0.03em] text-bone sm:text-[2.75rem]">
                 The sheet is already open.

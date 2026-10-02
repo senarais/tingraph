@@ -735,7 +735,7 @@ with the backend and provider terms. Do not equate Tingraph Premium with a paid
 Gemini API tier, promise AI confidentiality or waive mandatory consumer rights.
 US$5 is the undiscounted product price; valid discounts lower it. Checkout adds
 lawful purchaser-borne purchase taxes and configured processing charges, while
-the operator's statutory obligations remain its own. Footer diagram guides use
+the operator's statutory obligations remain its own. Site-map diagram guides use
 five rows and fill additional columns horizontally.
 
 ## Accounts and saved diagrams belong to the Go API

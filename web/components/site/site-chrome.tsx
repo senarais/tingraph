@@ -2,7 +2,6 @@ import Link from "next/link";
 import Image from "next/image";
 import AccountButton from "@/components/account/account-button";
 import PremiumPreview from "@/components/site/premium-preview";
-import { READY_DIAGRAMS } from "@/lib/diagrams";
 import { POLICIES, SUPPORT_EMAIL, SUPPORT_PHONE } from "@/lib/legal";
 
 const PAGES = [
@@ -68,13 +67,8 @@ export function SiteFooter() {
   ];
 
   return (
-    <footer className="border-t-2 border-edge bg-bone">
-      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-12">
-        <div className="slab mb-12 flex flex-col gap-6 bg-edge p-6 text-white sm:p-8 md:flex-row md:items-center md:justify-between">
-          <div><h2 className="max-w-[25ch] font-mono text-2xl font-semibold tracking-[-0.04em] sm:text-3xl">Your next idea starts here.</h2><p className="mt-3 max-w-[55ch] text-[13px] leading-relaxed text-white/70">Working examples, complete syntax and a copy-ready AI prompt for every diagram. Find your starting point in the docs.</p></div>
-          <Link href="/docs/getting-started" className="press inline-flex min-h-12 shrink-0 items-center justify-center border-2 border-white bg-white px-5 font-mono text-[12px] font-semibold text-ink shadow-[4px_4px_0_#505050]">Start with the guide ↗</Link>
-        </div>
-
+    <footer className="mt-12 border-t-2 border-edge bg-white sm:mt-16">
+      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
         <div className="grid gap-10 lg:grid-cols-[1.1fr_2fr] lg:gap-16">
           <div>
             <Link href="/" className="inline-flex items-center gap-2 font-mono text-[17px] font-semibold text-ink"><Image src="/icon.png" alt="" width={1000} height={1000} sizes="32px" className="h-8 w-8 object-contain" />tingraph</Link>
@@ -82,13 +76,6 @@ export function SiteFooter() {
             <address className="mt-5 space-y-2 text-[12px] not-italic text-ink-soft"><a href={`mailto:${SUPPORT_EMAIL}`} className="block break-all underline underline-offset-4 hover:text-ink">{SUPPORT_EMAIL}</a><a href={`tel:${SUPPORT_PHONE.replace(/[^+\d]/g, "")}`} className="block underline underline-offset-4 hover:text-ink">{SUPPORT_PHONE}</a></address>
           </div>
           <div className="grid grid-cols-2 gap-x-6 gap-y-8 sm:grid-cols-3">{groups.map((group) => <nav key={group.title} aria-label={group.title}><h2 className="font-mono text-[12px] font-semibold">{group.title}</h2><ul className="mt-4 space-y-3">{group.links.map((link) => <li key={link.href}><Link href={link.href} className="text-[12px] text-ink-soft underline-offset-4 hover:text-ink hover:underline">{link.label}</Link></li>)}</ul></nav>)}</div>
-        </div>
-
-        <div className="mt-10 min-w-0 border-t border-edge/20 pt-7">
-          <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="font-mono text-[12px] font-semibold">Diagram guides</h2><p className="text-[11px] text-ink-soft sm:hidden">Scroll sideways for more →</p></div>
-          <nav aria-label="Diagram guides" tabIndex={0} className="mt-4 overflow-x-auto pb-3">
-            <ul className="grid grid-flow-col grid-rows-5 auto-cols-[minmax(145px,1fr)] gap-x-7 gap-y-3">{READY_DIAGRAMS.map((diagram) => <li key={diagram.id}><Link href={`/docs/${diagram.id}`} className="whitespace-nowrap text-[12px] text-ink-soft underline-offset-4 hover:text-ink hover:underline">{diagram.name}</Link></li>)}</ul>
-          </nav>
         </div>
       </div>
 
