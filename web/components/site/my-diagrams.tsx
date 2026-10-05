@@ -87,7 +87,7 @@ export default function MyDiagrams({ query }: { query: string }) {
         </p>
         {problem && <p className="mt-3 text-[12.5px] text-alert">{problem}</p>}
         <Link
-          href={`/login?next=${encodeURIComponent("/build?view=mine")}`}
+          href={`/login?next=${encodeURIComponent("/editor?view=mine")}`}
           className="slab-tight press mt-5 inline-block bg-edge px-4 py-2 font-mono text-[12.5px] font-semibold text-bone"
         >
           Sign in
@@ -127,7 +127,7 @@ export default function MyDiagrams({ query }: { query: string }) {
           </p>
           {diagrams.length === 0 && (
             <Link
-              href="/build?view=browse"
+              href="/editor?view=browse"
               className="mt-4 inline-block font-mono text-[12.5px] font-semibold text-ink underline underline-offset-4"
             >
               Browse notations

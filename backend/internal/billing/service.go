@@ -16,6 +16,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"tingraph/backend/internal/auth"
 	"tingraph/backend/internal/config"
 )
 
@@ -46,24 +47,36 @@ type Checkout struct {
 	URL string `json:"url"`
 }
 
+type CheckoutRequest struct {
+	Method                  string `json:"method"`
+	Amount                  int64  `json:"amount"`
+	Code                    string `json:"code"`
+	TimeZone                string `json:"time_zone"`
+	Provider                string `json:"provider"`
+	RenewalAmount           int64  `json:"renewal_amount"`
+	RecurringConsent        bool   `json:"recurring_consent"`
+	RecurringConsentVersion string `json:"recurring_consent_version"`
+}
+
 type Order struct {
-	ID         string     `json:"id"`
-	Provider   string     `json:"provider"`
-	Status     string     `json:"status"`
-	Currency   string     `json:"currency"`
-	Amount     int64      `json:"amount"`
-	ProviderID string     `json:"-"`
-	PaymentID  string     `json:"-"`
-	PaidAt     *time.Time `json:"paid_at,omitempty"`
-	UserID     string     `json:"-"`
-	Method     string     `json:"method"`
-	ExpiresAt  time.Time  `json:"expires_at"`
-	Deeplink   string     `json:"deeplink,omitempty"`
-	Discount   string     `json:"discount_code,omitempty"`
-	BaseCents  int64      `json:"base_cents"`
-	TaxCents   int64      `json:"tax_cents"`
-	Fee        int64      `json:"fee"`
-	IDRBase    int64      `json:"idr_base,omitempty"`
+	ID          string     `json:"id"`
+	Provider    string     `json:"provider"`
+	Status      string     `json:"status"`
+	Currency    string     `json:"currency"`
+	Amount      int64      `json:"amount"`
+	ProviderID  string     `json:"-"`
+	PaymentID   string     `json:"-"`
+	PaidAt      *time.Time `json:"paid_at,omitempty"`
+	UserID      string     `json:"-"`
+	Method      string     `json:"method"`
+	ExpiresAt   time.Time  `json:"expires_at"`
+	Deeplink    string     `json:"deeplink,omitempty"`
+	Discount    string     `json:"discount_code,omitempty"`
+	BaseCents   int64      `json:"base_cents"`
+	TaxCents    int64      `json:"tax_cents"`
+	Fee         int64      `json:"fee"`
+	IDRBase     int64      `json:"idr_base,omitempty"`
+	CheckoutURL string     `json:"checkout_url,omitempty"`
 }
 
 func New(db *pgxpool.Pool, cfg config.Billing, origin *url.URL) *Service {
@@ -81,6 +94,13 @@ func (service *Service) payPalEnabled() bool {
 	return service.cfg.PayPalClientID != "" && service.cfg.PayPalClientSecret != "" && service.cfg.PayPalWebhookID != ""
 }
 
+func (service *Service) cardEnabled() bool {
+	if service.cfg.CardPaymentProvider == "paypal" {
+		return service.payPalEnabled() && service.cfg.PayPalCardProductID != ""
+	}
+	return service.cfg.CardPaymentProvider == "midtrans" && service.midtransEnabled()
+}
+
 func (service *Service) ValidTimeZone(ctx context.Context, zone string) (bool, error) {
 	if len(zone) == 0 || len(zone) > 64 {
 		return false, nil
@@ -90,13 +110,20 @@ func (service *Service) ValidTimeZone(ctx context.Context, zone string) (bool, e
 	return valid, err
 }
 
-func (service *Service) Checkout(ctx context.Context, userID, method string, quotedAmount int64, code, timeZone string) (Checkout, error) {
+func (service *Service) Checkout(ctx context.Context, userID string, input CheckoutRequest) (Checkout, error) {
+	method, quotedAmount, code, timeZone := input.Method, input.Amount, input.Code, input.TimeZone
 	price, err := service.Price(ctx, method, code)
 	if err != nil {
 		return Checkout{}, err
 	}
 	if quotedAmount != price.Amount {
 		return Checkout{}, ErrPriceChanged
+	}
+	if method == "card" && (input.Provider != price.Provider || input.RenewalAmount != price.RenewalAmount) {
+		return Checkout{}, ErrPriceChanged
+	}
+	if price.Recurring && (!input.RecurringConsent || input.RecurringConsentVersion != auth.PolicyVersion) {
+		return Checkout{}, ErrRecurringConsent
 	}
 	valid, err := service.ValidTimeZone(ctx, timeZone)
 	if err != nil {
@@ -105,10 +132,7 @@ func (service *Service) Checkout(ctx context.Context, userID, method string, quo
 	if !valid {
 		return Checkout{}, ErrTimeZone
 	}
-	provider := "midtrans"
-	if method == "paypal" {
-		provider = "paypal"
-	}
+	provider := price.Provider
 	var id string
 	err = service.db.QueryRow(ctx, `
 		insert into ops.payment_orders (user_id, provider, currency, amount, rate_date, method, base_cents, tax_cents, fee, idr_base, time_zone)
@@ -130,8 +154,12 @@ func (service *Service) Checkout(ctx context.Context, userID, method string, quo
 			return Checkout{}, ErrDiscount
 		}
 	}
-	var providerID, checkoutURL, deeplink string
-	if provider == "midtrans" {
+	var providerID, checkoutURL, deeplink, snapToken string
+	if price.Recurring {
+		providerID, checkoutURL, err = service.createCardSubscription(ctx, id, userID, price)
+	} else if method == "card" {
+		providerID, checkoutURL, snapToken, err = service.createMidtransCard(ctx, id, price.Amount)
+	} else if provider == "midtrans" {
 		providerID, checkoutURL, deeplink, err = service.createMidtrans(ctx, id, price.Amount)
 	} else {
 		providerID, checkoutURL, err = service.createPayPal(ctx, id, price.Amount)
@@ -141,10 +169,10 @@ func (service *Service) Checkout(ctx context.Context, userID, method string, quo
 		return Checkout{}, err
 	}
 	if _, err := service.db.Exec(ctx, `update ops.payment_orders
-		set provider_id = $2, checkout_url = $3, deeplink_url = $4 where id = $1`, id, providerID, checkoutURL, deeplink); err != nil {
+		set provider_id = $2, checkout_url = $3, deeplink_url = $4, snap_token = nullif($5, '') where id = $1`, id, providerID, checkoutURL, deeplink, snapToken); err != nil {
 		return Checkout{}, fmt.Errorf("save payment order: %w", err)
 	}
-	if provider == "midtrans" {
+	if provider == "midtrans" && method != "card" {
 		checkoutURL = "/checkout?order=" + id
 	}
 	return Checkout{ID: id, URL: checkoutURL}, nil
@@ -157,11 +185,11 @@ func (service *Service) Order(ctx context.Context, id, userID string) (Order, er
 	var order Order
 	err := service.db.QueryRow(ctx, `select id::text, user_id::text, provider, status,
 		currency, amount, coalesce(provider_id, ''), coalesce(payment_id, ''), paid_at,
-		method, expires_at, coalesce(deeplink_url, ''), coalesce(discount_code, ''), base_cents, tax_cents, fee, coalesce(idr_base, 0)
+		method, expires_at, coalesce(deeplink_url, ''), coalesce(discount_code, ''), base_cents, tax_cents, fee, coalesce(idr_base, 0), coalesce(checkout_url, '')
 		from ops.payment_orders where id = $1 and user_id = $2`, id, userID,
 	).Scan(&order.ID, &order.UserID, &order.Provider, &order.Status, &order.Currency,
 		&order.Amount, &order.ProviderID, &order.PaymentID, &order.PaidAt,
-		&order.Method, &order.ExpiresAt, &order.Deeplink, &order.Discount, &order.BaseCents, &order.TaxCents, &order.Fee, &order.IDRBase)
+		&order.Method, &order.ExpiresAt, &order.Deeplink, &order.Discount, &order.BaseCents, &order.TaxCents, &order.Fee, &order.IDRBase, &order.CheckoutURL)
 	return order, err
 }
 
@@ -200,6 +228,7 @@ func (service *Service) RunExpiry(ctx context.Context) {
 				slog.Warn("payment expiry verification failed", "order", id, "error", err)
 			}
 		}
+		service.reconcileSubscriptions(ctx)
 		select {
 		case <-ctx.Done():
 			return
@@ -214,7 +243,13 @@ func (service *Service) expireOne(ctx context.Context, id string) error {
 		return err
 	}
 	if order.Provider == "midtrans" {
+		if order.Method == "card" {
+			return service.expireMidtransCard(ctx, order)
+		}
 		return service.confirmMidtrans(ctx, order)
+	}
+	if order.Method == "card" {
+		return service.expireSubscription(ctx, id)
 	}
 	// A PayPal capture started just before the deadline can still be in flight.
 	// Allow its bounded provider request to complete before freeing its code.

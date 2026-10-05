@@ -155,6 +155,9 @@ func (service *Service) CapturePayPal(ctx context.Context, id, userID, token str
 	if order.Provider != "paypal" || order.ProviderID == "" || order.ProviderID != token {
 		return errors.New("PayPal order does not belong to this account")
 	}
+	if order.Method == "card" {
+		return errors.New("subscriptions are confirmed through their transactions, not order capture")
+	}
 	if order.Status == "paid" {
 		return nil
 	}
@@ -216,6 +219,9 @@ func (service *Service) HandlePayPal(ctx context.Context, headers http.Header, b
 	}
 	if verified.Status != "SUCCESS" {
 		return ErrInvalidWebhook
+	}
+	if strings.HasPrefix(event.EventType, "BILLING.SUBSCRIPTION.") || strings.HasPrefix(event.EventType, "PAYMENT.SALE.") {
+		return service.handleSubscriptionEvent(ctx, event.EventType, event.Resource)
 	}
 	if event.EventType != "PAYMENT.CAPTURE.COMPLETED" && event.EventType != "PAYMENT.CAPTURE.REFUNDED" && event.EventType != "PAYMENT.CAPTURE.REVERSED" {
 		return nil

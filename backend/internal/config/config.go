@@ -33,18 +33,22 @@ type Config struct {
 }
 
 type Billing struct {
-	MidtransServerKey  string
-	MidtransMode       string
-	PayPalClientID     string
-	PayPalClientSecret string
-	PayPalWebhookID    string
-	PayPalMode         string
-	FXBaseURL          string
-	GoPayFeeBPS        int
-	QRISFeeBPS         int
-	PayPalFeeBPS       int
-	PayPalFixedCents   int
-	ProductTaxBPS      int
+	CardPaymentProvider string
+	PayPalCardProductID string
+	CardFeeBPS          int
+	CardFixedIDR        int
+	MidtransServerKey   string
+	MidtransMode        string
+	PayPalClientID      string
+	PayPalClientSecret  string
+	PayPalWebhookID     string
+	PayPalMode          string
+	FXBaseURL           string
+	GoPayFeeBPS         int
+	QRISFeeBPS          int
+	PayPalFeeBPS        int
+	PayPalFixedCents    int
+	ProductTaxBPS       int
 }
 
 type SMTP struct {
@@ -134,13 +138,18 @@ func Load() (Config, error) {
 			TLSMode:  value("SMTP_TLS_MODE", "starttls"),
 		},
 		Billing: Billing{
-			MidtransServerKey: midtransKey,
-			MidtransMode:      value("MIDTRANS_MODE", "sandbox"),
-			PayPalClientID:    value("PAYPAL_CLIENT_ID", ""), PayPalClientSecret: payPalSecret,
+			CardPaymentProvider: value("CARD_PAYMENT_PROVIDER", "midtrans"),
+			PayPalCardProductID: value("PAYPAL_CARD_PRODUCT_ID", ""),
+			MidtransServerKey:   midtransKey,
+			MidtransMode:        value("MIDTRANS_MODE", "sandbox"),
+			PayPalClientID:      value("PAYPAL_CLIENT_ID", ""), PayPalClientSecret: payPalSecret,
 			PayPalWebhookID: value("PAYPAL_WEBHOOK_ID", ""),
 			PayPalMode:      value("PAYPAL_MODE", "sandbox"),
 			FXBaseURL:       value("FX_BASE_URL", "https://api.frankfurter.dev"),
 		},
+	}
+	if cfg.Billing.CardPaymentProvider != "midtrans" && cfg.Billing.CardPaymentProvider != "paypal" {
+		return Config{}, errors.New("CARD_PAYMENT_PROVIDER must be midtrans or paypal")
 	}
 	for _, fee := range []struct {
 		name     string
@@ -151,11 +160,17 @@ func Load() (Config, error) {
 		{"QRIS_FEE_BPS", 78, &cfg.Billing.QRISFeeBPS},
 		{"PAYPAL_FEE_BPS", 499, &cfg.Billing.PayPalFeeBPS},
 		{"PAYPAL_FIXED_CENTS", 49, &cfg.Billing.PayPalFixedCents},
+		{"MIDTRANS_CARD_FEE_BPS", 290, &cfg.Billing.CardFeeBPS},
+		{"MIDTRANS_CARD_FIXED_IDR", 2000, &cfg.Billing.CardFixedIDR},
 		{"PRODUCT_TAX_BPS", 0, &cfg.Billing.ProductTaxBPS},
 	} {
 		*fee.target, err = integer(fee.name, fee.fallback)
-		if err != nil || *fee.target < 0 || *fee.target >= 5000 {
-			return Config{}, fmt.Errorf("%s must be between 0 and 4999", fee.name)
+		max := 4999
+		if fee.name == "MIDTRANS_CARD_FIXED_IDR" {
+			max = 1000000
+		}
+		if err != nil || *fee.target < 0 || *fee.target > max {
+			return Config{}, fmt.Errorf("%s must be between 0 and %d", fee.name, max)
 		}
 	}
 	cfg.GeminiAPIKey, err = secret("GEMINI_API_KEY")

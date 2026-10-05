@@ -49,7 +49,7 @@ export default function AboutPage() {
             </div>
             <div>
               <h2 className="font-mono text-2xl font-semibold tracking-tight">Clear about the service.</h2>
-              <p className="mt-4 text-[14px] leading-[1.85] text-ink-soft">Start on the Free plan and purchase prepaid Premium when you need larger allowances. No automatic renewal. Read the docs for the product&apos;s behavior and the policies for how accounts, AI, data and payments work.</p>
+              <p className="mt-4 text-[14px] leading-[1.85] text-ink-soft">Start on the Free plan and purchase Premium when you need larger allowances. Choose one-time payment or explicitly authorized PayPal card renewal at checkout, when available. Read the docs for the product&apos;s behavior and the policies for how accounts, AI, data and payments work.</p>
               <div className="mt-5 flex flex-wrap gap-5 text-[13px] font-semibold"><Link href="/support" className="underline underline-offset-4">Talk to support</Link><Link href="/privacy" className="underline underline-offset-4">Privacy Policy</Link><Link href="/billing-policy" className="underline underline-offset-4">Billing & Refunds</Link></div>
             </div>
           </div>

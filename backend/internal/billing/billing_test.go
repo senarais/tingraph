@@ -34,7 +34,7 @@ func TestPricesAndCheckoutHosts(t *testing.T) {
 	if err != nil || quote.IDR != 89220 {
 		t.Fatalf("unexpected daily quote: %+v, %v", quote, err)
 	}
-	if _, err := service.Checkout(context.Background(), "user-123", "gopay", 1, "", "UTC"); !errors.Is(err, ErrPriceChanged) {
+	if _, err := service.Checkout(context.Background(), "user-123", CheckoutRequest{Method: "gopay", Amount: 1, TimeZone: "UTC"}); !errors.Is(err, ErrPriceChanged) {
 		t.Fatal("checkout accepted a price different from what the buyer saw")
 	}
 	// A stale rate must fail closed; it must not silently charge an outdated IDR price.

@@ -87,7 +87,7 @@ const FAQ = [
   },
   {
     q: "What does Premium include?",
-    a: "Premium gives you more saved diagrams, unlimited code-to-diagram generations and a larger Tingraph AI allowance, plus the full range of export options. It is a 30-day prepaid plan with no automatic renewal.",
+    a: "Premium gives you more saved diagrams, unlimited code-to-diagram generations and a larger Tingraph AI allowance, plus the full range of export options. Each paid period lasts 30 days. Checkout offers one-time methods or PayPal card auto-renewal when available; renewal requires explicit authorization and can be stopped from your profile.",
   },
 ];
 
@@ -128,7 +128,7 @@ export default function Home() {
                   {READY_DIAGRAMS.length} notations ready, more on the way
                 </span>
                 <Link
-                  href="/build"
+                  href="/editor"
                   className="flex items-center gap-1.5 bg-edge px-2.5 py-1.5 font-mono text-[12px] font-semibold text-bone transition-colors hover:bg-navy"
                 >
                   See them
@@ -184,7 +184,7 @@ export default function Home() {
                 </p>
               </div>
               <Link
-                href="/build"
+                href="/editor"
                 className="slab-tight press flex items-center gap-2 bg-white px-4 py-2.5 text-[13px] font-medium text-ink"
               >
                 All diagrams
@@ -232,7 +232,7 @@ export default function Home() {
 
             {READY_DIAGRAMS.length > FEATURED_DIAGRAMS.length && (
               <Link
-                href="/build"
+                href="/editor"
                 className="slab-tight press mt-6 flex items-center justify-center gap-2 bg-white px-4 py-3.5 text-[13.5px] font-medium text-ink"
               >
                 Browse all {READY_DIAGRAMS.length} notations, searchable
@@ -391,12 +391,6 @@ export default function Home() {
                 href="/editor"
                 className="press border-2 border-bone bg-bone px-6 py-3.5 font-mono text-[14px] font-semibold text-ink"
                 style={{ boxShadow: "5px 5px 0 #4b4b4b" }}
-              >
-                Open the editor
-              </Link>
-              <Link
-                href="/build"
-                className="border-2 border-white/40 px-6 py-3.5 font-mono text-[14px] font-semibold text-bone transition-colors hover:border-bone"
               >
                 Browse diagrams
               </Link>

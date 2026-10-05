@@ -56,10 +56,7 @@ export default function FeaturesPage() {
               </p>
               <div className="mt-9 flex flex-wrap gap-3">
                 <Link href="/editor" className="slab-tight press inline-flex min-h-12 items-center gap-2 bg-edge px-5 font-mono text-[13px] font-semibold text-bone">
-                  Open the editor <ArrowUpRight size={16} aria-hidden="true" />
-                </Link>
-                <Link href="/build" className="slab-tight press inline-flex min-h-12 items-center gap-2 bg-white px-5 font-mono text-[13px] font-semibold text-ink">
-                  Explore diagrams <ArrowRight size={16} aria-hidden="true" />
+                  Browse diagrams <ArrowUpRight size={16} aria-hidden="true" />
                 </Link>
               </div>
             </div>
@@ -145,7 +142,7 @@ export default function FeaturesPage() {
 
         <section className="border-b-2 border-edge bg-white">
           <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6 sm:py-20">
-            <div className="site-reveal flex flex-wrap items-end justify-between gap-5"><div><h2 className="font-mono text-3xl font-semibold tracking-[-0.04em] sm:text-5xl">A notation for the job.</h2><p className="mt-4 max-w-[60ch] text-[14px] leading-relaxed text-ink-soft">From workflows and systems to data and ideas. Every one starts with a working example.</p></div><Link href="/build" className="slab-tight press inline-flex items-center gap-2 bg-white px-4 py-3 font-mono text-[12px] font-semibold">Browse all {READY_DIAGRAMS.length} <ArrowRight size={15} aria-hidden="true" /></Link></div>
+            <div className="site-reveal flex flex-wrap items-end justify-between gap-5"><div><h2 className="font-mono text-3xl font-semibold tracking-[-0.04em] sm:text-5xl">A notation for the job.</h2><p className="mt-4 max-w-[60ch] text-[14px] leading-relaxed text-ink-soft">From workflows and systems to data and ideas. Every one starts with a working example.</p></div><Link href="/editor" className="slab-tight press inline-flex items-center gap-2 bg-white px-4 py-3 font-mono text-[12px] font-semibold">Browse all {READY_DIAGRAMS.length} <ArrowRight size={15} aria-hidden="true" /></Link></div>
             <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
               {FAMILIES.map((family, index) => {
                 const diagrams = READY_DIAGRAMS.filter((diagram) => diagram.family === family);
@@ -155,7 +152,7 @@ export default function FeaturesPage() {
           </div>
         </section>
 
-        <section className="bg-edge text-bone"><div className="site-reveal mx-auto flex max-w-6xl flex-col gap-8 px-4 py-16 sm:px-6 sm:py-20 md:flex-row md:items-center md:justify-between"><div><Sparkles size={24} className="text-[#f1d483]" aria-hidden="true" /><h2 className="mt-5 max-w-[19ch] font-mono text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-4xl">Make the first draft. Own the final one.</h2><p className="mt-4 text-[14px] text-white/70">Start free. Go Premium when you need more room to make and save.</p></div><div className="flex flex-wrap gap-3"><Link href="/editor" className="press border-2 border-bone bg-bone px-5 py-3 font-mono text-[13px] font-semibold text-ink shadow-[5px_5px_0_#505050]">Open editor ↗</Link><Link href="/checkout" className="border-2 border-[#f1d483] px-5 py-3 font-mono text-[13px] font-semibold text-[#f1d483] hover:bg-[#f1d483] hover:text-ink">Go Premium →</Link></div></div></section>
+        <section className="bg-edge text-bone"><div className="site-reveal mx-auto flex max-w-6xl flex-col gap-8 px-4 py-16 sm:px-6 sm:py-20 md:flex-row md:items-center md:justify-between"><div><Sparkles size={24} className="text-[#f1d483]" aria-hidden="true" /><h2 className="mt-5 max-w-[19ch] font-mono text-3xl font-semibold leading-tight tracking-[-0.04em] sm:text-4xl">Make the first draft. Own the final one.</h2><p className="mt-4 text-[14px] text-white/70">Start free. Go Premium when you need more room to make and save.</p></div><div className="flex flex-wrap gap-3"><Link href="/editor" className="press border-2 border-bone bg-bone px-5 py-3 font-mono text-[13px] font-semibold text-ink shadow-[5px_5px_0_#505050]">Browse diagrams ↗</Link><Link href="/checkout" className="border-2 border-[#f1d483] px-5 py-3 font-mono text-[13px] font-semibold text-[#f1d483] hover:bg-[#f1d483] hover:text-ink">Go Premium →</Link></div></div></section>
         </ScrollReveal>
       </main>
       <SiteFooter />

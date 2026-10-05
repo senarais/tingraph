@@ -9,7 +9,7 @@ export const metadata: Metadata = { title: "Site map | Tingraph", description: "
 
 export default function SiteMapPage() {
   const groups = [
-    { title: "Product & support", links: [{ href: "/", title: "Home" }, { href: "/features", title: "Features" }, { href: "/build", title: "Diagram library" }, { href: "/editor", title: "Editor" }, { href: "/about", title: "About" }, { href: "/support", title: "Support & contact" }] },
+    { title: "Product & support", links: [{ href: "/", title: "Home" }, { href: "/features", title: "Features" }, { href: "/editor", title: "Browse diagrams" }, { href: "/about", title: "About" }, { href: "/support", title: "Support & contact" }] },
     { title: "Documentation", links: DOC_GUIDES.map((guide) => ({ href: docHref(guide.slug), title: guide.title })) },
     { title: "Account & plans", links: [{ href: "/login", title: "Sign in" }, { href: "/login?mode=signup", title: "Create account" }, { href: "/forgot-password", title: "Reset a password" }, { href: "/profile", title: "Your profile" }, { href: "/#pricing", title: "Plans & pricing" }, { href: "/checkout", title: "Premium checkout" }] },
     { title: "Policies & security", links: POLICIES.map((policy) => ({ href: `/${policy.slug}`, title: policy.title })) },

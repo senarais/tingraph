@@ -17,7 +17,7 @@ import (
 func (server *Handler) BillingQuote(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
 	if method := r.URL.Query().Get("method"); method != "" {
-		if method != "paypal" && method != "gopay" && method != "qris" {
+		if method != "paypal" && method != "gopay" && method != "qris" && method != "card" {
 			httpx.Problem(w, 400, "invalid payment method")
 			return
 		}
@@ -47,20 +47,18 @@ func (server *Handler) BillingQuote(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		server.log.Warn("IDR exchange rate unavailable", "error", err)
 		quote.Midtrans = false
+		if quote.CardProvider == "midtrans" {
+			quote.Card = false
+		}
 	}
 	httpx.JSON(w, http.StatusOK, quote)
 }
 
 func (server *Handler) BillingCheckout(w http.ResponseWriter, r *http.Request) {
 	httpx.NoStore(w)
-	var input struct {
-		Method   string `json:"method"`
-		Amount   int64  `json:"amount"`
-		Code     string `json:"code"`
-		TimeZone string `json:"time_zone"`
-	}
-	if err := httpx.ReadJSON(w, r, &input); err != nil || input.Method != "gopay" && input.Method != "qris" && input.Method != "paypal" || len(input.Code) > 32 {
-		httpx.Problem(w, http.StatusBadRequest, "choose GoPay, QRIS or PayPal")
+	var input billing.CheckoutRequest
+	if err := httpx.ReadJSON(w, r, &input); err != nil || input.Method != "gopay" && input.Method != "qris" && input.Method != "paypal" && input.Method != "card" || len(input.Code) > 32 {
+		httpx.Problem(w, http.StatusBadRequest, "choose GoPay, QRIS, PayPal or card")
 		return
 	}
 	session := currentSession(r)
@@ -68,8 +66,17 @@ func (server *Handler) BillingCheckout(w http.ResponseWriter, r *http.Request) {
 		httpx.Problem(w, http.StatusTooManyRequests, "too many checkout attempts")
 		return
 	}
-	order, err := server.billing.Checkout(r.Context(), session.User.ID, input.Method, input.Amount, strings.ToUpper(strings.TrimSpace(input.Code)), input.TimeZone)
+	input.Code = strings.ToUpper(strings.TrimSpace(input.Code))
+	order, err := server.billing.Checkout(r.Context(), session.User.ID, input)
 	if err != nil {
+		if errors.Is(err, billing.ErrRecurringConsent) {
+			httpx.Problem(w, http.StatusBadRequest, "confirm automatic renewal before subscribing")
+			return
+		}
+		if errors.Is(err, billing.ErrSubscriptionExists) {
+			httpx.Problem(w, http.StatusConflict, "you already have a subscription; manage it from your profile")
+			return
+		}
 		if errors.Is(err, billing.ErrPriceChanged) {
 			httpx.Problem(w, http.StatusConflict, "price changed; refresh your checkout")
 			return
@@ -144,9 +151,34 @@ func (server *Handler) BillingSync(w http.ResponseWriter, r *http.Request) {
 		httpx.Problem(w, http.StatusTooManyRequests, "too many payment status checks")
 		return
 	}
-	if err := server.billing.SyncMidtrans(r.Context(), r.PathValue("id"), userID); err != nil {
+	if err := server.billing.SyncPayment(r.Context(), r.PathValue("id"), userID); err != nil {
 		server.log.Warn("Midtrans status check failed", "error", err)
 		httpx.Problem(w, http.StatusBadGateway, "payment status could not be checked yet")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (server *Handler) BillingSubscriptions(w http.ResponseWriter, r *http.Request) {
+	httpx.NoStore(w)
+	items, err := server.billing.Subscriptions(r.Context(), currentSession(r).User.ID)
+	if err != nil {
+		httpx.Problem(w, http.StatusServiceUnavailable, "subscriptions unavailable")
+		return
+	}
+	httpx.JSON(w, http.StatusOK, items)
+}
+
+func (server *Handler) BillingCancelSubscription(w http.ResponseWriter, r *http.Request) {
+	httpx.NoStore(w)
+	userID := currentSession(r).User.ID
+	if server.limited(r.Context(), "subscription_cancel_user", userID, 10, time.Hour) {
+		httpx.Problem(w, http.StatusTooManyRequests, "too many subscription changes")
+		return
+	}
+	if err := server.billing.CancelSubscription(r.Context(), r.PathValue("id"), userID); err != nil {
+		server.log.Warn("subscription cancellation failed", "error", err)
+		httpx.Problem(w, http.StatusBadGateway, "renewal could not be stopped yet; please retry")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -3,6 +3,9 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  async redirects() {
+    return [{ source: "/build", destination: "/editor", permanent: true }];
+  },
   async rewrites() {
     const backend = process.env.BACKEND_INTERNAL_URL?.replace(/\/$/, "");
     if (!backend) {

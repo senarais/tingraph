@@ -119,7 +119,7 @@ export default function Pricing() {
         </div>
 
         <p className="mt-8 text-center font-mono text-[11px] text-ink-soft">
-          Premium is a one-time payment for 30 days, plus applicable taxes and processing. No automatic renewal.
+          $5 per 30-day period, plus applicable taxes and processing. Choose one-time payment or PayPal card auto-renewal at checkout, when available.
         </p>
       </div>
     </section>

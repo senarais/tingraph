@@ -11,7 +11,7 @@ export default function PremiumCheckout({ active, until }: { active: boolean; un
     <div className="space-y-3 border-t-2 border-edge p-5">
       <p className="text-[13px] font-semibold text-ink">{active ? "Extend Premium" : "Get Premium"} · $5 for 30 days</p>
       {active && until && <p className="text-[12px] text-ink-soft">Active through {new Date(new Date(until).getTime() - 1000).toLocaleDateString()} · 24:00 local time. A new payment adds 30 days.</p>}
-      <p className="text-[12px] text-ink-soft">One-time payment. No automatic renewal.</p>
+      <p className="text-[12px] text-ink-soft">Choose a one-time method or PayPal card auto-renewal at checkout, when available. Manage existing renewal above.</p>
       <Link href="/checkout" className="slab-tight press inline-block bg-edge px-4 py-2.5 font-mono text-[12px] font-semibold text-bone">Continue to checkout →</Link>
     </div>
   );

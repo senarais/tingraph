@@ -3,7 +3,7 @@ import { ARCHITECTURE_TEMPLATES } from "@/lib/templates";
 
 /**
  * The notations the site offers, and the ones it has promised. The landing page
- * shows the ready ones, the catalogue at /build shows every entry, and the hero
+ * shows the ready ones, the catalogue at /editor shows every entry, and the hero
  * demo types the samples out. One list so the three can never disagree.
  *
  * Every `sample` is real source: `npm run self-check` parses each of them.

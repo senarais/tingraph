@@ -122,7 +122,7 @@ export default function EditorShell({
               </Link>
             )}
             <Link
-              href="/build?view=mine"
+              href="/editor?view=mine"
               className="slab-tight press bg-white px-3 py-2 text-[12px] font-semibold text-ink"
             >
               My diagrams

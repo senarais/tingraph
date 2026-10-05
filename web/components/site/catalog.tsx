@@ -178,7 +178,7 @@ export default function Catalog() {
           </h2>
           <nav aria-label="Diagram library" className="grid grid-cols-2 gap-1 p-2 lg:block">
             <Link
-              href="/build?view=mine"
+              href="/editor?view=mine"
               aria-current={view === "mine" ? "page" : undefined}
               className={`flex items-center gap-2.5 border-2 px-3 py-2.5 font-mono text-[12.5px] font-semibold transition-colors ${
                 view === "mine"
@@ -190,7 +190,7 @@ export default function Catalog() {
               My diagrams
             </Link>
             <Link
-              href="/build?view=browse"
+              href="/editor?view=browse"
               aria-current={view === "browse" ? "page" : undefined}
               className={`flex items-center gap-2.5 border-2 px-2 py-2.5 font-mono text-[12.5px] font-semibold transition-colors lg:mt-1 lg:px-3 ${
                 view === "browse"

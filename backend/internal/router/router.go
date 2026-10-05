@@ -59,6 +59,8 @@ func Setup(h *handler.Handler, authService *auth.Service, origin *url.URL, logge
 	mux.Handle("GET /api/v1/billing/orders/{id}/qr", protected(h.BillingQR))
 	mux.Handle("POST /api/v1/billing/orders/{id}/capture", protected(h.BillingCapture))
 	mux.Handle("POST /api/v1/billing/orders/{id}/sync", protected(h.BillingSync))
+	mux.Handle("GET /api/v1/billing/subscriptions", protected(h.BillingSubscriptions))
+	mux.Handle("POST /api/v1/billing/subscriptions/{id}/cancel", protected(h.BillingCancelSubscription))
 	mux.HandleFunc("POST /api/v1/billing/webhook/midtrans", h.MidtransWebhook)
 	mux.HandleFunc("POST /api/v1/billing/webhook/paypal", h.PayPalWebhook)
 	return middleware.Recover(logger, middleware.Security(middleware.Origin(origin, mux)))

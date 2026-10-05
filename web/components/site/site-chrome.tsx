@@ -49,8 +49,8 @@ export function SiteNav() {
             href="/editor"
             className="slab-tight press flex min-h-10 items-center whitespace-nowrap bg-white px-2 font-mono text-[12.5px] font-semibold text-ink sm:px-3"
           >
-            <span className="sm:hidden">Editor</span>
-            <span className="hidden sm:inline">Open editor</span>
+            <span className="sm:hidden">Diagrams</span>
+            <span className="hidden sm:inline">Browse diagrams</span>
           </Link>
           <AccountButton />
         </div>
@@ -61,13 +61,13 @@ export function SiteNav() {
 
 export function SiteFooter() {
   const groups = [
-    { title: "Product", links: [{ href: "/editor", label: "Open editor" }, { href: "/build", label: "Diagram library" }, { href: "/features", label: "Features" }, { href: "/#pricing", label: "Plans & pricing" }] },
+    { title: "Product", links: [{ href: "/editor", label: "Browse diagrams" }, { href: "/features", label: "Features" }, { href: "/#pricing", label: "Plans & pricing" }] },
     { title: "Learn", links: [{ href: "/docs", label: "Documentation" }, { href: "/docs/getting-started", label: "Getting started" }, { href: "/docs/tingraph-ai", label: "AI & copy prompts" }, { href: "/docs/saving-and-exporting", label: "Saving & exporting" }] },
     { title: "Tingraph", links: [{ href: "/about", label: "About" }, { href: "/support", label: "Support & contact" }, { href: "/security", label: "Security" }, { href: "/profile", label: "Your account" }] },
   ];
 
   return (
-    <footer className="mt-12 border-t-2 border-edge bg-white sm:mt-16">
+    <footer className="mt-12 border-t border-edge bg-white sm:mt-16">
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
         <div className="grid gap-10 lg:grid-cols-[1.1fr_2fr] lg:gap-16">
           <div>
@@ -79,7 +79,7 @@ export function SiteFooter() {
         </div>
       </div>
 
-      <div className="border-t-2 border-edge">
+      <div className="border-t border-edge">
         <div className="mx-auto flex max-w-6xl flex-col gap-4 px-4 py-5 sm:px-6"><nav aria-label="Legal and site information" className="flex flex-wrap gap-x-5 gap-y-3">{POLICIES.map((policy) => <Link key={policy.slug} href={`/${policy.slug}`} className="text-[11px] text-ink-soft underline-offset-4 hover:text-ink hover:underline">{policy.title}</Link>)}<Link href="/site-map" className="text-[11px] text-ink-soft underline-offset-4 hover:text-ink hover:underline">Site map</Link></nav><p className="font-mono text-[10px] text-ink-soft">© {new Date().getFullYear()} Tingraph. Start with code. Finish on your own terms.</p></div>
       </div>
     </footer>

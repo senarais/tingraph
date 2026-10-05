@@ -17,26 +17,31 @@ import (
 const monthlyUSD = 500 // cents
 
 type Quote struct {
-	USD      string     `json:"usd"`
-	IDR      int64      `json:"idr,omitempty"`
-	RateDate *time.Time `json:"rate_date,omitempty"`
-	Midtrans bool       `json:"midtrans"`
-	PayPal   bool       `json:"paypal"`
+	USD          string     `json:"usd"`
+	IDR          int64      `json:"idr,omitempty"`
+	RateDate     *time.Time `json:"rate_date,omitempty"`
+	Midtrans     bool       `json:"midtrans"`
+	PayPal       bool       `json:"paypal"`
+	Card         bool       `json:"card"`
+	CardProvider string     `json:"card_provider"`
 }
 
 type Price struct {
-	Method    string     `json:"method"`
-	USD       string     `json:"usd"`
-	Discount  int64      `json:"discount_cents"`
-	Base      int64      `json:"base_cents"`
-	Tax       int64      `json:"tax_cents"`
-	Fee       int64      `json:"fee"`
-	Amount    int64      `json:"amount"`
-	Currency  string     `json:"currency"`
-	RateDate  *time.Time `json:"rate_date,omitempty"`
-	IDRBase   int64      `json:"idr_base,omitempty"`
-	Code      string     `json:"code,omitempty"`
-	Available bool       `json:"available"`
+	Method        string     `json:"method"`
+	USD           string     `json:"usd"`
+	Discount      int64      `json:"discount_cents"`
+	Base          int64      `json:"base_cents"`
+	Tax           int64      `json:"tax_cents"`
+	Fee           int64      `json:"fee"`
+	Amount        int64      `json:"amount"`
+	Currency      string     `json:"currency"`
+	RateDate      *time.Time `json:"rate_date,omitempty"`
+	IDRBase       int64      `json:"idr_base,omitempty"`
+	Code          string     `json:"code,omitempty"`
+	Available     bool       `json:"available"`
+	Provider      string     `json:"provider"`
+	Recurring     bool       `json:"recurring"`
+	RenewalAmount int64      `json:"renewal_amount,omitempty"`
 }
 
 var ErrDiscount = errors.New("discount code is invalid or fully reserved")
@@ -57,9 +62,20 @@ func (service *Service) Price(ctx context.Context, method, code string) (Price, 
 	var bps int
 	switch method {
 	case "paypal":
+		price.Provider = "paypal"
 		price.Currency, price.Available = "USD", service.payPalEnabled()
 		bps = service.cfg.PayPalFeeBPS
+	case "card":
+		price.Provider = service.cfg.CardPaymentProvider
+		price.Available = service.cardEnabled()
+		if price.Provider == "paypal" {
+			price.Currency, price.Recurring = "USD", true
+			bps = service.cfg.PayPalFeeBPS
+		} else {
+			price.Currency, bps = "IDR", service.cfg.CardFeeBPS
+		}
 	case "gopay", "qris":
+		price.Provider = "midtrans"
 		price.Currency, price.Available = "IDR", service.midtransEnabled()
 		if method == "gopay" {
 			bps = service.cfg.GoPayFeeBPS
@@ -85,8 +101,12 @@ func (service *Service) Price(ctx context.Context, method, code string) (Price, 
 	}
 	price.Tax = (price.Base*int64(service.cfg.ProductTaxBPS) + 9999) / 10000
 	payable := price.Base + price.Tax
-	if method == "paypal" {
+	if price.Currency == "USD" {
 		price.Amount = grossFor(payable, bps, int64(service.cfg.PayPalFixedCents))
+		if price.Recurring {
+			tax := (monthlyUSD*int64(service.cfg.ProductTaxBPS) + 9999) / 10000
+			price.RenewalAmount = grossFor(monthlyUSD+tax, bps, int64(service.cfg.PayPalFixedCents))
+		}
 	} else {
 		idr, day, err := service.idrAmount(ctx)
 		if err != nil {
@@ -95,7 +115,11 @@ func (service *Service) Price(ctx context.Context, method, code string) (Price, 
 		price.RateDate = &day
 		price.IDRBase = idr
 		net := (idr*payable + monthlyUSD - 1) / monthlyUSD
-		price.Amount = grossFor(net, bps, 0)
+		var fixed int64
+		if method == "card" {
+			fixed = int64(service.cfg.CardFixedIDR)
+		}
+		price.Amount = grossFor(net, bps, fixed)
 		price.Fee = price.Amount - net
 		return price, nil
 	}
@@ -111,7 +135,7 @@ type rates struct {
 }
 
 func (service *Service) Quote(ctx context.Context) (Quote, error) {
-	quote := Quote{USD: "5.00", Midtrans: service.midtransEnabled(), PayPal: service.payPalEnabled()}
+	quote := Quote{USD: "5.00", Midtrans: service.midtransEnabled(), PayPal: service.payPalEnabled(), Card: service.cardEnabled(), CardProvider: service.cfg.CardPaymentProvider}
 	if !quote.Midtrans {
 		return quote, nil
 	}

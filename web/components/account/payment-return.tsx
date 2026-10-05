@@ -5,7 +5,7 @@ import Link from "next/link";
 import { apiFetch } from "@/lib/api/client";
 
 export default function PaymentReturn({ order, provider, token }: { order: string; provider: string; token: string }) {
-  const valid = /^[0-9a-f-]{36}$/.test(order) && ["midtrans", "paypal"].includes(provider) && (provider !== "paypal" || !!token);
+  const valid = /^[0-9a-f-]{36}$/.test(order) && ["midtrans", "paypal", "paypal-subscription"].includes(provider) && (provider !== "paypal" || !!token);
   const [message, setMessage] = useState(valid ? "Waiting for confirmation from the payment provider…" : "This payment link is invalid.");
 
   useEffect(() => {
@@ -19,7 +19,8 @@ export default function PaymentReturn({ order, provider, token }: { order: strin
           });
           if (!response.ok) throw new Error("PayPal could not confirm this payment yet.");
         } else {
-          await apiFetch(`/api/v1/billing/orders/${order}/sync`, { method: "POST" });
+          const response = await apiFetch(`/api/v1/billing/orders/${order}/sync`, { method: "POST" });
+          if (!response.ok) throw new Error("Payment could not be confirmed yet.");
         }
         for (let attempt = 0; attempt < 20 && !cancelled; attempt++) {
           const response = await apiFetch(`/api/v1/billing/orders/${order}`);

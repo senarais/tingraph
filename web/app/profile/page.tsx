@@ -14,6 +14,7 @@ import { AccountPage } from "@/components/account/shell";
 import { PROFILE_FIELDS, type ProfileField, type ProfileInput } from "@/lib/auth";
 import { isPlanTier, planName } from "@/lib/plans";
 import { backendFetch } from "@/lib/api/server";
+import CardSubscriptions from "@/components/account/card-subscriptions";
 import type { Entitlements, User } from "@/lib/api/types";
 
 export const metadata: Metadata = {
@@ -102,7 +103,8 @@ export default async function ProfilePage({ searchParams }: PageProps<"/profile"
                 {planName(tier)}
               </span>
             </SectionHead>
-            <p className="p-5 text-[13px] text-ink-soft">30 days of Premium. One-time payment; no automatic renewal. <Link href="/profile?view=usage" className="font-semibold text-blueprint underline">See usage →</Link></p>
+            <p className="p-5 text-[13px] text-ink-soft">30 days per paid Premium period. PayPal card subscriptions renew automatically; other methods are one-time. <Link href="/profile?view=usage" className="font-semibold text-blueprint underline">See usage →</Link></p>
+            <CardSubscriptions />
             <PremiumCheckout active={tier === "premium"} until={usage.premium_until ?? null} />
           </section>}
 

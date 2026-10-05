@@ -8,7 +8,7 @@ import (
 )
 
 // Keep this release in sync with web/lib/legal.ts; never infer acceptance for existing accounts.
-const PolicyVersion = "2026-09-30"
+const PolicyVersion = "2026-10-05"
 
 var ErrConsentRequired = errors.New("read the policies and agree to the current Terms before creating an account")
 

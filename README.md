@@ -31,9 +31,10 @@ Open <http://localhost:8080>. Development defaults leave SMTP, Google, Gemini,
 and offsite backup disabled. Email verification/reset messages remain safely
 queued until SMTP is configured.
 
-Payments also stay disabled until provider credentials are supplied. Premium is
-prepaid for 30 days at USD 5, without automatic renewal. Midtrans charges IDR at
-the most recent daily USD/IDR rate; PayPal charges USD 5.
+Payments stay disabled until provider credentials are supplied. Premium's base
+price is USD 5 per 30-day period, plus displayed taxes and processing fees.
+GoPay, QRIS, regular PayPal and Midtrans card checkout are one-time. PayPal card
+subscriptions renew every 30 days after explicit authorization.
 
 Inspect state with:
 
@@ -93,7 +94,7 @@ CPU/memory.
 
 ### Premium payments
 
-For Midtrans Snap Redirect checkout, put the **Sandbox Server Key** from
+For Midtrans (Core GoPay/QRIS and Snap Redirect cards), put the **Sandbox Server Key** from
 **Sandbox dashboard → Settings → Access Keys** in `secrets/midtrans_server_key`.
 Set `MIDTRANS_MODE=sandbox` in `.env`. In **Settings → Configuration**, set
 the Payment Notification URL to
@@ -123,6 +124,70 @@ instance at `http://frankfurter:8080` instead. If quotes are unavailable, Midtra
 checkout is disabled until rates recover; PayPal remains available. After
 populating the secrets, run `docker compose up -d --build` so migration 005
 is applied before the new API and web images start.
+
+#### Switch credit/debit cards
+
+Set one field in `.env`, then recreate the API:
+
+```dotenv
+CARD_PAYMENT_PROVIDER=midtrans
+# or CARD_PAYMENT_PROVIDER=paypal
+```
+
+```bash
+docker compose up -d --no-deps api
+```
+
+`midtrans` uses hosted Snap, restricts checkout to `credit_card`, enables 3DS,
+does not save cards and does not auto-renew. Card acquiring must be enabled on
+the Midtrans merchant account. Configure `MIDTRANS_CARD_FEE_BPS` and
+`MIDTRANS_CARD_FIXED_IDR` against the merchant agreement, including fee taxes.
+Abandoned Snap sessions are explicitly closed before their discounts are
+released; a Core API 404 does not by itself prove that a Snap token is closed.
+
+`paypal` uses hosted PayPal approval and requires a PayPal account; buyers can
+select a linked credit/debit card there. PayPal direct-card subscriptions are
+limited to US/Australia merchants and non-3DS cards, so this implementation
+does not collect a PAN/CVV or use that restricted API flow.
+
+For PayPal recurring:
+
+1. Use the same REST app credentials, mode and verified webhook as above.
+2. Create a Catalog API product with `type: SERVICE` in that app/environment:
+   `POST /v1/catalogs/products` with `{"name":"Tingraph Premium","type":"SERVICE","category":"SOFTWARE"}`.
+   Set its returned `id` as `PAYPAL_CARD_PRODUCT_ID` in `.env`.
+3. Add webhook events `PAYMENT.SALE.COMPLETED`, `PAYMENT.SALE.REFUNDED`,
+   `PAYMENT.SALE.REVERSED`, and all `BILLING.SUBSCRIPTION.*` events, including
+   `BILLING.SUBSCRIPTION.PAYMENT.FAILED`, to the existing webhook.
+4. Set `CARD_PAYMENT_PROVIDER=paypal` and recreate the API. No frontend rebuild
+   is needed when changing only the provider.
+
+The API creates a dedicated plan per checkout: regular 30-day cycles at the
+quoted full price including configured taxes/fees. Discounted checkouts prepend
+one paid 30-day trial cycle at the reduced first-period price. Outstanding balances
+are not automatically added to later cycles. One failed-payment threshold
+lets PayPal suspend after its normal retries. A provider-side activation alone
+never grants Premium: a verified sale must be recorded exactly once.
+
+Changing provider or fee configuration affects new checkouts only. Existing
+subscriptions keep their original PayPal plan/price and remain cancellable
+from `/profile?view=plan` or PayPal. Pending approval cannot yet be cancelled
+through PayPal's API; stop requests are stored and retried when approval makes
+it cancellable. Any already authorized payment may complete. Pending discounts
+are not freed while PayPal could still collect their original first charge.
+
+Apply migration `014_card_subscriptions.sql` before starting the new API.
+Test first/renewal payment, duplicate webhook, refund/reversal and cancellation
+using a real Sandbox Personal buyer account. Signature simulation is not a
+substitute for an actual PayPal sandbox subscription.
+
+Docs consulted: [Midtrans Snap request](https://docs.midtrans.com/reference/request-body-json-parameter.md),
+[Snap expiry/callbacks](https://docs.midtrans.com/docs/snap-advanced-feature.md),
+[Snap session cancellation](https://docs.midtrans.com/reference/cancel-a-snap-session.md),
+[PayPal Subscriptions API](https://developer.paypal.com/docs/api/subscriptions/v1/),
+[paid trial cycles](https://developer.paypal.com/docs/subscriptions/customize/trial-period/),
+[failure/retries](https://developer.paypal.com/docs/subscriptions/customize/payment-failure-retry/),
+and [subscription webhooks](https://developer.paypal.com/docs/subscriptions/reference/webhooks/).
 
 To test locally, expose Caddy's `localhost:8080` through a public HTTPS URL
 (for example `ngrok http 8080`) and set `APP_ORIGIN` in `.env` to **that exact
@@ -236,6 +301,13 @@ go test ./...
 After stack starts, run `./ops/smoke-test.sh` from repository root. It verifies
 routing, registration/login, Origin enforcement, CSRF, ownership isolation,
 diagram quota, and logout, then removes its test accounts.
+
+The recurring-payment integration check uses real PostgreSQL and mocked provider
+HTTP responses. Point `BILLING_TEST_DATABASE_URL` to an owner connection for a
+disposable database whose name starts with `tingraph_billing_check`, then run
+`go test -race ./internal/billing -run Database -v` from `backend/`. It migrates
+that database, runs as the restricted app role, and checks concurrent duplicate
+events, discounted-first/full-price renewals, cancellation, isolation and refunds.
 
 ## Secrets
 

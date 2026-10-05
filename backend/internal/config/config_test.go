@@ -1,6 +1,23 @@
 package config
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
+
+func TestLoadRejectsUnknownCardProvider(t *testing.T) {
+	for _, key := range []string{"DATABASE_URL_FILE", "RATE_LIMIT_SECRET_FILE", "MIDTRANS_SERVER_KEY_FILE", "PAYPAL_CLIENT_SECRET_FILE"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("APP_ORIGIN", "http://localhost:8080")
+	t.Setenv("DATABASE_URL", "postgres://example")
+	t.Setenv("RATE_LIMIT_SECRET", strings.Repeat("01", 32))
+	t.Setenv("CARD_PAYMENT_PROVIDER", "paypall")
+	if _, err := Load(); err == nil || !strings.Contains(err.Error(), "CARD_PAYMENT_PROVIDER") {
+		t.Fatal("invalid provider did not fail startup", err)
+	}
+}
 
 func TestLoadRejectsUnknownEnvironment(t *testing.T) {
 	t.Setenv("APP_ENV", "prodution")

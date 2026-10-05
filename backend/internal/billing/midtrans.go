@@ -31,6 +31,98 @@ type midtransStatus struct {
 	FraudStatus       string `json:"fraud_status"`
 	Currency          string `json:"currency"`
 	SignatureKey      string `json:"signature_key"`
+	PaymentType       string `json:"payment_type"`
+}
+
+func (service *Service) createMidtransCard(ctx context.Context, id string, amount int64) (string, string, string, error) {
+	request := map[string]any{
+		"transaction_details": map[string]any{"order_id": id, "gross_amount": amount},
+		"enabled_payments":    []string{"credit_card"},
+		"credit_card":         map[string]any{"secure": true, "save_card": false},
+		"callbacks":           map[string]string{"finish": service.returnURL(id, "midtrans")},
+		"expiry":              map[string]any{"duration": 24, "unit": "hours", "start_time": time.Now().Format("2006-01-02 15:04:05 -0700")},
+		"page_expiry":         map[string]any{"duration": 24, "unit": "hours"},
+	}
+	var result struct {
+		Token string `json:"token"`
+		URL   string `json:"redirect_url"`
+	}
+	if err := service.do(ctx, http.MethodPost, service.midtransBase(true)+"/snap/v1/transactions",
+		service.cfg.MidtransServerKey, "", request, &result, map[string]string{"Accept": "application/json"}); err != nil {
+		return "", "", "", err
+	}
+	u, err := url.Parse(result.URL)
+	base, _ := url.Parse(service.midtransBase(true))
+	if err != nil || result.Token == "" || u.Scheme != "https" || u.Host != base.Host || u.User != nil ||
+		u.Path != "/snap/v2/vtweb/"+url.PathEscape(result.Token) {
+		return "", "", "", errors.New("invalid Midtrans card checkout")
+	}
+	return id, u.String(), result.Token, nil
+}
+
+func (service *Service) expireMidtransCard(ctx context.Context, order Order) error {
+	err := service.confirmMidtrans(ctx, order)
+	var status providerStatusError
+	if err != nil && (!errors.As(err, &status) || status.Status != http.StatusNotFound) {
+		return err
+	}
+	current, lookupErr := service.lookup(ctx, order.ID)
+	if lookupErr != nil {
+		return lookupErr
+	}
+	if current.Status != "pending" {
+		return nil
+	}
+	var token string
+	if err := service.db.QueryRow(ctx, `select coalesce(snap_token, '') from ops.payment_orders where id = $1`, order.ID).Scan(&token); err != nil {
+		return err
+	}
+	if token == "" {
+		return errors.New("Snap session token is missing")
+	}
+	if err := service.cancelSnapSession(ctx, token); err != nil {
+		return err
+	}
+	// A Snap token is created before a Core transaction exists. A 404 alone does
+	// not prove expiry; only release the reservation after closing that token.
+	if _, err := service.getMidtrans(ctx, order.ID); err != nil {
+		if !errors.As(err, &status) || status.Status != http.StatusNotFound {
+			return err
+		}
+		var expired bool
+		return service.db.QueryRow(ctx, `select ops.expire_confirmed_payment($1, $2)`, order.ID, order.ProviderID).Scan(&expired)
+	}
+	return service.confirmMidtrans(ctx, order)
+}
+
+func (service *Service) cancelSnapSession(ctx context.Context, token string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, service.midtransBase(true)+"/snap/v1/transactions/"+url.PathEscape(token)+"/cancel", nil)
+	if err != nil {
+		return err
+	}
+	// The Snap-session cancel API documents a raw Server Key, not Core's Basic auth.
+	req.Header.Set("Authorization", service.cfg.MidtransServerKey)
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	response, err := service.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	var result struct {
+		CancelledAt time.Time `json:"canceled_at"`
+		Errors      []string  `json:"error_messages"`
+	}
+	if err := json.NewDecoder(io.LimitReader(response.Body, 64<<10)).Decode(&result); err != nil {
+		return err
+	}
+	if response.StatusCode >= 200 && response.StatusCode < 300 && !result.CancelledAt.IsZero() {
+		return nil
+	}
+	if response.StatusCode >= 400 && response.StatusCode < 500 && len(result.Errors) == 1 && result.Errors[0] == "token already canceled" {
+		return nil
+	}
+	return errors.New("Midtrans has not confirmed that the Snap session is closed")
 }
 
 func (service *Service) midtransBase(snap bool) string {
@@ -91,7 +183,7 @@ func (service *Service) createMidtrans(ctx context.Context, id string, amount in
 
 func (service *Service) QR(ctx context.Context, id, userID string) ([]byte, error) {
 	order, err := service.Order(ctx, id, userID)
-	if err != nil || order.Provider != "midtrans" || order.Status != "pending" || !time.Now().Before(order.ExpiresAt) {
+	if err != nil || order.Provider != "midtrans" || order.Method == "card" || order.Status != "pending" || !time.Now().Before(order.ExpiresAt) {
 		return nil, errors.New("QR payment is unavailable")
 	}
 	var raw string
@@ -145,6 +237,9 @@ func (service *Service) getMidtrans(ctx context.Context, orderID string) (midtra
 	}
 	err := service.do(ctx, http.MethodGet, service.midtransBase(false)+"/v2/"+orderID+"/status",
 		service.cfg.MidtransServerKey, "", nil, &status, nil)
+	if err == nil && status.StatusCode == "404" {
+		err = providerStatusError{Status: http.StatusNotFound}
+	}
 	return status, err
 }
 
@@ -163,6 +258,9 @@ func (service *Service) confirmMidtrans(ctx context.Context, order Order) error 
 	order.ProviderID = status.OrderID
 	switch status.TransactionStatus {
 	case "settlement", "capture":
+		if order.Method == "card" && (status.PaymentType != "credit_card" || status.FraudStatus != "accept") {
+			return nil
+		}
 		if status.StatusCode != "200" || status.FraudStatus != "" && status.FraudStatus != "accept" {
 			return nil
 		}

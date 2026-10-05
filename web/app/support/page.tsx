@@ -10,8 +10,8 @@ export const metadata: Metadata = {
 };
 
 const HELP = [
-  { icon: Shapes, title: "Explore the diagrams", body: "Find the right notation and open a working example to make your own.", href: "/build", action: "Browse notations" },
-  { icon: BookOpen, title: "Learn in the editor", body: "Open the built-in syntax guide or ask Tingraph AI for help with your source.", href: "/editor", action: "Open editor" },
+  { icon: Shapes, title: "Explore the diagrams", body: "Find the right notation and open a working example to make your own.", href: "/editor", action: "Browse notations" },
+  { icon: BookOpen, title: "Learn in the editor", body: "Open the built-in syntax guide or ask Tingraph AI for help with your source.", href: "/editor?type=flow", action: "Open editor" },
   { icon: CreditCard, title: "Plans & billing", body: "See your account details, saved diagrams and current plan in one place.", href: "/profile", action: "Go to profile" },
 ];
 

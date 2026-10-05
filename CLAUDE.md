@@ -45,11 +45,11 @@ nobody can find:
 1. `lib/diagrams.ts` — a `READY_DIAGRAMS` entry with a sample that really
    parses (`npm run self-check` proves it), plus art in
    `components/site/diagram-art.tsx`. This is what fills the catalogue at
-   `/build`, which is the page the landing page sends readers to.
+   `/editor`, which is the page the landing page sends readers to.
 2. `app/editor/page.tsx` — the keyword in `CATEGORIES`, or `/editor?type=…`
    will not open it.
 3. The landing page needs nothing: it shows the first `FEATURED_COUNT` of
-   `READY_DIAGRAMS` on cards and links to `/build` for the rest, and the hero
+   `READY_DIAGRAMS` on cards and links to `/editor` for the rest, and the hero
    types out `HERO_DIAGRAMS` — three, deliberately. Curate by reordering
    `READY_DIAGRAMS`, never by adding another card row.
 
@@ -719,6 +719,12 @@ and that is the thing to fix.
 
 ## Public documentation and policies
 
+`/editor` is the sole diagram-library entry, with Browse diagrams and My
+diagrams tabs. A valid `?type=…` or `?diagram=…` opens the canvas directly;
+existing notation and saved-diagram links keep their meaning. The old picker
+and `/build` page are gone. `/build` permanently redirects to `/editor` while
+preserving query parameters, so old bookmarks still reach the right tab.
+
 `/docs` starts with an overview and task-oriented guides. `/docs/<notation>`
 documents every ready notation from `lib/diagrams.ts`; syntax tables, rules,
 working examples and copy prompts come directly from `lib/guide.ts`, the same
@@ -817,10 +823,11 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
   browser, with a 1 MB API limit. It is stored on the persistent uploads volume
   at `avatars/<user id>/<random name>`, a new name every time because the old
   address is cached for a year; replaced files are deleted.
-- **Account-aware chrome asks the browser, not the server.** `/` and `/build`
-  are prerendered, and reading a cookie in `SiteNav` would render them per
-  request. `AccountButton` fetches the face in the bar; `/build?view=mine`
-  fetches diagram metadata below a Suspense boundary. In the editor the account
+- **Account-aware chrome asks the browser, not the server.** `/` is prerendered,
+  and reading a cookie in `SiteNav` would render it per request. `/editor`
+  resolves its catalogue/canvas mode from query parameters at request time.
+  `AccountButton` fetches the face in the bar; `/editor?view=mine` fetches
+  diagram metadata below a Suspense boundary. On the canvas the account
   opens in a new tab (`detached`), so an unsaved drawing is not thrown away.
 - **Email is an outbox, not part of the request.** Registration and password
   transactions enqueue rows in `ops.email_outbox`; the worker claims with
@@ -832,16 +839,34 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
   lock the AI window; late settlements from previous windows cannot consume a
   new allowance. The profile shows exact reset instants in the reader's local
   time. Keep policy in migrations, not only in React.
-- **Premium is prepaid for 30 days, without automatic renewal.**
+- **Each payment buys 30 days; only PayPal card subscriptions auto-renew.**
   The public navbar's Go Premium button opens a benefits preview in a native
   dialog; only its checkout CTAs lead to `/checkout`.
-  `/checkout` selects GoPay, QRIS or PayPal and shows product, discount, estimated
-  processing fee and final IDR charge. Credit/debit cards remain unavailable.
+  `/checkout` selects GoPay, QRIS, PayPal or card and shows product, discount,
+  processing fee and final payable currency. `CARD_PAYMENT_PROVIDER` switches
+  only the card button: `midtrans` is a one-time hosted Snap card payment with
+  3DS; `paypal` is a hosted PayPal subscription every 30 days, requiring a
+  PayPal account and explicit renewal consent. Card credentials never enter
+  Tingraph. Direct-card PayPal subscriptions are restricted to US/AU merchants
+  and non-3DS cards, so they are deliberately not the integration used here.
+  Snap tokens are stored server-side so an abandoned hosted card session can
+  be closed before its coupon is freed: a Core API 404 alone is not expiry.
   `backend/internal/billing/` creates Midtrans Core API GoPay charges (the same
   charge provides a QRIS image, proxied for authenticated buyers) and PayPal
-  Orders v2 checkouts. Fees are grossed up *before* either provider is called:
+  Orders v2 checkouts. `subscriptions.go` creates an unlimited regular 30-day
+  cycle from `PAYPAL_CARD_PRODUCT_ID`; a discount prepends one paid trial cycle
+  at the reduced first-period amount. Each subscription records its original provider,
+  plan, renewal price and consent version, so switching configuration never
+  migrates or reprices existing subscriptions. Signed subscription/sale events
+  re-fetch the provider ledger, process it oldest-first and settle each unique
+  sale through `ops.settle_subscription_payment`. A worker reconciles missed
+  events. Profile cancellation keeps paid coverage; pending-approval stop
+  requests remain durable because PayPal only cancels ACTIVE/SUSPENDED states.
+  Unapproved PayPal orders retain discount reservations until collection is
+  definitively closed. Fees are grossed up *before* either provider is called:
   `GOPAY_FEE_BPS`, `QRIS_FEE_BPS`, `PAYPAL_FEE_BPS`,
-  `PAYPAL_FIXED_CENTS` must match merchant terms including fee taxes; optional
+  `PAYPAL_FIXED_CENTS`, `MIDTRANS_CARD_FEE_BPS`, `MIDTRANS_CARD_FIXED_IDR`
+  must match merchant terms including fee taxes; optional
   `PRODUCT_TAX_BPS` adds product tax after discounts, before processing fees. Defaults
   are estimates, not a guarantee against FX or provider-specific adjustments.
   Discounts lower the USD product price first; `ops.reserve_discount` serializes
@@ -865,7 +890,7 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
 
 ## Checks
 
-From `web/`, `npm run self-check` runs four assert-based scripts under `tsx`:
+From `web/`, `npm run self-check` runs five assert-based scripts under `tsx`:
 `scripts/self-check.ts` (parser, layout, connector geometry, copies, the ERD's
 port pairing, and every figure's own geometry — a Venn region really falls
 inside the right rings, a fishbone's causes really meet their bone, a sequence
@@ -879,6 +904,10 @@ should be asserted there rather than clicked through.
 `scripts/site-check.ts` verifies documentation coverage, every displayed
 example and copy prompt, unique policy/guide anchors and agreement-version
 consistency across frontend, backend and the smoke test.
+
+`scripts/routing-check.ts` verifies the single catalogue entry, all notation
+canvases, saved-diagram links and query-preserving legacy redirects using
+Next's own config-routing test utility.
 
 `editor-check.ts` also covers Tingraph AI without calling anything: the
 chatbot's briefing carries every syntax row of its notation, and every

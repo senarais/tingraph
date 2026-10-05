@@ -86,7 +86,7 @@ export default function PremiumPreview() {
           <Link href="/checkout" prefetch={false} className="premium-cta mt-7 inline-flex min-h-12 items-center justify-center gap-3 border-2 border-[#f2d89a] px-5 font-mono text-[13px] font-semibold text-[#11110f]">
             Get Premium <ArrowRight size={16} aria-hidden="true" />
           </Link>
-          <p className="mt-3 text-[12px] leading-relaxed text-white/65">One-time payment. No automatic renewal. Applicable taxes and processing fees are shown at checkout.</p>
+          <p className="mt-3 text-[12px] leading-relaxed text-white/65">One-time methods or PayPal card auto-renewal, when available. Renewal terms, taxes and processing fees are shown at checkout.</p>
         </section>
 
         <section className="px-5 py-8 sm:px-8">
@@ -109,7 +109,7 @@ export default function PremiumPreview() {
 
         <footer className="border-t-2 border-edge bg-white px-5 py-7 sm:px-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
-            <div><h3 className="font-mono text-xl font-semibold tracking-tight">Ready for more?</h3><p className="mt-2 text-[13px] text-ink-soft">$5 for 30 days. Renew only when you choose.</p></div>
+            <div><h3 className="font-mono text-xl font-semibold tracking-tight">Ready for more?</h3><p className="mt-2 text-[13px] text-ink-soft">$5 per 30-day period. Choose your payment and renewal method at checkout.</p></div>
             <Link href="/checkout" prefetch={false} className="premium-cta inline-flex min-h-12 shrink-0 items-center justify-center gap-3 border-2 border-edge px-5 font-mono text-[13px] font-semibold text-[#11110f]">
               Continue to checkout <ArrowRight size={16} aria-hidden="true" />
             </Link>
