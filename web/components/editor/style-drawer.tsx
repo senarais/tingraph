@@ -25,6 +25,9 @@ const CHART_FIXED =
 const FIGURE_FIXED =
   "The colours come from this notation's own panel in the rail. The ink writes the captions and rules the lines.";
 
+const PRISMA_FIXED =
+  "The arrows, the box outlines and the phase bands come from the notation. The ink writes every line and caption.";
+
 const FIXED: Record<DiagramCategory, string> = {
   flow: "Arrowheads, routing and the terminator outline come from the notation.",
   bpmn: "Arrowheads, event ring weights, the task outline and the BPMN markers come from the notation.",
@@ -42,6 +45,7 @@ const FIXED: Record<DiagramCategory, string> = {
   matrix: FIGURE_FIXED,
   venn: FIGURE_FIXED,
   fishbone: FIGURE_FIXED,
+  prisma: PRISMA_FIXED,
 };
 
 /** A shape and a connector, drawn the way the style would draw them. */

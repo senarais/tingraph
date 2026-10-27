@@ -166,6 +166,7 @@ export const PALETTE_GROUPS: Record<DiagramCategory, PaletteGroup[]> = {
   matrix: [],
   venn: [],
   fishbone: [],
+  prisma: [],
 };
 
 function idPrefix(type: string): string {

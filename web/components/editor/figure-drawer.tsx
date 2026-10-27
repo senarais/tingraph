@@ -12,6 +12,7 @@ import MatrixDrawer from "@/components/editor/matrix-drawer";
 import VennDrawer from "@/components/editor/venn-drawer";
 import FishboneDrawer from "@/components/editor/fishbone-drawer";
 import SequenceDrawer from "@/components/editor/sequence-drawer";
+import PrismaDrawer from "@/components/editor/prisma-drawer";
 import { SlabButton } from "@/components/editor/ui";
 
 /**
@@ -76,6 +77,8 @@ export default function FigureDrawer({
         return <VennDrawer spec={spec} onChange={onChange} />;
       case "sequence":
         return <SequenceDrawer spec={spec} onChange={onChange} />;
+      case "prisma":
+        return <PrismaDrawer spec={spec} onChange={onChange} />;
       default:
         return <FishboneDrawer spec={spec} onChange={onChange} />;
     }

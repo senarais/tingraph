@@ -34,6 +34,10 @@ export function summarise(ast: AST): string {
     const causes = figure.bones.reduce((sum, bone) => sum + bone.causes.length, 0);
     return `${figure.bones.length} bones · ${causes} causes`;
   }
+  if (figure.kind === "prisma") {
+    const exclusions = figure.steps.filter((step) => step.side).length;
+    return `${figure.steps.length} rows · ${exclusions} exclusion boxes`;
+  }
   const chart = figure;
   if (chart.kind === "scatter") {
     const points = chart.series.reduce(

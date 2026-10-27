@@ -8,7 +8,7 @@ import { FAMILIES, READY_DIAGRAMS } from "@/lib/diagrams";
 
 export const metadata: Metadata = {
   title: "Features | Tingraph",
-  description: "Explore Tingraph AI, code-to-diagram generation, an editable canvas, 16 notations, styling, saved diagrams and export options.",
+  description: "Explore Tingraph AI, code-to-diagram generation, an editable canvas, 17 notations, styling, saved diagrams and export options.",
 };
 
 const WORKFLOW = [

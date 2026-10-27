@@ -665,6 +665,80 @@ export function FishboneArt({ accent = "mono", className }: ArtProps) {
   );
 }
 
+export function PrismaArt({ accent = "navy", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const wash = ACCENTS[accent].wash;
+  const bands = [
+    { y: 10, height: 40 },
+    { y: 60, height: 50 },
+    { y: 120, height: 20 },
+    { y: 150, height: 30 },
+  ];
+  const rows = [
+    { y: 10, height: 40 },
+    { y: 60, height: 20 },
+    { y: 90, height: 20 },
+    { y: 120, height: 20 },
+    { y: 150, height: 30 },
+  ];
+  return (
+    <svg viewBox="0 0 320 190" className={className} aria-hidden="true" fill="none">
+      {bands.map((band) => (
+        <rect
+          key={band.y}
+          x={8}
+          y={band.y}
+          width={16}
+          height={band.height}
+          fill={wash}
+          stroke={ink}
+          strokeWidth={CONNECTOR}
+          pathLength={1}
+          className="ink-path"
+        />
+      ))}
+      {rows.map((row, index) => (
+        <g key={row.y}>
+          <rect
+            x={36}
+            y={row.y}
+            width={150}
+            height={row.height}
+            fill="#ffffff"
+            stroke={ink}
+            strokeWidth={CONNECTOR}
+            pathLength={1}
+            className="ink-path"
+          />
+          {index < rows.length - 1 && (
+            <>
+              <rect
+                x={218}
+                y={row.y}
+                width={92}
+                height={row.height}
+                fill="#ffffff"
+                stroke={ink}
+                strokeWidth={CONNECTOR}
+                pathLength={1}
+                className="ink-path"
+              />
+              <Line d={`M186 ${row.y + row.height / 2}H212`} ink={ink} />
+              <Head x={216} y={row.y + row.height / 2} dir="right" ink={ink} />
+            </>
+          )}
+          {index < rows.length - 1 && (
+            <>
+              <Line d={`M111 ${row.y + row.height}V${rows[index + 1].y - 6}`} ink={ink} />
+              <Head x={111} y={rows[index + 1].y - 1} dir="down" ink={ink} />
+            </>
+          )}
+        </g>
+      ))}
+    </svg>
+  );
+}
+
 /* --------------------------------------------------------------------- uml */
 
 /** The stick figure a use case diagram and a sequence diagram both draw. */
@@ -892,6 +966,7 @@ export function DiagramArt({
   if (id === "matrix") return <MatrixArt accent={accent} className={className} />;
   if (id === "venn") return <VennArt accent={accent} className={className} />;
   if (id === "fishbone") return <FishboneArt accent={accent} className={className} />;
+  if (id === "prisma") return <PrismaArt accent={accent} className={className} />;
   if (id === "usecase") return <UseCaseArt accent={accent} className={className} />;
   if (id === "activity") return <ActivityArt accent={accent} className={className} />;
   if (id === "sequence") return <SequenceArt accent={accent} className={className} />;

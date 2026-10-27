@@ -7,7 +7,7 @@ paths in this file are relative to `web/`.
 
 A diagram editor. The reader writes a small DSL, Tingraph parses it, lays it
 out, and draws it onto an Excalidraw canvas; from that moment the sheet is
-theirs to edit by hand. Sixteen notations ship today, in two families:
+theirs to edit by hand. Seventeen notations ship today, in two families:
 
 - **graphs** — `flow` (flowchart), `bpmn` (BPMN 2.0 with pools and lanes),
   `org` (org chart), `usecase` (UML use case), `activity` (UML activity with
@@ -15,8 +15,8 @@ theirs to edit by hand. Sixteen notations ship today, in two families:
   and components): elements joined by connectors,
   edited one at a time.
 - **figures** — `bar`, `line`, `pie`, `scatter`, `mind` (mind map), `matrix`
-  (matrix table), `venn`, `fishbone` and `sequence` (UML sequence): one object,
-  drawn.
+  (matrix table), `venn`, `fishbone`, `sequence` (UML sequence) and `prisma`
+  (PRISMA 2020 flow): one object, drawn.
 
 **Which family a notation belongs in is the first decision, and the only one
 that is hard to undo.** A notation whose elements can be anywhere on the sheet
@@ -78,6 +78,17 @@ drawer, or on an answer from Tingraph AI (`generate()` in
 has). It is the only moment the code writes over the sheet. Everything after
 it is the reader's, which is why nothing else may re-derive the drawing from
 the source.
+
+Generate asks for confirmation above 12,000 source characters, 60 graph nodes,
+or 100 connectors; the AI panel also confirms prompts over 4,000 characters
+before sending them. Cancelling consumes no allowance. Before replacing the
+sheet or taking an allowance, Generate checks the **rendered** graph-node bounds,
+including external and bound captions (`lib/canvas/generation.ts`). An unresolved
+node collision stops generation with an explanation, preserving the sheet.
+Architecture zones are intentional backdrops and excluded from that node check.
+All graph connector captions, including flowchart captions, are separate text
+elements in the connector's unit. After conversion they are nudged to the nearest
+free vertical slot using measured text bounds, clear of nodes and other captions.
 
 ## Tingraph AI writes source, and only source
 
@@ -405,7 +416,10 @@ with a pointer move, since that is the point the canvas zooms about.
   double-click to give it back to the notation. This is deliberate: one number,
   one meaning, no scattered points.
 - **The ends.** Drag an endpoint onto another element to re-tie it; the bend is
-  dropped, because it belonged to the old route.
+  dropped, because it belonged to the old route. Both ends preview the complete
+  new route while dragging, with the same pinned sides and ERD ports as the
+  released connector. The preview is overlay-only; cancelling changes no binding.
+  Pointer capture belongs to the SVG layer, not a handle that can disappear.
 
 ### The rail's connector list
 
@@ -561,6 +575,7 @@ One folder per notation, and they share nothing but the mechanism:
 | `lib/venn/` | `venn` |
 | `lib/fishbone/` | `fishbone` |
 | `lib/sequence/` | `sequence` |
+| `lib/prisma/` | `prisma` |
 
 Inside each, the split is the same and is worth keeping: `spec.ts` is what the
 thing *is* (no geometry), a layout step is where every mark goes in sheet units
@@ -626,6 +641,7 @@ stay different:
 | `venn` | drag a ring to set the overlap |
 | `fishbone` | press a bone to put a cause on it, a cause to put what is behind it |
 | `sequence` | drag a lifeline along the top to reorder the participants, press a message to move it up or down the order it is sent in |
+| `prisma` | press any caption to rename it; add or remove a line of the flow, and the box beside a row |
 
 Three things every figure has on the sheet, built from
 `components/editor/figure-handles.tsx` so they behave alike:

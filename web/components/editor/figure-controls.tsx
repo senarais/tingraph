@@ -9,6 +9,7 @@ import MatrixHandles from "@/components/editor/matrix-handles";
 import VennHandles from "@/components/editor/venn-handles";
 import FishboneHandles from "@/components/editor/fishbone-handles";
 import SequenceHandles from "@/components/editor/sequence-handles";
+import PrismaHandles from "@/components/editor/prisma-handles";
 import type { CanvasView } from "@/components/editor/pool-controls";
 
 /**
@@ -87,6 +88,17 @@ export default function FigureControls({
       return (
         <SequenceHandles
           api={api}
+          spec={spec}
+          box={box}
+          view={view}
+          picked={picked}
+          onPick={onPick}
+          onChange={onChange}
+        />
+      );
+    case "prisma":
+      return (
+        <PrismaHandles
           spec={spec}
           box={box}
           view={view}

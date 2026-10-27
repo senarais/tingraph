@@ -53,6 +53,8 @@ type PortList = Array<[string, number]>;
 interface Hover {
   unit: string;
   box: Box;
+  end: LinkEnd;
+  at?: number;
   /** the rows this element publishes, empty for everything but a table */
   ports: PortList;
 }
@@ -67,7 +69,15 @@ type Drag =
       fromAt?: number;
     }
   | { mode: "leg"; id: string; at: Point }
-  | { mode: "end"; id: string; which: "from" | "to"; at: Point };
+  | {
+      mode: "end";
+      id: string;
+      which: "from" | "to";
+      at: Point;
+      fixed: LinkEnd;
+      box: Box;
+      fixedAt?: number;
+    };
 
 const ACCENT = "#6b46ff";
 
@@ -96,7 +106,8 @@ function targetAt(
 /** Keeps the pointer on the element that took it, if the browser will. */
 function capture(event: React.PointerEvent): void {
   try {
-    (event.target as Element).setPointerCapture(event.pointerId);
+    const target = event.currentTarget as SVGElement;
+    (target.ownerSVGElement ?? target).setPointerCapture(event.pointerId);
   } catch {
     // a pointer that has already gone: the gesture still reads fine without it
   }
@@ -174,9 +185,14 @@ export default function ConnectLayer({
   /** What is under the pointer, with the rows it offers, for the overlay. */
   const hoverAt = (point: Point, targets: Map<string, Box>): Hover | null => {
     const found = targetAt(targets, point, reach());
-    return found
-      ? { ...found, ports: [...(portsRef.current.get(found.unit) ?? [])] }
-      : null;
+    if (!found) return null;
+    const end = endAt(found, point);
+    return {
+      ...found,
+      end,
+      at: end.port ? portsRef.current.get(found.unit)?.get(end.port) : undefined,
+      ports: [...(portsRef.current.get(found.unit) ?? [])],
+    };
   };
 
   /** Writes one connector back, re-cutting its route from the new setting. */
@@ -280,6 +296,7 @@ export default function ConnectLayer({
     }
     if (held.mode === "end") {
       setHover(hoverAt(point, targetsRef.current));
+      setDrag({ ...held, at: point });
     }
   };
 
@@ -318,28 +335,30 @@ export default function ConnectLayer({
   const scale = view.zoom;
   const size = (value: number) => value / scale;
   const preview = (() => {
-    if (held?.mode !== "draw") {
+    if (!held || held.mode === "leg") {
       return null;
     }
     const from = held.box;
-    const fromAt = held.fromAt;
-    if (hover && hover.unit !== held.from.unit) {
-      const toAt = hover.ports.find(
-        ([, y]) => Math.abs(held.at.y - y) <= PORT_REACH,
-      )?.[1];
-      return routeBetween(from, hover.box, {
+    const end = held.mode === "draw" ? held.from : held.fixed;
+    const fromAt = held.mode === "draw" ? held.fromAt : held.fixedAt;
+    const reverse = held.mode === "end" && held.which === "from";
+    if (hover && hover.unit !== end.unit) {
+      return routeBetween(reverse ? hover.box : from, reverse ? from : hover.box, {
         ...rules,
-        fromSide: held.from.side,
-        ...(fromAt === undefined ? {} : { fromAt }),
-        ...(toAt === undefined ? {} : { toAt }),
+        fromSide: reverse ? hover.end.side : end.side,
+        toSide: reverse ? end.side : hover.end.side,
+        fromAt: reverse ? hover.at : fromAt,
+        toAt: reverse ? fromAt : hover.at,
       });
     }
     // nothing under the pointer yet: the line leaves the side it would leave
     // by, and follows the hand from there
     const side =
-      held.from.side ??
+      end.side ??
       sidesFor(from, { x: held.at.x, y: held.at.y, width: 1, height: 1 }, rules)[0];
-    return [sideAnchor(from, side), held.at];
+    const anchor = sideAnchor(from, side);
+    if (fromAt !== undefined) anchor.y = fromAt;
+    return reverse ? [held.at, anchor] : [anchor, held.at];
   })();
 
   const corners = picked && link && holding === null ? cornersOf(picked) : null;
@@ -359,6 +378,8 @@ export default function ConnectLayer({
       onPointerDown={drawing ? (event) => startDraw(event) : undefined}
       onPointerMove={drawing ? moveDraw : held ? moveHandle : undefined}
       onPointerUp={drawing ? endDraw : held ? endHandle : undefined}
+      onPointerCancel={() => { setDrag(null); setHover(null); }}
+      onLostPointerCapture={() => { setDrag(null); setHover(null); }}
       onPointerLeave={drawing && !held ? () => setHover(null) : undefined}
       // the sheet keeps its own zoom and pan while a connector is out: a wheel
       // over this layer is handed to the canvas under it, along with where the
@@ -468,16 +489,20 @@ export default function ConnectLayer({
                 strokeWidth={1.5}
                 vectorEffect="non-scaling-stroke"
                 style={{ pointerEvents: "auto", cursor: "pointer" }}
-                onPointerDown={(event) =>
+                onPointerDown={(event) => {
+                  const fixed = index === 0 ? link!.to : link!.from;
+                  const box = readTargets().get(fixed.unit);
+                  if (!box) return;
                   dragHandle(event, {
                     mode: "end",
                     id: picked!.id,
                     which: index === 0 ? "from" : "to",
                     at: { x: point.x, y: point.y },
-                  })
-                }
-                onPointerMove={moveHandle}
-                onPointerUp={endHandle}
+                    fixed,
+                    box,
+                    fixedAt: fixed.port ? portsRef.current.get(fixed.unit)?.get(fixed.port) : undefined,
+                  });
+                }}
               />
             ))}
             {leg && (
@@ -498,8 +523,6 @@ export default function ConnectLayer({
                 onPointerDown={(event) =>
                   dragHandle(event, { mode: "leg", id: picked!.id, at: leg.at })
                 }
-                onPointerMove={moveHandle}
-                onPointerUp={endHandle}
                 onDoubleClick={() => write(picked!.id, { bend: null }, true)}
               />
             )}

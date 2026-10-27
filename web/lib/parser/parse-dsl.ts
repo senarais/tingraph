@@ -19,6 +19,7 @@ import { parseMind } from "@/lib/parser/parse-mind";
 import {
   parseFishbone,
   parseMatrix,
+  parsePrisma,
   parseVenn,
 } from "@/lib/parser/parse-figures";
 import { parseSequence } from "@/lib/parser/parse-sequence";
@@ -689,7 +690,7 @@ export function detectCategory(code: string): DiagramCategory | null {
     .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
     .trimStart();
   const head = stripped.match(
-    /^(flow|bpmn|org|usecase|activity|erd|architecture|bar|line|pie|scatter|mind|matrix|venn|fishbone|sequence)\b/,
+    /^(flow|bpmn|org|usecase|activity|erd|architecture|bar|line|pie|scatter|mind|matrix|venn|fishbone|sequence|prisma)\b/,
   );
   return head ? (head[1] as DiagramCategory) : null;
 }
@@ -698,7 +699,7 @@ export function parseDSL(code: string): AST {
   const category = detectCategory(code);
   if (!category) {
     throw new DSLError(
-      'A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are flow, bpmn, org, usecase, activity, erd, architecture, sequence, bar, line, pie, scatter, mind, matrix, venn and fishbone',
+      'A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are flow, bpmn, org, usecase, activity, erd, architecture, sequence, bar, line, pie, scatter, mind, matrix, venn, fishbone and prisma',
       1,
     );
   }
@@ -713,7 +714,9 @@ export function parseDSL(code: string): AST {
             ? parseVenn(code)
             : category === "sequence"
               ? parseSequence(code)
-              : parseFishbone(code);
+              : category === "prisma"
+                ? parsePrisma(code)
+                : parseFishbone(code);
     return { category, title: figure.title, nodes: [], edges: [], figure };
   }
   const nodeTypes =

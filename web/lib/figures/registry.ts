@@ -16,6 +16,8 @@ import { buildFishboneSkeletons } from "@/lib/fishbone/build-fishbone";
 import { blankFishbone } from "@/lib/fishbone/spec";
 import { buildSequenceSkeletons } from "@/lib/sequence/build-sequence";
 import { blankSequence } from "@/lib/sequence/spec";
+import { buildPrismaSkeletons } from "@/lib/prisma/build-prisma";
+import { blankPrisma } from "@/lib/prisma/spec";
 
 /**
  * The one place that knows which figure is which.
@@ -95,6 +97,11 @@ export const FIGURES: Partial<Record<DiagramCategory, FigureDef>> = {
     label: "Sequence diagram",
     build: buildSequenceSkeletons as FigureDef["build"],
     blank: blankSequence,
+  },
+  prisma: {
+    label: "PRISMA diagram",
+    build: buildPrismaSkeletons as FigureDef["build"],
+    blank: blankPrisma,
   },
 };
 

@@ -14,14 +14,23 @@ import {
   type FishboneBone,
   type FishboneSpec,
 } from "@/lib/fishbone/spec";
+import {
+  PRISMA_STYLES,
+  defaultPrismaOptions,
+  type PrismaBox,
+  type PrismaLine,
+  type PrismaSpec,
+  type PrismaStep,
+} from "@/lib/prisma/spec";
 
 /**
- * The matrix, the Venn diagram and the fishbone, written down.
+ * The matrix, the Venn diagram, the fishbone and the PRISMA flow, written down.
  *
- * Three small grammars rather than one general one, because the three say
+ * Four small grammars rather than one general one, because the four say
  * genuinely different things: a matrix names rows, columns and their cells, a
- * Venn names its sets and what falls in each region between them, and a
- * fishbone is a nest of causes. What they share is `lib/parser/reader.ts`, and
+ * Venn names its sets and what falls in each region between them, a fishbone
+ * is a nest of causes, and a PRISMA flow is a run of rows with what left the
+ * review beside each one. What they share is `lib/parser/reader.ts`, and
  * nothing else.
  */
 
@@ -408,6 +417,116 @@ class FishboneParser extends Reader {
   }
 }
 
+// ------------------------------------------------------------------- prisma
+
+class PrismaParser extends Reader {
+  parse(): PrismaSpec {
+    const { title, line } = this.open("prisma");
+    const options = defaultPrismaOptions();
+    const steps: PrismaStep[] = [];
+    let band = "";
+    let last: PrismaStep | null = null;
+
+    while (!this.peekIs("rbrace")) {
+      if (this.pos >= this.tokens.length) {
+        throw new DSLError('Missing closing "}"', line);
+      }
+      const tok = this.advance();
+      if (tok.kind !== "id") {
+        throw new DSLError(
+          `Expected "band", "row", "side" or a setting, got "${tok.value}"`,
+          tok.line,
+        );
+      }
+      if (tok.value === "band") {
+        band = this.eat("string", 'A band is written band "Identification"').value;
+        // a side box belongs to the row above it, and a band ends that row
+        last = null;
+        continue;
+      }
+      if (tok.value === "row") {
+        const step: PrismaStep = { band, ...this.parseBox("row") };
+        steps.push(step);
+        last = step;
+        continue;
+      }
+      if (tok.value === "side") {
+        if (!last) {
+          throw new DSLError(
+            'A side box follows the row it belongs to, e.g. row "Records screened" 955 then side "Records excluded" 812',
+            tok.line,
+          );
+        }
+        if (last.side) {
+          throw new DSLError(
+            `"${last.title}" already has a side box; a row has one`,
+            tok.line,
+          );
+        }
+        last.side = this.parseBox("side");
+        continue;
+      }
+      switch (tok.value) {
+        case "style":
+          options.style = this.word(
+            tok,
+            "style",
+            PRISMA_STYLES.map((entry) => entry.id),
+          ) as PrismaSpec["options"]["style"];
+          break;
+        case "bands":
+          options.bands = this.flag(tok, "bands");
+          break;
+        case "text":
+          options.fontSize = this.amount(tok, "text", 8, 24);
+          break;
+        case "size":
+          options.width = this.amount(tok, "size", 240, 2400);
+          options.height = this.amount(tok, "size", 200, 2400);
+          break;
+        default:
+          throw new DSLError(`"${tok.value}" is not a PRISMA setting`, tok.line);
+      }
+    }
+    this.close(line);
+    if (steps.length === 0) {
+      throw new DSLError(
+        'A PRISMA flow needs at least one row, e.g. row "Records screened" 955',
+        line,
+      );
+    }
+    return { kind: "prisma", title, steps, options };
+  }
+
+  /** `row "Records screened" 955 { "Databases" 1200 ... }`, or a side box. */
+  private parseBox(what: "row" | "side"): PrismaBox {
+    const title = this.eat(
+      "string",
+      what === "row"
+        ? 'A row is written row "Caption" 955, with an optional { "Line" 120 } block'
+        : 'A side box is written side "Caption" 812, with an optional { "Line" 120 } block',
+    ).value;
+    const count = this.peekIs("number") ? this.advance().value : "";
+    const items: PrismaLine[] = [];
+    if (this.peekIs("lbrace")) {
+      const opened = this.advance().line;
+      while (!this.peekIs("rbrace")) {
+        if (this.pos >= this.tokens.length) {
+          throw new DSLError(`Missing "}" for "${title}"`, opened);
+        }
+        const label = this.eat(
+          "string",
+          'A line is written "Caption" 1200, or just "Caption"',
+        ).value;
+        const lineCount = this.peekIs("number") ? this.advance().value : "";
+        items.push({ label, count: lineCount });
+      }
+      this.advance();
+    }
+    return { title, count, items };
+  }
+}
+
 export function parseMatrix(code: string): MatrixSpec {
   return new MatrixParser(tokenize(code)).parse();
 }
@@ -418,4 +537,8 @@ export function parseVenn(code: string): VennSpec {
 
 export function parseFishbone(code: string): FishboneSpec {
   return new FishboneParser(tokenize(code)).parse();
+}
+
+export function parsePrisma(code: string): PrismaSpec {
+  return new PrismaParser(tokenize(code)).parse();
 }

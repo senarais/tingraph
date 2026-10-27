@@ -99,8 +99,10 @@ function Turn({
 export default function AiDrawer({
   category,
   onGenerate,
+  generationMessage,
 }: {
   category: DiagramCategory;
+  generationMessage: string;
   /** writes the source into the editor and draws it, in that order */
   onGenerate: (source: string) => void;
 }) {
@@ -152,6 +154,9 @@ export default function AiDrawer({
     if ((!prompt && files.length === 0) || thinking) {
       return;
     }
+    if (prompt.length > 4000 && !window.confirm(
+      "This prompt is long and may produce a dense diagram or use more AI tokens. Consider splitting it into smaller diagrams. Continue sending?",
+    )) return;
     const text = prompt || "Create a diagram from the attached files.";
     const message = files.length > 0 ? `${text}\n\nAttached: ${files.map((file) => file.name).join(", ")}` : text;
     const store = useTingraphStore.getState();
@@ -246,6 +251,9 @@ export default function AiDrawer({
 
         {thinking && (
           <p className="text-[11.5px] text-ink-faint">Writing the diagram…</p>
+        )}
+        {generationMessage && (
+          <p role="status" className="text-[11.5px] text-ink">{generationMessage}</p>
         )}
         <div ref={foot} />
       </div>

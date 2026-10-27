@@ -17,7 +17,7 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Tingraph | Editable Code to Diagram",
   description:
-    "Turn code or a prompt into an editable diagram. Make clean figures for papers and reports, or explore playful styles across 16 notations.",
+    "Turn code or a prompt into an editable diagram. Make clean figures for papers and reports, or explore playful styles across 17 notations.",
   icons: {
     icon: "/icon.png",
     apple: "/icon.png",

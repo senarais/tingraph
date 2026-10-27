@@ -1,0 +1,82 @@
+services:
+  db:
+    network_mode: host
+    networks: !reset []
+    command:
+      - postgres
+      - -c
+      - shared_buffers=128MB
+      - -c
+      - effective_cache_size=384MB
+      - -c
+      - work_mem=4MB
+      - -c
+      - maintenance_work_mem=64MB
+      - -c
+      - max_connections=40
+      - -c
+      - wal_compression=on
+      - -c
+      - listen_addresses=127.0.0.2
+      - -c
+      - port=15432
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.2 -p 15432 -U tingraph_owner -d tingraph"]
+
+  db-bootstrap:
+    network_mode: host
+    networks: !reset []
+
+  migrate:
+    network_mode: host
+    networks: !reset []
+
+  redis:
+    network_mode: host
+    networks: !reset []
+    command:
+      - redis-server
+      - --save
+      - ""
+      - --appendonly
+      - "no"
+      - --maxmemory
+      - 32mb
+      - --maxmemory-policy
+      - noeviction
+      - --bind
+      - 127.0.0.3
+      - --port
+      - "16379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "-h", "127.0.0.3", "-p", "16379", "ping"]
+
+  api:
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    environment:
+      HTTP_ADDRESS: 127.0.0.1:8081
+      REDIS_URL: redis://127.0.0.3:16379
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://127.0.0.1:8081/health/ready"]
+
+  web:
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+    environment:
+      BACKEND_INTERNAL_URL: http://127.0.0.1:8081
+      HOSTNAME: 127.0.0.1
+
+  caddy:
+    network_mode: host
+    networks: !reset []
+    ports: !reset []
+
+  backup:
+    network_mode: host
+    networks: !reset []

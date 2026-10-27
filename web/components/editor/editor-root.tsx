@@ -20,6 +20,7 @@ import { TEMPLATES } from "@/lib/templates";
 import { styleFor, type SheetStyle } from "@/lib/sheet";
 import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
 import { computeLayout } from "@/lib/layout/compute-layout";
+import { generationConflict } from "@/lib/canvas/generation";
 import { mapToExcalidrawElements } from "@/lib/excalidraw-mapper/map-to-elements";
 import {
   buildShapeFor,
@@ -518,8 +519,29 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
     if (generatingRef.current) {
       return;
     }
+    let ast;
+    try {
+      ast = parseDSL(source);
+    } catch (cause) {
+      setGenerationMessage(cause instanceof Error ? cause.message : String(cause));
+      return;
+    }
+    if (
+      (source.length > 12000 || ast.nodes.length > 60 || ast.edges.length > 100) &&
+      !window.confirm(
+        `This is a large diagram (${ast.nodes.length} nodes, ${ast.edges.length} connectors; ${source.length} source characters). ` +
+        "It may take longer to draw and be hard to read when fitted to the screen. " +
+        "Split it into smaller diagrams for clarity. Continue generating?",
+      )
+    ) return;
     const fresh = drawFromSource(source, ink, direction, style);
     if (!api || fresh.length === 0) {
+      setGenerationMessage("The diagram could not be drawn. Check the source and try again.");
+      return;
+    }
+    const conflict = generationConflict(fresh);
+    if (conflict) {
+      setGenerationMessage(conflict);
       return;
     }
 
@@ -883,6 +905,7 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
             {drawer === "ai" && (
               <AiDrawer
                 category={editorCategory}
+                generationMessage={generationMessage}
                 onGenerate={(source) => void generate(source, true)}
               />
             )}

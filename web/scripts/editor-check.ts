@@ -5,6 +5,7 @@ import { buildSkeletons } from "../lib/excalidraw-mapper/build-skeletons";
 import { shapeFamily } from "../lib/layout/compute-layout";
 import { controlsFor, held } from "../lib/canvas/inspect";
 import { unitOf } from "../lib/canvas/units";
+import { clearConnectorLabels, generationConflict } from "../lib/canvas/generation";
 import Module from "node:module";
 import { createRequire } from "node:module";
 import type { PoolBox } from "../lib/canvas/scene";
@@ -29,6 +30,36 @@ import { isSettable, type DiagramCategory, type DSLNode } from "../lib/types";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 
 type Skel = Record<string, unknown> & { id?: string; type: string };
+
+// Render-time guards see text growth that a layout estimate cannot predict.
+const rendered = [
+  { id: "a", type: "rectangle", x: 0, y: 0, width: 100, height: 60,
+    customData: { tingraph: { unit: "a", kind: "node" } } },
+  { id: "b", type: "rectangle", x: 150, y: 0, width: 100, height: 60,
+    customData: { tingraph: { unit: "b", kind: "node" } } },
+] as unknown as ExcalidrawElement[];
+assert.equal(generationConflict(rendered), null);
+const overflowingText = { id: "text", type: "text", containerId: "a",
+  x: 20, y: 20, width: 160, height: 20 } as ExcalidrawElement;
+assert.match(generationConflict([...rendered, overflowingText])!, /a and b overlap/);
+assert.equal(generationConflict([...rendered, { ...overflowingText, isDeleted: true }]), null);
+const zone = { ...rendered[0], id: "zone", width: 400, height: 200,
+  customData: { tingraph: { unit: "zone", kind: "node", spec: { type: "zone" } } } } as ExcalidrawElement;
+assert.equal(generationConflict([...rendered, zone]), null, "intentional zone containment is valid");
+const captions = Array.from({ length: 12 }, (_, i) => ({
+  id: `caption-${i}`, type: "text", x: 30, y: 20, width: 180, height: 20,
+  customData: { tingraph: { unit: `edge-${i}`, kind: "edge" } },
+})) as unknown as ExcalidrawElement[];
+const cleared = clearConnectorLabels([...rendered, ...captions]);
+for (let i = 2; i < cleared.length; i++) {
+  const a = cleared[i];
+  for (const b of cleared.slice(0, i)) {
+    assert.ok(!(a.x < b.x + b.width && b.x < a.x + a.width &&
+      a.y < b.y + b.height && b.y < a.y + a.height), "dense captions clear nodes and each other");
+  }
+}
+assert.deepEqual(clearConnectorLabels(cleared), cleared, "caption placement is stable");
+assert.equal(captions[0].y, 20, "layout inputs are not mutated");
 
 /**
  * The scene rules, without a browser.

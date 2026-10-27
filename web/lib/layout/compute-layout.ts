@@ -219,7 +219,7 @@ export function flowDimensions(
     case "decision":
       return {
         width: Math.round(Math.max(170, width * 2 + 40)),
-        height: Math.round(Math.max(90, textHeight + 56)),
+        height: Math.round(Math.max(90, textHeight * 2 + 40)),
       };
     default:
       return {

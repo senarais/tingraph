@@ -20,6 +20,7 @@ import {
   Wand2,
   Waypoints,
   MessagesSquare,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { useTingraphStore, type CanvasTool, type Drawer } from "@/lib/store";
@@ -121,6 +122,7 @@ const FIGURE_ICONS: Partial<Record<DiagramCategory, LucideIcon>> = {
   venn: Blend,
   fishbone: Fish,
   sequence: MessagesSquare,
+  prisma: Workflow,
 };
 
 /**

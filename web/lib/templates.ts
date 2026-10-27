@@ -401,6 +401,39 @@ export const VENN_TEMPLATE = `venn "Three sets" {
 }
 `;
 
+export const PRISMA_TEMPLATE = `prisma "PRISMA 2020 flow diagram" {
+  band "Identification"
+  row "Records identified from" 1423 {
+    "Databases" 1200
+    "Registers" 223
+  }
+  side "Records removed before screening" 468 {
+    "Duplicate records removed" 300
+    "Records marked as ineligible by automation tools" 100
+    "Records removed for other reasons" 68
+  }
+
+  band "Screening"
+  row "Records screened" 955
+  side "Records excluded" 812
+  row "Reports sought for retrieval" 143
+  side "Reports not retrieved" 20
+
+  band "Eligibility"
+  row "Reports assessed for eligibility" 123
+  side "Reports excluded" 110 {
+    "Reason 1" 50
+    "Reason 2" 35
+    "Reason 3" 25
+  }
+
+  band "Included"
+  row "Studies included in review" 13 {
+    "Reports of included studies" 16
+  }
+}
+`;
+
 export const FISHBONE_TEMPLATE = `fishbone "The part is produced the wrong size" {
   bone "Material" {
     "Wrong specification of the material"
@@ -444,6 +477,7 @@ export const TEMPLATES: Record<DiagramCategory, string> = {
   matrix: MATRIX_TEMPLATE,
   venn: VENN_TEMPLATE,
   fishbone: FISHBONE_TEMPLATE,
+  prisma: PRISMA_TEMPLATE,
   architecture: ARCHITECTURE_TEMPLATES[0].source,
 };
 
@@ -463,5 +497,6 @@ export const TEMPLATE_LABELS: Record<DiagramCategory, string> = {
   matrix: "matrix table",
   venn: "Venn diagram",
   fishbone: "Fishbone",
+  prisma: "PRISMA flow",
   architecture: "Architecture diagram",
 };

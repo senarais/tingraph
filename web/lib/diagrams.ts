@@ -236,6 +236,34 @@ export const VENN_SAMPLE = `venn "Three sets" {
 }
 `;
 
+export const PRISMA_SAMPLE = `prisma "PRISMA 2020 flow diagram" {
+  band "Identification"
+  row "Records identified from" 1423 {
+    "Databases" 1200
+    "Registers" 223
+  }
+  side "Records removed before screening" 468 {
+    "Duplicate records removed" 468
+  }
+
+  band "Screening"
+  row "Records screened" 955
+  side "Records excluded" 812
+  row "Reports sought for retrieval" 143
+  side "Reports not retrieved" 20
+
+  band "Eligibility"
+  row "Reports assessed for eligibility" 123
+  side "Reports excluded" 110 {
+    "Reason 1" 50
+    "Reason 2" 60
+  }
+
+  band "Included"
+  row "Studies included in review" 13
+}
+`;
+
 export const FISHBONE_SAMPLE = `fishbone "The part is the wrong size" {
   bone "Material" {
     "Wrong specification"
@@ -428,6 +456,17 @@ export const READY_DIAGRAMS: DiagramKind[] = [
     parts: ["The effect", "Bones", "Causes", "Causes behind causes"],
     accent: "mono",
     sample: FISHBONE_SAMPLE,
+  },
+  {
+    id: "prisma",
+    name: "PRISMA flow",
+    family: "Process",
+    keyword: "prisma",
+    summary:
+      "The record counts a systematic review reports from identification through screening and eligibility to the studies it included, with what left the flow at each step.",
+    parts: ["Four phases", "Records and exclusions", "Counts", "PRISMA 2020 flow"],
+    accent: "navy",
+    sample: PRISMA_SAMPLE,
   },
 ];
 

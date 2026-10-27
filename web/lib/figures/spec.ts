@@ -4,6 +4,7 @@ import type { MatrixSpec } from "@/lib/matrix/spec";
 import type { VennSpec } from "@/lib/venn/spec";
 import type { FishboneSpec } from "@/lib/fishbone/spec";
 import type { SequenceSpec } from "@/lib/sequence/spec";
+import type { PrismaSpec } from "@/lib/prisma/spec";
 
 /**
  * A figure is a notation whose whole state is one object.
@@ -11,7 +12,7 @@ import type { SequenceSpec } from "@/lib/sequence/spec";
  * The graph notations — flowchart, BPMN, org chart — are a bag of elements the
  * reader edits one at a time, and the sheet is the record of them. A figure is
  * the other thing: a chart, a mind map, a matrix, a Venn diagram, a fishbone,
- * a sequence diagram.
+ * a sequence diagram, a PRISMA flow.
  * Its marks are drawn *from* a spec rather than being the spec, so the sheet
  * carries that spec on one invisible frame element and every edit — from the
  * panel, from a handle on the sheet, or from the source — rewrites it and has
@@ -27,7 +28,8 @@ export type FigureSpec =
   | MatrixSpec
   | VennSpec
   | FishboneSpec
-  | SequenceSpec;
+  | SequenceSpec
+  | PrismaSpec;
 
 /** Every figure says how big it is drawn, because every figure can be resized. */
 export interface FigureSize {

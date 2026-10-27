@@ -550,6 +550,7 @@ function edgeLabelSkeletons(
 ): ExcalidrawElementSkeleton[] {
   const taken: Box[] = [];
   for (const node of positioned.nodes) {
+    if (node.type === "zone") continue;
     taken.push({ x: node.x - 3, y: node.y - 3, width: node.width + 6, height: node.height + 6 });
     const label =
       positioned.category === "bpmn" ? externalLabelBox(node) : null;
@@ -602,26 +603,6 @@ function edgeLabelSkeletons(
     } as ExcalidrawElementSkeleton);
   });
   return out;
-}
-
-function flowEdgeSkeleton(
-  edge: PositionedEdge,
-  index: number,
-  theme: Theme,
-  category: DiagramCategory,
-): ExcalidrawElementSkeleton | null {
-  const skeleton = edgeSkeleton(edge, index, theme, category);
-  if (!skeleton || !edge.label) {
-    return skeleton;
-  }
-  return {
-    ...skeleton,
-    label: {
-      text: edge.label,
-      fontSize: theme.fontSize,
-      fontFamily: theme.fontFamily,
-    },
-  } as ExcalidrawElementSkeleton;
 }
 
 function diagramBounds(positioned: PositionedAST): {
@@ -971,9 +952,7 @@ export function buildSkeletons(
   const theme = themeFor(ink, category, style);
   const skeletons: ExcalidrawElementSkeleton[] = [];
   const isBpmn = category === "bpmn";
-  // every notation but the flowchart writes its captions beside the line
-  // rather than on it, so they are placed after the shapes and nudged clear
-  const besideTheLine = category !== "flow";
+  // Every connector caption is placed separately so it can clear nearby nodes.
 
   if (isBpmn && positioned.pools) {
     skeletons.push(...poolLaneSkeletons(positioned, theme));
@@ -990,16 +969,12 @@ export function buildSkeletons(
   }
 
   positioned.edges.forEach((edge, index) => {
-    const skeleton = besideTheLine
-      ? edgeSkeleton(edge, index, theme, category)
-      : flowEdgeSkeleton(edge, index, theme, category);
+    const skeleton = edgeSkeleton(edge, index, theme, category);
     if (skeleton) {
       skeletons.push(skeleton);
     }
   });
-  if (besideTheLine) {
-    skeletons.push(...edgeLabelSkeletons(positioned, theme));
-  }
+  skeletons.push(...edgeLabelSkeletons(positioned, theme));
 
   if (positioned.nodes.length > 0) {
     skeletons.push(titleSkeleton(positioned, theme));

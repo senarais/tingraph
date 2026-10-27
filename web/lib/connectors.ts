@@ -251,6 +251,7 @@ export const CONNECTORS: Record<DiagramCategory, ConnectorKind[]> = {
   matrix: [],
   venn: [],
   fishbone: [],
+  prisma: [],
 };
 
 const ALL = [...BPMN, ...FLOW, ...ORG, ...USECASE, ...ACTIVITY, ...ERD, ...ARCHITECTURE];

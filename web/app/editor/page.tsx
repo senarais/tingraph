@@ -30,6 +30,7 @@ const CATEGORIES: DiagramCategory[] = [
   "matrix",
   "venn",
   "fishbone",
+  "prisma",
 ];
 
 function requested(value: string | string[] | undefined): DiagramCategory | undefined {

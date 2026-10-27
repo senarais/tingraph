@@ -1,6 +1,6 @@
 import assert from "node:assert";
 import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
-import { computeLayout } from "@/lib/layout/compute-layout";
+import { computeLayout, flowDimensions } from "@/lib/layout/compute-layout";
 import {
   FLOWCHART_TEMPLATE,
   BPMN_TEMPLATE,
@@ -13,6 +13,7 @@ import {
   MATRIX_TEMPLATE,
   VENN_TEMPLATE,
   FISHBONE_TEMPLATE,
+  PRISMA_TEMPLATE,
   USECASE_TEMPLATE,
   ACTIVITY_TEMPLATE,
   ERD_TEMPLATE,
@@ -47,6 +48,12 @@ import {
 } from "@/lib/ai/attachments";
 import type { FishboneSpec } from "@/lib/fishbone/spec";
 import { planFishbone } from "@/lib/fishbone/build-fishbone";
+import type { PrismaSpec } from "@/lib/prisma/spec";
+import {
+  buildPrismaSkeletons,
+  grownPrisma,
+  planPrisma,
+} from "@/lib/prisma/build-prisma";
 import {
   asElement,
   gripSide,
@@ -63,6 +70,12 @@ assert.equal(detectCategory(FLOWCHART_TEMPLATE), "flow");
 assert.equal(detectCategory(BPMN_TEMPLATE), "bpmn");
 assert.equal(detectCategory(ORG_TEMPLATE), "org");
 assert.equal(detectCategory('graph "x" {}'), null);
+
+const longDecision = "Verify all required conditions before accepting the submitted registration request ".repeat(8);
+const decisionSize = flowDimensions("decision", longDecision);
+const processSize = flowDimensions("process", longDecision);
+assert.ok(decisionSize.height >= (processSize.height - 26) * 2,
+  "diamond reserves twice the text height for its inscribed caption area");
 
 const flowAst = parseDSL(FLOWCHART_TEMPLATE);
 assert.equal(flowAst.category, "flow");
@@ -1236,6 +1249,122 @@ for (const bone of bones.bones) {
     assert.ok(cause.from.x < cause.at.x, "a cause runs into its bone from the left");
   }
 }
+
+// ---------------------------------------------------------------- prisma
+
+const flow = parseDSL(PRISMA_TEMPLATE).figure as PrismaSpec;
+assert.equal(flow.kind, "prisma");
+assert.equal(flow.steps.length, 5, "the PRISMA template is five rows");
+assert.deepEqual(
+  flow.steps.map((step) => step.band),
+  ["Identification", "Screening", "Screening", "Eligibility", "Included"],
+  "the four phases are read off the rows",
+);
+assert.equal(flow.steps[0].side?.items.length, 3, "the removed-before-screening box lists three reasons");
+assert.equal(flow.steps[4].side, undefined, "the included row has nothing beside it");
+
+const flowPlan = planPrisma(flow, {
+  x: 0,
+  y: 0,
+  width: flow.options.width,
+  height: flow.options.height,
+});
+assert.equal(flowPlan.bands.length, 4, "consecutive Screening rows share one band");
+assert.equal(
+  flowPlan.bands[1].box.y + flowPlan.bands[1].box.height,
+  flowPlan.bands[2].box.y,
+  "the bands meet in the channel between rows",
+);
+assert.equal(flowPlan.rows.length, 5);
+for (const row of flowPlan.rows) {
+  assert.ok(
+    row.box.x >= 0 && row.box.x + row.box.width <= flow.options.width,
+    "a main box stays inside the frame",
+  );
+  if (row.side) {
+    assert.ok(
+      row.side.box.x >= row.box.x + row.box.width,
+      "a side box stands to the right of its row",
+    );
+    assert.ok(
+      row.side.box.x + row.side.box.width <= flow.options.width,
+      "and stays inside the frame",
+    );
+  }
+}
+for (let index = 1; index < flowPlan.rows.length; index += 1) {
+  assert.ok(
+    flowPlan.rows[index].box.y > flowPlan.rows[index - 1].box.y,
+    "rows run down the page",
+  );
+}
+assert.equal(
+  flowPlan.arrows.length,
+  flowPlan.rows.length - 1 + flowPlan.rows.filter((row) => row.side).length,
+  "one hop between rows, and one step out to each side box",
+);
+assert.ok(
+  flowPlan.rows[flowPlan.rows.length - 1].box.y +
+    flowPlan.rows[flowPlan.rows.length - 1].box.height <=
+    flow.options.height,
+  "the default sheet is tall enough for the flow",
+);
+
+const drawnFlow = buildPrismaSkeletons(flow, {
+  x: 0,
+  y: 0,
+  width: flow.options.width,
+  height: flow.options.height,
+}) as unknown as Array<{
+  id?: string;
+  type: string;
+  customData?: { tingraph?: { unit?: string; kind?: string; figure?: unknown } };
+}>;
+const flowFrame = drawnFlow.find((piece) => piece.id === "prisma-1-frame");
+assert.ok(flowFrame, "the flow is carried by one frame");
+assert.equal(flowFrame!.customData?.tingraph?.kind, "figure");
+assert.ok(flowFrame!.customData?.tingraph?.figure, "and the frame holds the whole spec");
+assert.ok(
+  drawnFlow.every((piece) => piece.customData?.tingraph?.unit === "prisma-1"),
+  "every piece is one inseparable figure",
+);
+assert.equal(
+  drawnFlow.filter((piece) => piece.type === "arrow").length,
+  flowPlan.arrows.length,
+  "every hop between rows and out to a side box is drawn",
+);
+assert.equal(
+  drawnFlow.filter((piece) => piece.type === "rectangle").length,
+  1 + flowPlan.bands.length + flowPlan.rows.length +
+    flowPlan.rows.filter((row) => row.side).length,
+  "a box for the frame, each band, each row and each side box",
+);
+
+const grown = grownPrisma({
+  ...flow,
+  steps: [
+    ...flow.steps,
+    { band: "Included", title: "New row", count: "", items: [] },
+  ],
+});
+assert.ok(
+  grown.options.height > flow.options.height,
+  "a row added below grows the sheet rather than drawing past it",
+);
+assert.equal(
+  grownPrisma(flow).options.height,
+  flow.options.height,
+  "a flow that already fits is left the size it is",
+);
+
+expectDSLError('prisma "P" { side "Excluded" 2 }', "A side box follows the row");
+expectDSLError('prisma "P" { }', "at least one row");
+expectDSLError(
+  'prisma "P" { row "A" 1 side "B" 2 side "C" 3 }',
+  "already has a side box",
+);
+expectDSLError('prisma "P" { row "A" 1 style wide }', '"style" takes one of');
+expectDSLError('prisma "P" { row "A" 1 bands maybe }', '"bands" takes on or off');
 
 // ------------------------------------------------------------------ use case
 

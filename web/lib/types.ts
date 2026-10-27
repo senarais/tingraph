@@ -171,6 +171,7 @@ export const FIGURE_KINDS = [
   "venn",
   "fishbone",
   "sequence",
+  "prisma",
 ] as const;
 
 export type FigureKind = (typeof FIGURE_KINDS)[number];

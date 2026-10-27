@@ -11,6 +11,7 @@ import {
   MATRIX_TEMPLATE,
   VENN_TEMPLATE,
   FISHBONE_TEMPLATE,
+  PRISMA_TEMPLATE,
   USECASE_TEMPLATE,
   ACTIVITY_TEMPLATE,
   ERD_TEMPLATE,
@@ -559,6 +560,36 @@ const FISHBONE_SECTIONS: GuideSection[] = [
   },
 ];
 
+const PRISMA_SECTIONS: GuideSection[] = [
+  {
+    title: "Diagram",
+    rows: [
+      row('prisma "Title" {', "open a PRISMA 2020 flow diagram"),
+      row('band "Identification"', "name the phase the rows after it stand in"),
+    ],
+  },
+  {
+    title: "The flow",
+    rows: [
+      row('row "Records screened" 955', "a step and its total"),
+      row('row "Records identified from" 1423 {', "a step with lines under it"),
+      row('"Databases" 1200', "one line and its own count"),
+      row('side "Records excluded" 812 {', "what left the flow at the row above"),
+      row('"Duplicate records removed" 300', "one reason and its count"),
+    ],
+  },
+  {
+    title: "Look",
+    rows: [
+      row("style formal", "formal, banded, bold"),
+      row("bands on", "the four phase bands down the left"),
+      row("text 12", "caption size"),
+      row("size 820 660", "how big the flow is drawn"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
 const ARCHITECTURE_SECTIONS: GuideSection[] = [
   { title: "Components", rows: [
     row('architecture "Title" {', "open an architecture diagram; close with }"),
@@ -592,6 +623,7 @@ export const GUIDE_SECTIONS: Record<DiagramCategory, GuideSection[]> = {
   matrix: MATRIX_SECTIONS,
   venn: VENN_SECTIONS,
   fishbone: FISHBONE_SECTIONS,
+  prisma: PRISMA_SECTIONS,
 };
 
 /** One line of orientation, shown at the top of the guide. */
@@ -612,6 +644,7 @@ export const GUIDE_INTRO: Record<DiagramCategory, string> = {
   matrix: "Declare the columns, then each row and its cell values. Cells are text on purpose: an x, a number, a status or a sentence all work, and every one can be edited again on the sheet.",
   venn: "Name the sets, then say what falls in each region between them. A region is named by the sets it is in: A, AB, ABC.",
   fishbone: "The title is the effect, in the head. Each bone is a category of cause, and what is written inside it are the causes themselves.",
+  prisma: "Write the counts in the order the review moved through them. Each row is a step in the flow, a side box says what was dropped there, and the four phase bands are read off the rows themselves.",
 };
 
 /** The rules every chart shares, with the one word that differs filled in. */
@@ -660,6 +693,13 @@ export const RULES: Record<DiagramCategory, string[]> = {
     "Each category of cause is `bone \"Name\" { ... }`, and the causes inside it are captions in quotes.",
     "A cause may take a `{ ... }` block of its own for what is behind it, one level deep.",
     "Bones alternate above and below the spine in the order they are written.",
+  ]),
+  prisma: FIGURE_RULES("prisma", [
+    "The title is the name of the flow, written above it.",
+    "A `band` names the phase every row after it stands in, until the next `band`. Consecutive rows naming the same band share one strip, so Screening may cover two rows.",
+    "A step is `row \"Caption\" 955`, optionally followed by a `{ ... }` block of lines. Each line is `\"Caption\" 1200`.",
+    "A `side` box follows the row it belongs to and says what left the flow there. It takes the same caption, total and block.",
+    "Counts are written plainly and drawn as `(n = 955)`. Leave the number out to draw the caption on its own.",
   ]),
   usecase: [
     'The file is one `usecase "Title" { ... }` block.',
@@ -734,6 +774,7 @@ export const KEYWORD: Record<DiagramCategory, string> = {
   matrix: "matrix",
   venn: "venn",
   fishbone: "fishbone",
+  prisma: "prisma",
 };
 
 export const EXAMPLE: Record<DiagramCategory, string> = {
@@ -753,6 +794,7 @@ export const EXAMPLE: Record<DiagramCategory, string> = {
   matrix: MATRIX_TEMPLATE,
   venn: VENN_TEMPLATE,
   fishbone: FISHBONE_TEMPLATE,
+  prisma: PRISMA_TEMPLATE,
 };
 
 export const NOTATION_NAME: Record<DiagramCategory, string> = {
@@ -772,6 +814,7 @@ export const NOTATION_NAME: Record<DiagramCategory, string> = {
   matrix: "matrix table",
   venn: "Venn diagram",
   fishbone: "fishbone diagram",
+  prisma: "PRISMA 2020 flow diagram",
 };
 
 /**

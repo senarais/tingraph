@@ -47,3 +47,6 @@ next-env.d.ts
 /secrets/*
 !/secrets/*.example
 /backups/
+
+# local agent/tooling state
+/.commandcode/
