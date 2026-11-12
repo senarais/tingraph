@@ -42,7 +42,7 @@ function requested(value: string | string[] | undefined): DiagramCategory | unde
  * the canvas directly, preserving existing editor links.
  */
 export default async function EditorPage({ searchParams }: PageProps<"/editor">) {
-  const { type, diagram } = await searchParams;
+  const { type, diagram, start } = await searchParams;
   const category = requested(type);
   const diagramId = typeof diagram === "string" ? diagram : undefined;
   // keyed on the notation: asking for another one opens a fresh sheet on it
@@ -53,6 +53,8 @@ export default async function EditorPage({ searchParams }: PageProps<"/editor">)
         key={`${category ?? "bpmn"}:${diagramId ?? "new"}`}
         initialCategory={category ?? "bpmn"}
         diagramId={diagramId}
+        // the catalogue asks for the start dialog; a saved diagram never gets it
+        start={start === "1" && !diagramId}
       />
     );
   }

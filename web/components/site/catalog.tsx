@@ -143,8 +143,12 @@ export default function Catalog() {
   const [guestChoice, setGuestChoice] = useState<DiagramKind | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
+  // a notation picked here opens on the start dialog: the ways to write it,
+  // in front of a reader who has not found the Syntax guide yet
+  const editorHref = (kind: DiagramKind) => `/editor?type=${kind.id}&start=1`;
+
   const openDiagram = async (kind: DiagramKind) => {
-    const href = `/editor?type=${kind.id}`;
+    const href = editorHref(kind);
     const session = await getSession().catch(() => null);
     if (session?.user) {
       router.push(href);
@@ -298,12 +302,12 @@ export default function Catalog() {
         open={guestChoice !== null}
         title="Sign up to use generation and AI"
         message="A free account unlocks 10 generations and 3,000 Tingraph AI tokens per day, plus space for 2 saved diagrams. You can continue without an account to edit manually and export."
-        next={guestChoice ? `/editor?type=${guestChoice.id}` : "/editor"}
+        next={guestChoice ? editorHref(guestChoice) : "/editor"}
         onClose={() => setGuestChoice(null)}
         onContinue={
           guestChoice
             ? () => {
-                router.push(`/editor?type=${guestChoice.id}`);
+                router.push(editorHref(guestChoice));
                 setGuestChoice(null);
               }
             : undefined

@@ -73,6 +73,7 @@ import Inspector from "@/components/editor/inspector";
 import Rail from "@/components/editor/rail";
 import ShapeDrawer from "@/components/editor/shape-drawer";
 import SourceDrawer from "@/components/editor/source-drawer";
+import StartDialog, { type StartChoice } from "@/components/editor/start-dialog";
 import StyleDrawer from "@/components/editor/style-drawer";
 import TopBar from "@/components/editor/top-bar";
 import { Tick } from "@/components/editor/ui";
@@ -184,7 +185,14 @@ const DRAWER_TITLES: Record<Drawer, string> = {
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
-export default function EditorRoot({ initialDiagram }: { initialDiagram?: OpenedDiagram }) {
+export default function EditorRoot({
+  initialDiagram,
+  start = false,
+}: {
+  initialDiagram?: OpenedDiagram;
+  /** opened from the catalogue: the start dialog is shown over the sheet */
+  start?: boolean;
+}) {
   const code = useTingraphStore((s) => s.code);
   const setCode = useTingraphStore((s) => s.setCode);
   const category = useTingraphStore((s) => s.category);
@@ -220,6 +228,7 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
     message: string;
     next: string;
   } | null>(null);
+  const [starting, setStarting] = useState(start);
   const monacoRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
   const counterRef = useRef(1);
   const generatingRef = useRef(false);
@@ -611,6 +620,32 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
     }
   };
 
+  /**
+   * The start dialog is put away for good: the address loses its `start`, so
+   * a reload or a shared link opens on the canvas rather than asking again.
+   */
+  const finishStart = () => {
+    setStarting(false);
+    const url = new URL(window.location.href);
+    if (url.searchParams.has("start")) {
+      url.searchParams.delete("start");
+      window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  };
+
+  const chooseStart = (choice: StartChoice) => {
+    finishStart();
+    if (choice === "ai") {
+      void openAi();
+      return;
+    }
+    // set rather than toggled: whichever panel was out, this is the one now
+    useTingraphStore.setState({
+      drawer: "source",
+      sourceTab: choice === "guide" ? "guide" : "code",
+    });
+  };
+
   const saveDiagram = async () => {
     if (!api || saveState === "saving") {
       return;
@@ -959,6 +994,12 @@ export default function EditorRoot({ initialDiagram }: { initialDiagram?: Opened
           onClose={() => setExportOpen(false)}
         />
       )}
+      <StartDialog
+        open={starting}
+        category={editorCategory}
+        onChoose={chooseStart}
+        onClose={finishStart}
+      />
       <AccessDialog
         open={accountGate !== null}
         title={accountGate?.title ?? "Account required"}

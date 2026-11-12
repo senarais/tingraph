@@ -21,9 +21,12 @@ const EditorRoot = dynamic(() => import("@/components/editor/editor-root"), {
 export default function EditorShell({
   initialCategory,
   diagramId,
+  start = false,
 }: {
   initialCategory: DiagramCategory;
   diagramId?: string;
+  /** opened from the catalogue: offer the ways to start writing */
+  start?: boolean;
 }) {
   // seeded before the editor mounts, so the notation chosen on the way in is
   // the one on the first paint rather than a swap the reader watches happen
@@ -133,5 +136,5 @@ export default function EditorShell({
     );
   }
 
-  return <EditorRoot initialDiagram={loaded ?? undefined} />;
+  return <EditorRoot initialDiagram={loaded ?? undefined} start={start} />;
 }

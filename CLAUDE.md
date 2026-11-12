@@ -802,6 +802,15 @@ existing notation and saved-diagram links keep their meaning. The old picker
 and `/build` page are gone. `/build` permanently redirects to `/editor` while
 preserving query parameters, so old bookmarks still reach the right tab.
 
+A card's "Open in editor" adds `start=1`, which opens `StartDialog` over the
+starter sheet: write the source, read the syntax guide, ask Tingraph AI, or
+copy the tutorial into a chat of the reader's own. Each choice lands in the
+panel it names, so the dialog also teaches where things are. Closing it,
+however, drops `start` from the address, so a reload or a shared link opens
+on the canvas. A saved diagram never gets it. The tutorial buttons are
+`TutorialPrompt`, shared with the Syntax guide; a clipboard the browser
+refuses is said in words rather than opening an empty chat.
+
 `/docs` starts with an overview and task-oriented guides. `/docs/<notation>`
 documents every ready notation from `lib/diagrams.ts`; syntax tables, rules,
 working examples and copy prompts come directly from `lib/guide.ts`, the same
