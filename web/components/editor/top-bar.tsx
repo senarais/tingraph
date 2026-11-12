@@ -47,6 +47,9 @@ interface TopBarProps {
   saveState: "idle" | "saving" | "saved" | "error";
   saveMessage: string;
   onSave: () => void;
+  /** whether the sheet saves itself as the reader works */
+  autoSave: boolean;
+  onAutoSave: () => void;
 }
 
 export default function TopBar({
@@ -58,6 +61,8 @@ export default function TopBar({
   saveState,
   saveMessage,
   onSave,
+  autoSave,
+  onAutoSave,
 }: TopBarProps) {
   const setExportOpen = useTingraphStore((s) => s.setExportOpen);
 
@@ -101,6 +106,33 @@ export default function TopBar({
       </Cell>
 
       <div className="ml-auto flex items-center gap-2 px-2 sm:gap-3 sm:px-4">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={autoSave}
+          aria-label="Auto-save"
+          onClick={onAutoSave}
+          title={
+            autoSave
+              ? "Auto-save is on: changes are saved to My diagrams a moment after you stop. Press to turn it off."
+              : "Turn on auto-save: changes are saved to My diagrams a moment after you stop."
+          }
+          className="group flex h-10 items-center gap-2 px-1 text-[12.5px] font-semibold text-ink"
+        >
+          <span className="hidden whitespace-nowrap lg:inline">Auto-save</span>
+          <span
+            aria-hidden="true"
+            className={`relative h-[22px] w-10 shrink-0 border-2 border-edge transition-colors group-hover:shadow-[2px_2px_0_var(--edge)] ${
+              autoSave ? "bg-edge" : "bg-white"
+            }`}
+          >
+            <span
+              className={`absolute top-[2px] h-3.5 w-3.5 transition-[left,background-color] duration-150 ${
+                autoSave ? "left-[20px] bg-bone" : "left-[2px] bg-edge"
+              }`}
+            />
+          </span>
+        </button>
         <button
           type="button"
           onClick={onSave}

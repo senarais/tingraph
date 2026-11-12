@@ -7,6 +7,7 @@ import * as monaco from "monaco-editor";
 import {
   CaptureUpdateAction,
   convertToExcalidrawElements,
+  hashElementsVersion,
   restore,
   serializeAsJSON,
   viewportCoordsToSceneCoords,
@@ -186,6 +187,28 @@ const DRAWER_TITLES: Record<Drawer, string> = {
 
 type SaveState = "idle" | "saving" | "saved" | "error";
 
+/** Where this browser remembers whether auto-save is on. */
+const AUTO_SAVE_KEY = "tingraph.autosave";
+/** How often auto-save looks at the sheet; a change has to sit this long first. */
+const AUTO_SAVE_TICK = 1500;
+
+function readAutoSave(): boolean {
+  try {
+    return window.localStorage.getItem(AUTO_SAVE_KEY) === "on";
+  } catch {
+    return false;
+  }
+}
+
+function writeAutoSave(on: boolean): void {
+  try {
+    window.localStorage.setItem(AUTO_SAVE_KEY, on ? "on" : "off");
+  } catch {
+    // a browser that keeps no storage still auto-saves; it just forgets the
+    // choice when the tab closes
+  }
+}
+
 export default function EditorRoot({
   initialDiagram,
   start = false,
@@ -221,6 +244,12 @@ export default function EditorRoot({
   const [savedId, setSavedId] = useState(initialDiagram?.id ?? null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [saveMessage, setSaveMessage] = useState("");
+  const [autoSave, setAutoSave] = useState(readAutoSave);
+  /** what the sheet was when it was last saved, or opened: the clean state */
+  const savedSigRef = useRef<string | null>(null);
+  /** a sheet that just failed to save, so auto-save waits for a new change */
+  const failedSigRef = useRef<string | null>(null);
+  const savingRef = useRef(false);
   const [generating, setGenerating] = useState(false);
   const [generationMessage, setGenerationMessage] = useState("");
   /**
@@ -664,16 +693,57 @@ export default function EditorRoot({
     });
   };
 
-  const saveDiagram = async () => {
-    if (!api || saveState === "saving") {
+  /**
+   * Everything a save writes, in one line: the sheet's elements and files, and
+   * the source and settings beside them. Two equal signatures are one save.
+   */
+  const sheetSignature = (): string | null => {
+    if (!api) {
+      return null;
+    }
+    const state = useTingraphStore.getState();
+    return [
+      hashElementsVersion(api.getSceneElementsIncludingDeleted()),
+      Object.keys(api.getFiles()).sort().join(","),
+      state.code,
+      state.direction,
+      state.style,
+      state.ink.color,
+      state.ink.tint,
+    ].join("|");
+  };
+
+  const turnAutoSave = (on: boolean) => {
+    setAutoSave(on);
+    writeAutoSave(on);
+  };
+
+  const saveDiagram = async ({ auto = false }: { auto?: boolean } = {}) => {
+    if (!api || savingRef.current) {
       return;
     }
-    const account = await requireAccount(
-      "Sign up to save diagrams",
-      "Saving needs an account. The Free plan stores up to 2 diagrams; Premium stores up to 100.",
-    );
-    if (!account) return;
+    if (auto) {
+      // nobody is at the keyboard to answer a sign-up dialog: a session that
+      // has run out turns auto-save off and says so on the Save button
+      const session = await getSession().catch(() => null);
+      if (!session?.user) {
+        turnAutoSave(false);
+        setSaveState("error");
+        setSaveMessage("Sign in again to keep auto-saving. Auto-save is off.");
+        return;
+      }
+    } else {
+      const account = await requireAccount(
+        "Sign up to save diagrams",
+        "Saving needs an account. The Free plan stores up to 2 diagrams; Premium stores up to 100.",
+      );
+      if (!account) return;
+    }
 
+    // what is being written; a change made while it is on its way stays
+    // unsaved, and auto-save takes it on the next round
+    const signature = sheetSignature();
+    savingRef.current = true;
     setSaveState("saving");
     setSaveMessage("Saving diagram…");
     try {
@@ -708,26 +778,98 @@ export default function EditorRoot({
       );
       if (!response.ok) {
         const error = await APIError.from(response);
+        failedSigRef.current = signature;
         setSaveState("error");
+        if (error.status === 409 && auto) {
+          // trying again cannot help until a diagram is deleted
+          turnAutoSave(false);
+        }
         setSaveMessage(
           error.status === 409
-            ? "Saved-diagram limit reached for your plan."
+            ? `Saved-diagram limit reached for your plan.${auto ? " Auto-save is off." : ""}`
             : "Diagram could not be saved. Try again.",
         );
         return;
       }
       const data = (await response.json()) as { id: string };
+      savedSigRef.current = signature;
+      failedSigRef.current = null;
       setSavedId(data.id);
       setSaveState("saved");
-      setSaveMessage("Saved to My diagrams.");
+      setSaveMessage(auto ? "Auto-saved to My diagrams." : "Saved to My diagrams.");
       const url = new URL(window.location.href);
       url.searchParams.set("type", editorCategory);
       url.searchParams.set("diagram", data.id);
       window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
     } catch {
+      failedSigRef.current = signature;
       setSaveState("error");
       setSaveMessage("Diagram could not be saved. Try again.");
+    } finally {
+      savingRef.current = false;
     }
+  };
+
+  // the latest save, for the auto-save timer to call: the one it closed over
+  // would still think a fresh diagram had never been saved, and save it twice
+  const saveRef = useRef(saveDiagram);
+  useEffect(() => {
+    saveRef.current = saveDiagram;
+  });
+
+  // the clean state is the sheet as it opened, once its first settling pass is
+  // done — a template's connectors adopt their routes then — so opening a
+  // diagram, or a notation, is never mistaken for a change worth saving
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+    const handle = setTimeout(() => {
+      savedSigRef.current ??= sheetSignature();
+    }, 800);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [api]);
+
+  // auto-save: a change that has sat still for a whole tick is written. One
+  // still moving under the hand changes the signature every tick, so a drag
+  // is saved once, when it ends, rather than every frame
+  useEffect(() => {
+    if (!autoSave || !api) {
+      return;
+    }
+    let seen: string | null = null;
+    const handle = setInterval(() => {
+      const signature = sheetSignature();
+      if (!signature || savingRef.current || savedSigRef.current === null) {
+        return;
+      }
+      const changed =
+        signature !== savedSigRef.current && signature !== failedSigRef.current;
+      if (changed && signature === seen) {
+        void saveRef.current({ auto: true });
+      }
+      seen = signature;
+    }, AUTO_SAVE_TICK);
+    return () => clearInterval(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoSave, api]);
+
+  /** The switch beside Save: on needs an account, and saves what is unsaved. */
+  const toggleAutoSave = async () => {
+    if (autoSave) {
+      turnAutoSave(false);
+      setSaveMessage("Auto-save is off.");
+      return;
+    }
+    const account = await requireAccount(
+      "Sign up to auto-save diagrams",
+      "Auto-save keeps your diagram in My diagrams as you work, so it needs an account. The Free plan stores up to 2 diagrams; Premium stores up to 100.",
+    );
+    if (!account) return;
+    turnAutoSave(true);
+    failedSigRef.current = null;
+    setSaveMessage("Auto-save is on.");
   };
 
   useEffect(() => {
@@ -828,6 +970,8 @@ export default function EditorRoot({
         saveState={saveState}
         saveMessage={saveMessage}
         onSave={() => void saveDiagram()}
+        autoSave={autoSave}
+        onAutoSave={() => void toggleAutoSave()}
       />
 
       <div className="relative flex min-h-0 flex-1 flex-col sm:flex-row">

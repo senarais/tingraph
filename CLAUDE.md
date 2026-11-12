@@ -898,6 +898,17 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
   canvas. Rows are private to `user_id`, capped at 10 MB, listed without
   fetching `document`, and read, changed or removed only with the user's id in
   the query.
+- **Auto-save is a switch beside Save, remembered per browser** in
+  `localStorage` (`tingraph.autosave`). Turning it on needs an account. It
+  never saves a sheet merely opened: the clean state is the sheet's signature
+  (`hashElementsVersion` of the scene, its file ids, and the source and
+  settings) taken just after it settles. A change is written once it has sat
+  still for a whole 1.5s tick, so a drag saves once, when it ends. The first
+  auto-save of a new sheet creates it; later ones update it, through a ref to
+  the latest save so the timer never posts a second copy. A failed save waits
+  for the next change rather than retrying in a loop. Hitting the plan's
+  diagram limit, or a session that has run out, turns auto-save off and says
+  why on the Save button.
 - **Redis accelerates only the small per-user saved-diagram list.** The Go API
   authenticates every request against PostgreSQL first; Redis keys use that
   authenticated user id and hold at most 32 KB of list metadata for 30 seconds.
