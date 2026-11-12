@@ -795,6 +795,7 @@ export default function EditorRoot({
       savedSigRef.current = signature;
       failedSigRef.current = null;
       setSavedId(data.id);
+      useTingraphStore.setState({ saved: data.id });
       setSaveState("saved");
       setSaveMessage(auto ? "Auto-saved to My diagrams." : "Saved to My diagrams.");
       const url = new URL(window.location.href);

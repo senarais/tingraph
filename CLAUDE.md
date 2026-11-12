@@ -909,6 +909,9 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
   for the next change rather than retrying in a loop. Hitting the plan's
   diagram limit, or a session that has run out, turns auto-save off and says
   why on the Save button.
+- **The store remembers which saved diagram its source came from** (`saved`).
+  A new sheet in the same notation opens on the template rather than on that
+  diagram's source, so saving it never copies a saved diagram by accident.
 - **Redis accelerates only the small per-user saved-diagram list.** The Go API
   authenticates every request against PostgreSQL first; Redis keys use that
   authenticated user id and hold at most 32 KB of list metadata for 30 seconds.

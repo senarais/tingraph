@@ -67,6 +67,12 @@ interface TingraphState {
   chat: ChatTurn[];
   /** a question is out with Tingraph AI and has not come back */
   thinking: boolean;
+  /**
+   * The saved diagram the source came from, or null for one being written
+   * fresh. A new sheet in the same notation must not open on a saved
+   * diagram's source, or saving it would copy that diagram.
+   */
+  saved: string | null;
   setCode: (code: string) => void;
   setCategory: (category: DiagramCategory) => void;
   setDirection: (direction: LayoutDirection) => void;
@@ -100,11 +106,12 @@ export const useTingraphStore = create<TingraphState>((set) => ({
   exportOpen: false,
   chat: [],
   thinking: false,
+  saved: null,
   setCode: (code) => set({ code }),
   // another notation is another sheet, and the conversation was about the old
   // one: the chatbot writes in one notation at a time, like the editor
   setCategory: (category) =>
-    set({ category, code: TEMPLATES[category], chat: [], thinking: false }),
+    set({ category, code: TEMPLATES[category], chat: [], thinking: false, saved: null }),
   setDirection: (direction) => set({ direction }),
   setInk: (ink) => set({ ink }),
   mix: (color) => set({ ink: customInk(color), mixed: color }),

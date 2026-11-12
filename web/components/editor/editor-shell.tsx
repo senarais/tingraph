@@ -32,7 +32,10 @@ export default function EditorShell({
   // the one on the first paint rather than a swap the reader watches happen
   useState(() => {
     const store = useTingraphStore.getState();
-    if (store.category !== initialCategory || store.code === "") {
+    if (
+      !diagramId &&
+      (store.category !== initialCategory || store.code === "" || store.saved !== null)
+    ) {
       store.setCategory(initialCategory);
     }
   });
@@ -94,6 +97,7 @@ export default function EditorShell({
         exportOpen: false,
         chat: [],
         thinking: false,
+        saved: data.id,
       });
       setLoaded({ id: data.id, title: data.title, document });
     };
