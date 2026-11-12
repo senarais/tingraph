@@ -424,17 +424,32 @@ and a row to `lib/connectors.ts`. Nothing else needs to know.
    the two boxes, the pinned sides, the bend, and where the connector sits.
 3. Signature unchanged → left alone. No `at` yet → the route is **adopted as
    it is**, which is what keeps the routing the source laid out, legs that step
-   around whatever stood in the way and all. Otherwise → cut again.
+   around whatever stood in the way and all. Carried whole — both boxes and the
+   connector moved by the same amount, its corners unchanged, as when the whole
+   drawing is dragged or a copy pasted (`carriedWhole`, reading the old
+   signature back with `readSignature`) → adopted too, and a dragged `bend`
+   moves with it. Otherwise → cut again.
 
-So a connector re-routes when a box it joins moves, when the reader moves its
-leg or re-ties an end, or when the connector itself is dragged out of place —
-and in no other case. Writing `RECUT` into `at` is how the gesture layer asks
-for a cut without a box having moved.
+So a connector re-routes when a box it joins moves on its own, when the reader
+moves its leg or re-ties an end, or when the connector itself is dragged out
+of place — and in no other case. Moving a whole drawing never re-guesses its
+routes. Writing `RECUT` into `at` is how the gesture layer asks for a cut
+without a box having moved. Excalidraw's rotation handle only adds an `angle`,
+which no signature sees, so a turned connector is cut square again with its
+angle put back to 0.
 
-**Known limit:** a route is cut from the two boxes it joins, so it cannot see
-a third. A straight line between two boxes on one level can run through a box
-standing between them. Avoiding that would mean routing against the whole
-sheet, which would throw away the generated routing every time anything moved.
+A cut is made against the whole sheet as it stands, through `routeContext`:
+every other element (not a zone, and not one that holds either end), every
+zone's name band, every other connector's caption, and the lines it must not
+run along — the zones' edges, the rules of pools, lanes and partitions, and the
+other connectors, including ones already re-cut in the same pass, so two
+re-cut together never land as one. A caption riding a re-cut connector is carried
+along by `carryCaption`: the same share of the way along the line, on the same
+side, kept off the elements. Only a connector whose ends moved is ever re-cut,
+so a generated drawing's routing is never thrown away by an edit elsewhere.
+
+The route preview while drawing or re-tying is cut through the same
+`routeContext`, heads and kind, so what is drawn is what lands.
 
 ### The gestures
 
@@ -960,6 +975,10 @@ The connector rules are held there too. `self-check.ts` draws every graph the
 editor ships — templates, catalogue samples and guide examples, both
 directions — and fails on a head drawn small, a route through an element it
 does not join, or two lines sharing a stretch that is not one bracket.
+`editor-check.ts` re-cuts a sheet through `syncConnectors`: a loop back up
+beside the line it returns from, its caption carried along, the whole drawing
+moved without a route re-guessed, a turned connector squared, and a box
+between two ends gone round.
 
 `scripts/site-check.ts` verifies documentation coverage, every displayed
 example and copy prompt, unique policy/guide anchors and agreement-version

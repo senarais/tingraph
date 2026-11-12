@@ -5,6 +5,7 @@ import { CaptureUpdateAction } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
 import {
+  headsOf,
   inside,
   movableLeg,
   gripSide,
@@ -16,7 +17,13 @@ import {
   type Point,
   type Rules,
 } from "@/lib/canvas/connect";
-import { linkTargets, newConnector, writeLink, type Ports } from "@/lib/canvas/scene";
+import {
+  linkTargets,
+  newConnector,
+  routeContext,
+  writeLink,
+  type Ports,
+} from "@/lib/canvas/scene";
 import { portsOf } from "@/lib/canvas/erd";
 import { unitOf, type LinkEnd, type LinkMark } from "@/lib/canvas/units";
 import { connectorInk, connectorKind } from "@/lib/connectors";
@@ -343,12 +350,32 @@ export default function ConnectLayer({
     const fromAt = held.mode === "draw" ? held.fromAt : held.fixedAt;
     const reverse = held.mode === "end" && held.which === "from";
     if (hover && hover.unit !== end.unit) {
+      // cut exactly as the finished connector will be: the same heads, round
+      // the same elements, clear of the same lines
+      const heads =
+        held.mode === "draw"
+          ? headsOf(holding ? connectorKind(holding, rules.category) : style)
+          : headsOf(picked as unknown as Parameters<typeof headsOf>[0]);
+      const kindOf =
+        held.mode === "draw"
+          ? (holding ? connectorKind(holding, rules.category).id : undefined)
+          : link?.line;
+      const ends = reverse
+        ? { from: { unit: hover.unit }, to: { unit: end.unit }, line: kindOf }
+        : { from: { unit: end.unit }, to: { unit: hover.unit }, line: kindOf };
       return routeBetween(reverse ? hover.box : from, reverse ? from : hover.box, {
         ...rules,
         fromSide: reverse ? hover.end.side : end.side,
         toSide: reverse ? end.side : hover.end.side,
         fromAt: reverse ? hover.at : fromAt,
         toAt: reverse ? fromAt : hover.at,
+        heads,
+        ...routeContext(
+          api.getSceneElements(),
+          linkTargets(api.getSceneElements()),
+          ends,
+          held.mode === "end" ? held.id : undefined,
+        ),
       });
     }
     // nothing under the pointer yet: the line leaves the side it would leave

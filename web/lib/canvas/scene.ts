@@ -9,10 +9,14 @@ import type { Ink } from "@/lib/ink";
 import { FORMAL, type SheetStyle } from "@/lib/sheet";
 import {
   asElement,
+  headsOf,
   linkSignature,
+  movableLeg,
+  readSignature,
   routeBetween,
   RECUT,
   type Box,
+  type Point,
   type Rules,
 } from "@/lib/canvas/connect";
 import { buildFigure } from "@/lib/figures/registry";
@@ -565,6 +569,123 @@ function portAnchors(
 }
 
 /**
+ * What a connector between two elements has to keep clear of: every other
+ * element on the sheet, and the routes of the connectors it shares no end
+ * with.
+ *
+ * An element that holds one of the two ends — an architecture zone, a shape
+ * drawn round a group — is not in the way, since the line starts inside it;
+ * nor is any zone, which is a backdrop rather than a thing a line could
+ * cross. Two lines of the same kind that leave the same element, or meet the
+ * same one, may share a stretch: that is a bracket, or a merge, and reads as
+ * one. Any other pair drawn on top of each other — a dashed line laid along a
+ * solid one, a loop laid back along the line it returns from — reads as one
+ * line too, and is not.
+ */
+export function routeContext(
+  elements: Elements,
+  boxes: ReadonlyMap<string, Box>,
+  link: Pick<LinkMark, "from" | "to"> & { line?: string },
+  self?: string,
+): { avoid: Box[]; lines: Point[][] } {
+  const from = boxes.get(link.from.unit);
+  const to = boxes.get(link.to.unit);
+  const zones = new Set<string>();
+  for (const element of elements) {
+    const mark = element.isDeleted ? null : unitOf(element);
+    if (mark?.spec?.type === "zone") zones.add(mark.unit);
+  }
+  const holds = (outer: Box, inner: Box | undefined) =>
+    !!inner &&
+    outer.x <= inner.x + 0.5 &&
+    outer.y <= inner.y + 0.5 &&
+    outer.x + outer.width >= inner.x + inner.width - 0.5 &&
+    outer.y + outer.height >= inner.y + inner.height - 0.5;
+  const avoid: Box[] = [];
+  const lines: Point[][] = [];
+  // a zone is a backdrop a line may cross, but not through the name written
+  // at its top, nor along one of its edges, where the two would read as one;
+  // the same goes for the rules a pool, a lane or a partition is drawn with
+  for (const element of elements) {
+    const mark = element.isDeleted ? null : unitOf(element);
+    if (!mark || element.type === "text") continue;
+    // the rules of a pool, a lane or a partition are crossed all the time, but
+    // a flow laid along one would read as part of the chrome
+    if (mark.kind === "pool" || mark.kind === "lane" || mark.kind === "frame") {
+      const points = (element as unknown as { points?: ReadonlyArray<readonly [number, number]> })
+        .points;
+      if (element.type === "line" && points) {
+        lines.push(points.map(([x, y]) => ({ x: element.x + x, y: element.y + y })));
+      } else if (element.type === "rectangle") {
+        const { x, y, width, height } = element;
+        lines.push([
+          { x, y },
+          { x: x + width, y },
+          { x: x + width, y: y + height },
+          { x, y: y + height },
+          { x, y },
+        ]);
+      }
+      continue;
+    }
+    if (!zones.has(mark.unit)) continue;
+    if (mark.part === "name") {
+      avoid.push({ x: element.x, y: element.y, width: element.width, height: element.height });
+    } else if (element.type === "rectangle") {
+      const { x, y, width, height } = element;
+      lines.push([
+        { x, y },
+        { x: x + width, y },
+        { x: x + width, y: y + height },
+        { x, y: y + height },
+        { x, y },
+      ]);
+    }
+  }
+  for (const [unit, box] of boxes) {
+    if (
+      unit === link.from.unit ||
+      unit === link.to.unit ||
+      zones.has(unit) ||
+      holds(box, from) ||
+      holds(box, to)
+    ) {
+      continue;
+    }
+    avoid.push(box);
+  }
+  // a caption riding another connector is in the way as much as an element
+  // is: a line drawn through a "No" reads as crossing it out
+  const own = self ? elements.find((element) => element.id === self) : undefined;
+  const ownUnit = own ? unitOf(own)?.unit : undefined;
+  for (const element of elements) {
+    const mark = element.isDeleted || element.type !== "text" ? null : unitOf(element);
+    if (
+      mark?.kind === "edge" &&
+      mark.unit !== ownUnit &&
+      !(element as { containerId?: string | null }).containerId
+    ) {
+      avoid.push({ x: element.x, y: element.y, width: element.width, height: element.height });
+    }
+  }
+  for (const element of elements) {
+    if (element.isDeleted || element.type !== "arrow" || element.id === self) continue;
+    const other = unitOf(element)?.link;
+    if (
+      !other ||
+      (other.line === link.line &&
+        (other.from.unit === link.from.unit || other.to.unit === link.to.unit))
+    ) {
+      continue;
+    }
+    const points = (element as unknown as { points: ReadonlyArray<readonly [number, number]> })
+      .points;
+    lines.push(points.map(([x, y]) => ({ x: element.x + x, y: element.y + y })));
+  }
+  return { avoid, lines };
+}
+
+/**
  * One connector the reader has just drawn, cut to the notation's rule and
  * added to the sheet. Returns null when either end is no longer there.
  */
@@ -588,6 +709,8 @@ export function newConnector(
       fromSide: link.from.side,
       toSide: link.to.side,
       bend: link.bend,
+      heads: headsOf(style),
+      ...routeContext(elements, boxes, link),
       ...anchors,
     }),
   );
@@ -624,15 +747,125 @@ export function newConnector(
   return [...elements, arrow];
 }
 
+/** The corners of a connector on the sheet, in sheet coordinates. */
+function cornersOf(element: ExcalidrawElement): Point[] {
+  const points = (element as unknown as { points: ReadonlyArray<readonly [number, number]> })
+    .points;
+  return points.map(([x, y]) => ({ x: element.x + x, y: element.y + y }));
+}
+
+/** Where a point lies along a route: how far along it, and how far off it. */
+function placeOn(route: readonly Point[], point: Point): { share: number; dx: number; dy: number } {
+  let total = 0;
+  for (let i = 1; i < route.length; i++) {
+    total += Math.hypot(route[i].x - route[i - 1].x, route[i].y - route[i - 1].y);
+  }
+  let best = { distance: Infinity, along: 0, dx: 0, dy: 0 };
+  let walked = 0;
+  for (let i = 1; i < route.length; i++) {
+    const a = route[i - 1];
+    const b = route[i];
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    const t =
+      length === 0
+        ? 0
+        : Math.max(0, Math.min(1, ((point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y)) / (length * length)));
+    const foot = { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
+    const distance = Math.hypot(point.x - foot.x, point.y - foot.y);
+    if (distance < best.distance) {
+      best = { distance, along: walked + length * t, dx: point.x - foot.x, dy: point.y - foot.y };
+    }
+    walked += length;
+  }
+  return { share: total === 0 ? 0 : best.along / total, dx: best.dx, dy: best.dy };
+}
+
+/** The point a share of the way along a route, and which way that leg runs. */
+function pointOn(route: readonly Point[], share: number): { at: Point; upright: boolean } {
+  let total = 0;
+  for (let i = 1; i < route.length; i++) {
+    total += Math.hypot(route[i].x - route[i - 1].x, route[i].y - route[i - 1].y);
+  }
+  let left = total * share;
+  for (let i = 1; i < route.length; i++) {
+    const a = route[i - 1];
+    const b = route[i];
+    const length = Math.hypot(b.x - a.x, b.y - a.y);
+    if (left <= length || i === route.length - 1) {
+      const t = length === 0 ? 0 : Math.min(1, left / length);
+      return {
+        at: { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t },
+        upright: Math.abs(b.x - a.x) < Math.abs(b.y - a.y),
+      };
+    }
+    left -= length;
+  }
+  return { at: route[0], upright: true };
+}
+
+/**
+ * A caption riding a connector whose route was just cut again, carried along
+ * with it: it keeps the share of the way along the line it sat at, and the
+ * side of the line it sat on, so a "No" written beside the first leg of a loop
+ * is still beside the first leg after the loop has moved. It is kept off the
+ * elements the line joins and passes.
+ */
+function carryCaption(
+  caption: ExcalidrawElement,
+  was: readonly Point[],
+  now: readonly Point[],
+  boxes: readonly Box[],
+): ExcalidrawElement {
+  const centre = { x: caption.x + caption.width / 2, y: caption.y + caption.height / 2 };
+  const place = placeOn(was, centre);
+  // a caption that sat well away from its line has been put there on purpose
+  // and is moved by the same amount the line moved, nothing more
+  const reach = Math.max(caption.width, caption.height) / 2 + 24;
+  const offset = Math.hypot(place.dx, place.dy);
+  const scale = offset > reach ? reach / offset : 1;
+  const free = (x: number, y: number) =>
+    !boxes.some(
+      (box) =>
+        x < box.x + box.width + 3 &&
+        box.x - 3 < x + caption.width &&
+        y < box.y + box.height + 3 &&
+        box.y - 3 < y + caption.height,
+    );
+  const spot = (share: number) => {
+    const { at, upright } = pointOn(now, share);
+    // the side of the line it sat on, measured afresh against the new leg
+    const side = upright ? Math.sign(place.dx) || 1 : Math.sign(place.dy) || -1;
+    const gapX = upright ? side * (caption.width / 2 + 6) : place.dx * scale;
+    const gapY = upright ? place.dy * scale : side * (caption.height / 2 + 4);
+    return {
+      x: Math.round(at.x + gapX - caption.width / 2),
+      y: Math.round(at.y + gapY - caption.height / 2),
+    };
+  };
+  for (const step of [0, 0.08, -0.08, 0.16, -0.16, 0.25, -0.25, 0.35, -0.35]) {
+    const share = place.share + step;
+    if (share < 0 || share > 1) continue;
+    const { x, y } = spot(share);
+    if (free(x, y)) {
+      return x === caption.x && y === caption.y ? caption : newElementWith(caption, { x, y });
+    }
+  }
+  const { x, y } = spot(place.share);
+  return newElementWith(caption, { x, y });
+}
+
 /**
  * Cuts every connector's route again whenever what it is tied to has moved.
  *
  * The route on the sheet carries the boxes it was cut against, so a drawing
  * nobody has touched is left exactly as the source laid it out — routes that
- * step around the shapes in their way are not thrown away and re-guessed. The
- * moment a box moves, or the reader drags the connector's middle leg, or drags
- * the connector itself out of place, the route is cut again from the notation's
- * own rule.
+ * step around the shapes in their way are not thrown away and re-guessed. A
+ * connector carried along with both of its ends, by the same amount — the
+ * whole drawing moved, a copy pasted — keeps its route too, moved with them.
+ * Otherwise, the moment a box moves, or the reader drags the connector's
+ * middle leg, or drags the connector itself out of place, the route is cut
+ * again from the notation's own rule, round anything in its way, and any
+ * caption riding it goes along.
  *
  * `busy` names the connectors under the reader's hand this frame, which are
  * left alone until the pointer is up.
@@ -655,6 +888,8 @@ export function syncConnectors(
       .map((mark) => mark.unit),
   );
   const invalid = new Set<string>();
+  /** connectors cut again this pass, with the route each one had before */
+  const moved = new Map<string, { unit: string; was: Point[] }>();
   elements.forEach((element, index) => {
     if (element.isDeleted || element.type !== "arrow" || busy.has(element.id)) {
       return;
@@ -677,36 +912,59 @@ export function syncConnectors(
     }
     const anchors = portAnchors(link, ports);
     const signature = linkSignature(from, to, { ...link, ...anchors }, element);
-    if (signature === link.at) {
+    // a connector turned by Excalidraw's rotation handle keeps its corners and
+    // only gains an angle, which no signature sees: it is cut square again
+    const turned = !!element.angle;
+    if (signature === link.at && !turned) {
       return;
     }
-    if (!link.at) {
+    const carried = link.at && !turned ? carriedWhole(link.at, signature) : null;
+    if ((!link.at && !turned) || carried) {
       // a route that has never been cut here came from the source, which laid
-      // it out around whatever stood in the way; it is adopted as it is
+      // it out around whatever stood in the way; one carried along with both
+      // its ends is that same route, moved — and a rail the reader dragged
+      // moves with it. Either way it is adopted as it is
+      const leg = carried && link.bend != null ? movableLeg(cornersOf(element)) : null;
+      const kept = leg
+        ? { ...link, bend: (link.bend as number) + (leg.upright ? carried!.dx : carried!.dy) }
+        : link;
       next ??= elements.slice();
       next[index] = newElementWith(element, {
         customData: {
           ...element.customData,
-          tingraph: { ...mark, link: { ...link, at: signature } },
+          tingraph: {
+            ...mark,
+            link: {
+              ...kept,
+              at: leg ? linkSignature(from, to, { ...kept, ...anchors }, element) : signature,
+            },
+          },
         },
       });
       return;
     }
+    // routed against the sheet as it stands now, connectors already re-cut
+    // this pass included, so two lines re-cut together do not land as one
+    const scene = next ?? elements;
     const route = routeBetween(from, to, {
       ...rules,
       fromSide: link.from.side,
       toSide: link.to.side,
       bend: link.bend,
+      heads: headsOf(element as unknown as Parameters<typeof headsOf>[0]),
+      ...routeContext(scene, boxes, link, element.id),
       ...anchors,
     });
     const cut = asElement(route);
     next ??= elements.slice();
+    moved.set(element.id, { unit: mark.unit, was: cornersOf(element) });
     next[index] = newElementWith(element, {
       x: cut.x,
       y: cut.y,
       points: cut.points as never,
       width: cut.width,
       height: cut.height,
+      angle: 0 as never,
       customData: {
         ...element.customData,
         tingraph: {
@@ -716,6 +974,26 @@ export function syncConnectors(
       },
     });
   });
+  if (moved.size > 0 && next) {
+    const scene: ExcalidrawElement[] = next;
+    const all = [...(boxes ?? linkTargets(scene)).values()];
+    for (const [id, { unit, was }] of moved) {
+      const arrow = scene.find((element) => element.id === id);
+      if (!arrow) continue;
+      const now = cornersOf(arrow);
+      scene.forEach((element, index) => {
+        if (
+          !element.isDeleted &&
+          element.type === "text" &&
+          !(element as { containerId?: string | null }).containerId &&
+          !busy.has(element.id) &&
+          unitOf(element)?.unit === unit
+        ) {
+          scene[index] = carryCaption(element, was, now, all);
+        }
+      });
+    }
+  }
   if (invalid.size > 0) {
     next = (next ?? elements.slice()).map((element) =>
       invalid.has(unitOf(element)?.unit ?? "")
@@ -724,6 +1002,41 @@ export function syncConnectors(
     );
   }
   return next;
+}
+
+/**
+ * Whether a connector was carried along with both of the boxes it joins, by
+ * the same amount and without a corner of it changing: the whole drawing
+ * dragged, or a copy of the lot pasted. Its route is still the one it was.
+ */
+function carriedWhole(was: string, now: string): { dx: number; dy: number } | null {
+  const before = readSignature(was);
+  const after = readSignature(now);
+  if (
+    !before ||
+    !after ||
+    before.sides !== after.sides ||
+    before.bend !== after.bend ||
+    before.points !== after.points
+  ) {
+    return null;
+  }
+  const dx = after.origin.x - before.origin.x;
+  const dy = after.origin.y - before.origin.y;
+  const same = (p: Box, q: Box) =>
+    Math.abs(q.x - p.x - dx) <= 1 &&
+    Math.abs(q.y - p.y - dy) <= 1 &&
+    Math.abs(q.width - p.width) <= 1 &&
+    Math.abs(q.height - p.height) <= 1;
+  // a port is a height on its table, so it travels with the table
+  const port = (p: number | null, q: number | null) =>
+    p === null ? q === null : q !== null && Math.abs(q - p - dy) <= 1;
+  return same(before.from, after.from) &&
+    same(before.to, after.to) &&
+    port(before.fromAt, after.fromAt) &&
+    port(before.toAt, after.toAt)
+    ? { dx, dy }
+    : null;
 }
 
 // ----------------------------------------------------------------- pool edits

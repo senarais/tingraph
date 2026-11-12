@@ -6,6 +6,7 @@ import { shapeFamily } from "../lib/layout/compute-layout";
 import { controlsFor, held } from "../lib/canvas/inspect";
 import { unitOf } from "../lib/canvas/units";
 import { clearConnectorLabels, generationConflict } from "../lib/canvas/generation";
+import { runsAlong as runsAlongLines } from "../lib/canvas/connect";
 import Module from "node:module";
 import { createRequire } from "node:module";
 import type { PoolBox } from "../lib/canvas/scene";
@@ -305,6 +306,107 @@ for (const piece of soft) {
     true,
     "an existing connector tied to a lane is removed",
   );
+}
+
+// ------------------------------------- connectors re-cut on a changed sheet
+{
+  const RULES = { category: "flow" as const, direction: "down" as const };
+  const box = (unit: string, x: number, y: number) =>
+    fake("rectangle", { unit, kind: "node", core: true }, {
+      id: unit, x, y, width: 120, height: 50, angle: 0,
+    });
+  const line = (
+    id: string,
+    from: string,
+    to: string,
+    points: Array<[number, number]>,
+    at?: string,
+  ) =>
+    fake("arrow", {
+      unit: `flow-${id}`,
+      kind: "edge",
+      core: true,
+      link: { line: "flow", from: { unit: from }, to: { unit: to }, ...(at ? { at } : {}) },
+    }, {
+      id, x: points[0][0], y: points[0][1], angle: 0, endArrowhead: "triangle", startArrowhead: null,
+      points: points.map(([x, y]) => [x - points[0][0], y - points[0][1]]),
+    });
+  const cornersOf = (element: ExcalidrawElement) =>
+    (element as unknown as { points: Array<[number, number]> }).points.map(([x, y]) => ({
+      x: element.x + x,
+      y: element.y + y,
+    }));
+  const legAt = (element: ExcalidrawElement, end: boolean) => {
+    const points = cornersOf(element);
+    const [a, b] = end ? points.slice(-2) : points.slice(0, 2);
+    return Math.hypot(b.x - a.x, b.y - a.y);
+  };
+
+  // a step, the decision under it, and a loop from the decision back up
+  const step = box("flow-node-P", 0, 0);
+  const decision = box("flow-node-D", 0, 150);
+  const forward = line("e0", "flow-node-P", "flow-node-D", [[60, 50], [60, 150]], "stale");
+  const back = line("e1", "flow-node-D", "flow-node-P", [[0, 175], [-40, 175], [-40, 25], [0, 25]], "stale");
+  const caption = fake("text", { unit: "flow-e1", kind: "edge", core: true }, {
+    id: "no", x: -30, y: 90, width: 20, height: 14, text: "No", angle: 0,
+  });
+  const recut = scene.syncConnectors([step, decision, forward, back, caption], RULES)!;
+  const cutForward = recut.find((element) => element.id === "e0")!;
+  const cutBack = recut.find((element) => element.id === "e1")!;
+  assert.equal(
+    runsAlongLines(cornersOf(cutBack), [cornersOf(cutForward)]),
+    0,
+    "a loop back up is not laid on top of the line it returns from",
+  );
+  assert.ok(legAt(cutBack, true) >= 30 && legAt(cutForward, true) >= 30, "both heads are whole");
+  const carried = recut.find((element) => element.id === "no")!;
+  const backBox = {
+    x: Math.min(...cornersOf(cutBack).map((p) => p.x)) - 40,
+    y: Math.min(...cornersOf(cutBack).map((p) => p.y)) - 40,
+    right: Math.max(...cornersOf(cutBack).map((p) => p.x)) + 40,
+    bottom: Math.max(...cornersOf(cutBack).map((p) => p.y)) + 40,
+  };
+  assert.ok(
+    carried.x >= backBox.x && carried.x <= backBox.right && carried.y >= backBox.y && carried.y <= backBox.bottom,
+    "the caption rides along with its re-cut line",
+  );
+
+  // the whole drawing dragged at once: every route is the same route, moved
+  const settled = scene.syncConnectors(recut, RULES) ?? recut;
+  const shift = (element: ExcalidrawElement) =>
+    ({ ...element, x: element.x + 200, y: element.y + 40 }) as ExcalidrawElement;
+  const moved = scene.syncConnectors(settled.map(shift), RULES) ?? settled.map(shift);
+  for (const id of ["e0", "e1"]) {
+    const before = settled.find((element) => element.id === id)!;
+    const after = moved.find((element) => element.id === id)!;
+    assert.deepEqual(
+      (after as unknown as { points: unknown }).points,
+      (before as unknown as { points: unknown }).points,
+      `${id}: a connector carried with both its boxes keeps its route`,
+    );
+  }
+  assert.equal(scene.syncConnectors(moved, RULES), null, "and is settled after one pass");
+
+  // Excalidraw's rotation handle only adds an angle; the line is cut square again
+  const turned = moved.map((element) =>
+    element.id === "e0" ? ({ ...element, angle: 0.4 } as ExcalidrawElement) : element,
+  );
+  const squared = scene.syncConnectors(turned, RULES)!;
+  assert.equal(squared.find((element) => element.id === "e0")!.angle, 0, "a turned connector is squared");
+
+  // a box standing between the two ends is gone round, not through
+  const a = box("flow-node-A", 0, 0);
+  const middle = box("flow-node-M", 0, 150);
+  const b = box("flow-node-B", 0, 300);
+  const long = line("e2", "flow-node-A", "flow-node-B", [[60, 50], [60, 300]], "stale");
+  const around = scene.syncConnectors([a, middle, b, long], RULES)!.find((element) => element.id === "e2")!;
+  const through = cornersOf(around).slice(1).some((point, index) => {
+    const prev = cornersOf(around)[index];
+    return Math.min(prev.x, point.x) < 120 && 0 < Math.max(prev.x, point.x) &&
+      Math.min(prev.y, point.y) < 200 && 150 < Math.max(prev.y, point.y);
+  });
+  assert.ok(!through, "a re-cut line goes round the box between its ends");
+  assert.ok(legAt(around, true) >= 30, "and keeps its head whole");
 }
 
 // ----------------------------------------------- pool and lanes are one hold
