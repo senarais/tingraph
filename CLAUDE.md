@@ -86,9 +86,16 @@ sheet or taking an allowance, Generate checks the **rendered** graph-node bounds
 including external and bound captions (`lib/canvas/generation.ts`). An unresolved
 node collision stops generation with an explanation, preserving the sheet.
 Architecture zones are intentional backdrops and excluded from that node check.
+
 All graph connector captions, including flowchart captions, are separate text
-elements in the connector's unit. After conversion they are nudged to the nearest
-free vertical slot using measured text bounds, clear of nodes and other captions.
+elements in the connector's unit, broken onto a second line past 96px so a
+long one fits beside a line in a narrow partition. After conversion,
+`clearConnectorLabels` keeps a caption where the layout put it when that spot
+is clear, and otherwise tries each leg of its own route, the longest first, on
+either side. Clear means clear of nodes, other captions, every connector's
+legs, the heads at their ends, and the rules of pools, lanes and partitions —
+all measured, not estimated. A caption with no route moves straight up or
+down instead.
 
 ## Tingraph AI writes source, and only source
 

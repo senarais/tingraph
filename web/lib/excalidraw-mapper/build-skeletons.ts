@@ -33,6 +33,7 @@ import {
 } from "@/lib/layout/compute-layout";
 import { MONOCHROME, type Ink } from "@/lib/ink";
 import { FORMAL, type SheetStyle } from "@/lib/sheet";
+import { linesWidth } from "@/lib/layout/text";
 import {
   buildBpmnIcons,
   buildDataObjectOutline,
@@ -470,6 +471,16 @@ function edgeSkeleton(
   } as unknown as ExcalidrawElementSkeleton;
 }
 
+/**
+ * A connector caption, broken onto a second line once it runs long. A caption
+ * as wide as a sentence fits beside no line in a narrow partition, and would
+ * sit across the rule next to it whichever side it took.
+ */
+const EDGE_CAPTION_WIDTH = 96;
+function edgeCaption(label: string): string[] {
+  return wrapByWidth(label, EDGE_CAPTION_WIDTH, BPMN_LABEL_FONT_SIZE);
+}
+
 /** Edge caption, riding the longest leg of its route the way bpmn.io places it. */
 function edgeLabelBox(edge: PositionedEdge): Box | null {
   if (!edge.label || edge.points.length < 2) {
@@ -490,7 +501,8 @@ function edgeLabelBox(edge: PositionedEdge): Box | null {
   }
   const from = edge.points[leg];
   const next = edge.points[leg + 1];
-  const width = textWidth(edge.label, BPMN_LABEL_FONT_SIZE);
+  const lines = edgeCaption(edge.label);
+  const width = linesWidth(lines, BPMN_LABEL_FONT_SIZE);
   const vertical = Math.abs(next.x - from.x) < Math.abs(next.y - from.y);
   return {
     x: vertical ? from.x + 7 : (from.x + next.x) / 2 - width / 2,
@@ -501,7 +513,7 @@ function edgeLabelBox(edge: PositionedEdge): Box | null {
         : from.y - BPMN_LINE_HEIGHT - 10
       : from.y - BPMN_LINE_HEIGHT - 4,
     width,
-    height: BPMN_LINE_HEIGHT,
+    height: lines.length * BPMN_LINE_HEIGHT,
   };
 }
 
@@ -562,7 +574,7 @@ function edgeLabelSkeletons(
     out.push({
       type: "text",
       id: `edge-${index}-label`,
-      text: edge.label as string,
+      text: edgeCaption(edge.label as string).join("\n"),
       x: Math.round(box.x),
       y: Math.round(box.y),
       groupIds: [`flow-${index}`],
