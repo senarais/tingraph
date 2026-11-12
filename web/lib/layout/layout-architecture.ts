@@ -1,4 +1,4 @@
-import { routeBetween } from "@/lib/canvas/connect";
+import { routeAll } from "@/lib/layout/graph";
 import type { AST, LayoutDirection, PositionedAST, PositionedNode } from "@/lib/types";
 
 const GAP = 56; // enough room for the router's stubs, even between adjacent boxes
@@ -6,6 +6,23 @@ const SIDE = 24;
 const TOP = 44; // zone title + breathing room
 
 /** Coordinates suggest rows and columns; only Generate arranges them. */
+/**
+ * Where a zone writes its name: a band along the top-left of the backdrop.
+ * The drawing and the router both read it from here, so a connector never
+ * runs through the words.
+ */
+export function zoneBand(zone: { x: number; y: number; width: number }) {
+  return { x: zone.x + 12, y: zone.y + 8, width: Math.min(zone.width - 24, 260), height: 32 };
+}
+
+/** The four sides of a zone, as lines a connector should not be laid along. */
+function zoneSides(zone: { x: number; y: number; width: number; height: number }) {
+  const { x, y, width, height } = zone;
+  return [
+    [{ x, y }, { x: x + width, y }, { x: x + width, y: y + height }, { x, y: y + height }, { x, y }],
+  ];
+}
+
 export function computeArchitectureLayout(ast: AST, direction: LayoutDirection): PositionedAST {
   let index = 0;
   const nodes: PositionedNode[] = ast.nodes.map((node) => {
@@ -111,12 +128,11 @@ export function computeArchitectureLayout(ast: AST, direction: LayoutDirection):
     title: ast.title,
     // Draw outer regions first, even when the source declared the inner one first.
     nodes: [...zones].sort((a, b) => area(b) - area(a)).concat(nodes.filter((node) => node.type !== "zone")),
-    edges: ast.edges.map((edge) => ({
-      ...edge,
-      points: routeBetween(byId.get(edge.from)!, byId.get(edge.to)!, {
-        category: "architecture",
-        direction,
-      }),
-    })),
+    // a zone is a backdrop a line may cross, but not one it may run along
+    // the edge of, nor through the name written at its top
+    edges: routeAll(ast.edges, byId, nodes, "architecture", direction, undefined, {
+      avoid: zones.map(zoneBand),
+      lines: zones.flatMap(zoneSides),
+    }),
   };
 }

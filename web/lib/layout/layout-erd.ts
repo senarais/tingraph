@@ -1,6 +1,6 @@
 import dagre from "@dagrejs/dagre";
-import { routeBetween } from "@/lib/canvas/connect";
 import { textWidth } from "@/lib/layout/text";
+import { routeAll } from "@/lib/layout/graph";
 import type {
   AST,
   DSLField,
@@ -216,29 +216,23 @@ export function computeErdLayout(
   });
 
   const byId = new Map(nodes.map((node) => [node.id, node]));
-  const edges: PositionedEdge[] = ast.edges.map((edge) => {
+  // the two attributes each relation joins: what the source wrote, or the
+  // pair the keys themselves say
+  const written = ast.edges.map((edge) => {
     const from = byId.get(edge.from);
     const to = byId.get(edge.to);
-    if (!from || !to) {
-      return { ...edge, points: [] };
-    }
-    // the two attributes this relation joins: what the source wrote, or the
-    // pair the keys themselves say
-    const written = edge.fromPort || edge.toPort ? edge : { ...edge, ...pairPorts(from, to) };
-    const fromAt = erdPorts(from).get(written.fromPort ?? "");
-    const toAt = erdPorts(to).get(written.toPort ?? "");
+    return from && to && !edge.fromPort && !edge.toPort
+      ? { ...edge, ...pairPorts(from, to) }
+      : edge;
+  });
+  const edges: PositionedEdge[] = routeAll(written, byId, nodes, "erd", direction, (edge) => {
+    const from = byId.get(edge.from)!;
+    const to = byId.get(edge.to)!;
+    const fromAt = erdPorts(from).get(edge.fromPort ?? "");
+    const toAt = erdPorts(to).get(edge.toPort ?? "");
     return {
-      ...written,
-      points: routeBetween(
-        { x: from.x, y: from.y, width: from.width, height: from.height },
-        { x: to.x, y: to.y, width: to.width, height: to.height },
-        {
-          category: "erd",
-          direction,
-          ...(fromAt === undefined ? {} : { fromAt: from.y + fromAt }),
-          ...(toAt === undefined ? {} : { toAt: to.y + toAt }),
-        },
-      ),
+      ...(fromAt === undefined ? {} : { fromAt: from.y + fromAt }),
+      ...(toAt === undefined ? {} : { toAt: to.y + toAt }),
     };
   });
 

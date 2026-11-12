@@ -1,5 +1,6 @@
 import type { Arrowhead } from "@excalidraw/excalidraw/element/types";
-import type { DiagramCategory } from "@/lib/types";
+import { headRoom } from "@/lib/canvas/connect";
+import type { DiagramCategory, DSLEdge } from "@/lib/types";
 
 /**
  * The connectors each notation draws with.
@@ -278,4 +279,45 @@ export function connectorInk(kind: ConnectorKind) {
     startArrowhead: kind.startArrowhead,
     endArrowhead: kind.endArrowhead,
   };
+}
+
+/**
+ * Which of the notation's lines an edge in the source is drawn as. A notation
+ * whose source names the line outright — a use case include, an ERD's pair of
+ * crow's feet — says so on the edge; the rest have one solid line and one
+ * dashed one, and the arrow written in the source picks between them.
+ */
+const DASHED: Partial<Record<DiagramCategory, string>> = {
+  bpmn: "association",
+  org: "advisory",
+  flow: "annotation",
+  usecase: "include",
+  activity: "object-flow",
+  erd: "non-identifying",
+  architecture: "event",
+};
+
+export function edgeLine(
+  category: DiagramCategory,
+  edge: Pick<DSLEdge, "line" | "kind">,
+): string {
+  if (edge.line) {
+    return edge.line;
+  }
+  if (edge.kind !== "association") {
+    return defaultConnector(category) ?? "sequence";
+  }
+  return DASHED[category] ?? "annotation";
+}
+
+/**
+ * The straight run each end of an edge needs for its heads to be drawn whole,
+ * so a layout can leave that much room before the last turn.
+ */
+export function edgeHeads(
+  category: DiagramCategory,
+  edge: Pick<DSLEdge, "line" | "kind">,
+): [number, number] {
+  const kind = connectorKind(edgeLine(category, edge), category);
+  return [headRoom(kind.startArrowhead), headRoom(kind.endArrowhead)];
 }

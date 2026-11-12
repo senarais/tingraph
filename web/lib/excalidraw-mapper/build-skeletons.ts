@@ -14,7 +14,7 @@ import {
 import { marked, nodeUnit, unitOf, type UnitMark } from "@/lib/canvas/units";
 
 export { nodeUnit };
-import { connectorInk, connectorKind, defaultConnector } from "@/lib/connectors";
+import { connectorInk, connectorKind, edgeLine } from "@/lib/connectors";
 import { buildFigure } from "@/lib/figures/registry";
 import { architectureNodeSkeletons } from "@/lib/excalidraw-mapper/build-architecture";
 import {
@@ -414,32 +414,6 @@ function orgNodeSkeletons(
 
 
 /**
- * Which of the notation's lines an edge in the source is drawn as. A notation
- * whose source names the line outright — a use case include, an ERD's pair of
- * crow's feet — says so on the edge; the rest have one solid line and one
- * dashed one, and the arrow written in the source picks between them.
- */
-const DASHED: Partial<Record<DiagramCategory, string>> = {
-  bpmn: "association",
-  org: "advisory",
-  flow: "annotation",
-  usecase: "include",
-  activity: "object-flow",
-  erd: "non-identifying",
-  architecture: "event",
-};
-
-function lineFor(category: DiagramCategory, edge: PositionedEdge): string {
-  if (edge.line) {
-    return edge.line;
-  }
-  if (edge.kind !== "association") {
-    return defaultConnector(category) ?? "sequence";
-  }
-  return DASHED[category] ?? "annotation";
-}
-
-/**
  * Sequence flows and associations.
  *
  * A connector names the two elements it joins rather than binding to them:
@@ -464,7 +438,7 @@ function edgeSkeleton(
   );
   const xs = points.map((p) => p[0]);
   const ys = points.map((p) => p[1]);
-  const line = lineFor(category, edge);
+  const line = edgeLine(category, edge);
   return {
     type: "arrow",
     id: `edge-${index}`,

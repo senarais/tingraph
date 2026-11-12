@@ -18,6 +18,8 @@ import {
   ACTIVITY_TEMPLATE,
   ERD_TEMPLATE,
   SEQUENCE_TEMPLATE,
+  TEMPLATES,
+  ARCHITECTURE_TEMPLATES,
 } from "@/lib/templates";
 import { erdBoxLayout, erdPorts, pairPorts } from "@/lib/layout/layout-erd";
 import { planSequence, sequenceSize } from "@/lib/sequence/layout-sequence";
@@ -57,14 +59,21 @@ import {
 import {
   asElement,
   gripSide,
+  headRoom,
   linkSignature,
   movableLeg,
+  readSignature,
   routeBetween,
+  runsAlong,
   sideAnchor,
   sidesFor,
+  type Box,
   type Point,
   type Rules,
 } from "@/lib/canvas/connect";
+import { buildSkeletons } from "@/lib/excalidraw-mapper/build-skeletons";
+import { EXAMPLE } from "@/lib/guide";
+import { isGraph } from "@/lib/types";
 
 assert.equal(detectCategory(FLOWCHART_TEMPLATE), "flow");
 assert.equal(detectCategory(BPMN_TEMPLATE), "bpmn");
@@ -911,6 +920,160 @@ assert.notEqual(
   }),
   "and a connector skewed in place is re-cut too",
 );
+
+// ------------------------------------------ heads, detours and shared lines
+
+// Excalidraw draws a head at most half as long as the leg it sits on, so a
+// route has to leave that much straight run under every head, or the same
+// connector is drawn with a big head on one line and a small one on the next
+assert.equal(headRoom("triangle"), 30);
+assert.equal(headRoom("arrow"), 50);
+assert.equal(headRoom("crowfoot_many"), 40);
+assert.equal(headRoom(null), 0);
+
+const legLength = (points: readonly Point[], at: number) =>
+  Math.hypot(points[at + 1].x - points[at].x, points[at + 1].y - points[at].y);
+const lastLeg = (points: readonly Point[]) => legLength(points, points.length - 2);
+const FLOW_RULES: Rules = { category: "flow", direction: "down" };
+
+{
+  // a facing route whose rail would land too close to the head
+  const top = { x: 0, y: 0, width: 100, height: 40 };
+  const low = { x: 200, y: 90, width: 100, height: 40 };
+  const route = routeBetween(top, low, { ...FLOW_RULES, heads: [0, 30] });
+  assertSquare(route, "head room");
+  assert.ok(lastLeg(route) >= 30, `the rail keeps clear of the head (${lastLeg(route)})`);
+  // and one the reader dragged there, which may not take the room either
+  const dragged = routeBetween(top, low, { ...FLOW_RULES, heads: [0, 30], bend: 85 });
+  assert.ok(lastLeg(dragged) >= 30, "a dragged rail keeps clear of the head too");
+  // a route round the outside steps out far enough for its head
+  const beside = routeBetween(top, { x: 0, y: 50, width: 100, height: 40 }, {
+    ...FLOW_RULES,
+    heads: [0, 30],
+  });
+  assert.ok(lastLeg(beside) >= 30, "a stub under a head is a head long");
+}
+
+const legCrosses = (points: readonly Point[], box: Box) =>
+  points.slice(1).some((point, index) => {
+    const prev = points[index];
+    return (
+      Math.min(prev.x, point.x) < box.x + box.width &&
+      box.x < Math.max(prev.x, point.x) &&
+      Math.min(prev.y, point.y) < box.y + box.height &&
+      box.y < Math.max(prev.y, point.y)
+    );
+  });
+
+{
+  // a third box between the two: the route goes round it, square, and still
+  // leaves room for its head
+  const a = { x: 0, y: 0, width: 120, height: 50 };
+  const b = { x: 0, y: 300, width: 120, height: 50 };
+  const between = { x: 0, y: 150, width: 120, height: 50 };
+  const blind = routeBetween(a, b, { ...FLOW_RULES, heads: [0, 30] });
+  assert.ok(legCrosses(blind, between), "seeing only its two boxes, a line runs straight through");
+  const seen = routeBetween(a, b, { ...FLOW_RULES, heads: [0, 30], avoid: [between] });
+  assertSquare(seen, "detour");
+  assert.ok(!legCrosses(seen, between), "told about the box, it goes round");
+  assert.ok(lastLeg(seen) >= 30, "and its head is still whole");
+  assert.deepEqual(
+    routeBetween(a, { ...b, y: 120 }, { ...FLOW_RULES, avoid: [{ ...between, x: 400 }] }),
+    routeBetween(a, { ...b, y: 120 }, FLOW_RULES),
+    "nothing in the way leaves the notation's own route exactly as it was",
+  );
+
+  // a loop back up beside the line it returns from is not laid on top of it
+  const down = routeBetween(a, { ...b, x: 60 }, { ...FLOW_RULES, heads: [0, 30] });
+  const up = routeBetween({ ...b, x: 60 }, a, {
+    ...FLOW_RULES,
+    heads: [0, 30],
+    lines: [down],
+  });
+  assertSquare(up, "returning line");
+  assert.equal(runsAlong(up, [down]), 0, "a returning line runs beside, not along");
+}
+
+{
+  // the signature reads back into what it was cut from
+  const read = readSignature(
+    linkSignature(parentBox, leftChild, { from: { side: "bottom" }, to: {}, bend: 210 }, {
+      x: 380,
+      y: 148,
+      points: [[0, 0], [0, 40]],
+    }),
+  );
+  assert.deepEqual(read?.from, parentBox);
+  assert.deepEqual(read?.to, leftChild);
+  assert.equal(read?.sides, "bottom|");
+  assert.equal(read?.bend, "210");
+  assert.deepEqual(read?.origin, { x: 380, y: 148 });
+  assert.equal(readSignature("r1|whatever"), null, "an older signature is not read");
+}
+
+// Every graph the editor ships, drawn both ways round: no route runs through
+// an element it does not join, no two lines share a stretch unless they are
+// one bracket, and every head is drawn whole
+{
+  const cases: Array<[string, string]> = [
+    ...Object.entries(TEMPLATES).map(([key, source]) => [`template ${key}`, source] as [string, string]),
+    ...ARCHITECTURE_TEMPLATES.map((entry) => [`architecture ${entry.label}`, entry.source] as [string, string]),
+    ...READY_DIAGRAMS.filter((kind) => kind.sample).map(
+      (kind) => [`sample ${kind.id}`, kind.sample as string] as [string, string],
+    ),
+    ...Object.entries(EXAMPLE).map(([key, source]) => [`example ${key}`, source] as [string, string]),
+  ];
+  for (const direction of ["down", "right"] as const) {
+    for (const [name, source] of cases) {
+      const ast = parseDSL(source);
+      if (!isGraph(ast.category)) continue;
+      const laid = computeLayout(ast, direction);
+      const pieces = buildSkeletons(laid) as unknown as Array<Record<string, unknown>>;
+      const nodes = laid.nodes.filter((node) => node.type !== "zone");
+      const routes = pieces
+        .filter((piece) => piece.type === "arrow")
+        .map((piece) => {
+          const link = (piece.customData as { tingraph: { link: { line: string; from: { unit: string }; to: { unit: string } } } }).tingraph.link;
+          const points = (piece.points as Array<[number, number]>).map(([x, y]) => ({
+            x: x + (piece.x as number),
+            y: y + (piece.y as number),
+          }));
+          return { piece, link, points };
+        });
+      for (const { piece, link, points } of routes) {
+        const what = `${name} (${direction}) ${link.from.unit} -> ${link.to.unit}`;
+        assert.ok(
+          lastLeg(points) >= headRoom(piece.endArrowhead as string | null),
+          `${what}: the head at its end is drawn small`,
+        );
+        assert.ok(
+          legLength(points, 0) >= headRoom(piece.startArrowhead as string | null),
+          `${what}: the head at its start is drawn small`,
+        );
+        // a use case line is straight, and passes the corner of an oval's box
+        // without touching the oval, so only the square notations are held to it
+        if (ast.category === "usecase") continue;
+        for (const node of nodes) {
+          if (link.from.unit.endsWith(`-${node.id}`) || link.to.unit.endsWith(`-${node.id}`)) continue;
+          assert.ok(!legCrosses(points, node), `${what}: runs through ${node.id}`);
+        }
+      }
+      for (let i = 0; i < routes.length; i++) {
+        for (const other of routes.slice(i + 1)) {
+          const mine = routes[i];
+          const bracket =
+            mine.link.line === other.link.line &&
+            (mine.link.from.unit === other.link.from.unit || mine.link.to.unit === other.link.to.unit);
+          if (bracket) continue;
+          assert.ok(
+            runsAlong(mine.points, [other.points]) <= 6,
+            `${name} (${direction}): ${mine.link.from.unit} -> ${mine.link.to.unit} lies along ${other.link.from.unit} -> ${other.link.to.unit}`,
+          );
+        }
+      }
+    }
+  }
+}
 
 // -------------------------------------------------------------------- charts
 

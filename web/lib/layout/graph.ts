@@ -1,4 +1,7 @@
+import { routeBetween } from "@/lib/canvas/connect";
+import { edgeHeads, edgeLine } from "@/lib/connectors";
 import type {
+  DiagramCategory,
   DSLEdge,
   DSLNode,
   LayoutDirection,
@@ -35,6 +38,8 @@ const CLEARANCE = 5;
 const FLOW_SIDE_GAP = 40;
 /** How far apart two branches of one box turn, when both step through a channel. */
 const CHANNEL_STEP = 11;
+/** Least straight run out of a box before a branch may turn. */
+const MIN_LEG = 10;
 
 export function round(p: Point): Point {
   return { x: Math.round(p.x), y: Math.round(p.y) };
@@ -80,9 +85,10 @@ export function routeFlowEdges(
   nodes: PositionedNode[],
   edges: DSLEdge[],
   direction: LayoutDirection = "down",
+  category: DiagramCategory = "flow",
 ): PositionedEdge[] {
   if (direction === "right") {
-    return routeFlowEdges(nodes.map(turned), edges).map((edge) => ({
+    return routeFlowEdges(nodes.map(turned), edges, "down", category).map((edge) => ({
       ...edge,
       points: edge.points.map((point) => ({ x: point.y, y: point.x })),
     }));
@@ -102,6 +108,7 @@ export function routeFlowEdges(
     return at;
   });
   const lanes = (id: string) => leaving.get(id) ?? 1;
+  const laid: Array<{ from: string; to: string; line: string; points: Point[] }> = [];
 
   return edges.map((edge, index) => {
     const from = byId.get(edge.from);
@@ -109,12 +116,41 @@ export function routeFlowEdges(
     if (!from || !to) {
       return { ...edge, points: [] };
     }
+    const points = flowRoute(edge, index, from, to);
+    laid.push({ from: edge.from, to: edge.to, line: edgeLine(category, edge), points });
+    return { ...edge, points };
+  });
+
+  function flowRoute(
+    edge: DSLEdge,
+    index: number,
+    from: PositionedNode,
+    to: PositionedNode,
+  ): Point[] {
     const blockers = nodes.filter((node) => node !== from && node !== to);
+    // the straight run each end needs for its head to be drawn whole
+    const [headA, headB] = edgeHeads(category, edge);
     const fromCx = from.x + from.width / 2;
     const toCx = to.x + to.width / 2;
     const fromCy = from.y + from.height / 2;
     const toCy = to.y + to.height / 2;
     const downward = to.y >= from.y + from.height;
+    /** the canvas's own router, round whatever this one could not step past */
+    const around = (sides?: { fromSide: "left" | "right"; toSide: "left" | "right" }) =>
+      routeBetween(outline(from), outline(to), {
+        category,
+        direction: "down",
+        heads: [headA, headB],
+        avoid: blockers.map(outline),
+        lines: laid
+          .filter(
+            (other) =>
+              other.line !== edgeLine(category, edge) ||
+              (other.from !== edge.from && other.to !== edge.to),
+          )
+          .map((other) => other.points),
+        ...sides,
+      }).map(round);
 
     if (downward) {
       // one x for both ends, so a near-miss between two centres still drops
@@ -125,40 +161,130 @@ export function routeFlowEdges(
         { x: shared, y: to.y },
       ];
       if (Math.abs(fromCx - toCx) < 1 && !hits(straight, blockers)) {
-        return { ...edge, points: straight.map(round) };
+        return straight.map(round);
       }
       // the channel this branch turns in: the middle of the gap, stepped aside
-      // by enough to read when several leave the same box
-      const spread = Math.min(CHANNEL_STEP, (to.y - from.y - from.height) / 3);
+      // by enough to read when several leave the same box — and never so close
+      // to either box that the head on that end comes out small
+      const top = from.y + from.height;
+      const room = to.y - top;
+      const spread = Math.min(CHANNEL_STEP, room / 3);
+      const lo = Math.max(MIN_LEG, headA);
+      const hi = Math.max(MIN_LEG, headB);
+      const wanted =
+        (top + to.y) / 2 + (lane[index] - (lanes(edge.from) - 1) / 2) * spread;
       const midY = Math.round(
-        (from.y + from.height + to.y) / 2 +
-          (lane[index] - (lanes(edge.from) - 1) / 2) * spread,
+        room < lo + hi
+          ? top + (room * lo) / (lo + hi)
+          : Math.min(Math.max(wanted, top + lo), to.y - hi),
       );
       const stepped: Point[] = [
-        { x: fromCx, y: from.y + from.height },
+        { x: fromCx, y: top },
         { x: fromCx, y: midY },
         { x: toCx, y: midY },
         { x: toCx, y: to.y },
       ];
       if (!hits(stepped, blockers)) {
-        return { ...edge, points: stepped.map(round) };
+        return stepped.map(round);
       }
+      return around();
     }
 
-    // loops back up (or sideways): leave through the nearer side and climb
+    // loops back up (or sideways): leave through the nearer side and climb,
+    // far enough out that the head on the way back in is drawn whole
     const goLeft = toCx <= fromCx;
+    const out = Math.max(FLOW_SIDE_GAP, headB);
     const channel = goLeft
-      ? Math.min(from.x, to.x) - FLOW_SIDE_GAP
-      : Math.max(from.x + from.width, to.x + to.width) + FLOW_SIDE_GAP;
-    return {
-      ...edge,
-      points: [
-        { x: goLeft ? from.x : from.x + from.width, y: fromCy },
-        { x: channel, y: fromCy },
-        { x: channel, y: toCy },
-        { x: goLeft ? to.x : to.x + to.width, y: toCy },
-      ].map(round),
-    };
+      ? Math.min(from.x, to.x) - out
+      : Math.max(from.x + from.width, to.x + to.width) + out;
+    const loop = [
+      { x: goLeft ? from.x : from.x + from.width, y: fromCy },
+      { x: channel, y: fromCy },
+      { x: channel, y: toCy },
+      { x: goLeft ? to.x : to.x + to.width, y: toCy },
+    ].map(round);
+    if (!hits(loop, blockers)) {
+      return loop;
+    }
+    const side = goLeft ? "left" : "right";
+    return around({ fromSide: side, toSide: side });
+  }
+}
+
+/** Whether one box sits wholly inside another: a zone round a component. */
+function holds(outer: Box, inner: Box): boolean {
+  return (
+    outer.x <= inner.x &&
+    outer.y <= inner.y &&
+    outer.x + outer.width >= inner.x + inner.width &&
+    outer.y + outer.height >= inner.y + inner.height
+  );
+}
+
+const outline = (box: Box): Box => ({
+  x: box.x,
+  y: box.y,
+  width: box.width,
+  height: box.height,
+});
+
+/**
+ * Every edge of a placed graph cut by the canvas's own router, round the
+ * other nodes and clear of the routes already laid, with room under each
+ * head for it to be drawn whole — so a generated sheet is routed exactly the
+ * way a connector drawn by hand between the same two boxes would be.
+ *
+ * A zone, and anything else that holds one of the two ends, is a backdrop the
+ * line starts inside of rather than a thing in its way. Two edges of the same
+ * kind that leave the same node, or meet the same one, may share a stretch:
+ * that is a bracket or a merge, and reads as one.
+ */
+export function routeAll<E extends DSLEdge>(
+  edges: readonly E[],
+  byId: ReadonlyMap<string, PositionedNode>,
+  nodes: readonly PositionedNode[],
+  category: DiagramCategory,
+  direction: LayoutDirection,
+  ports?: (edge: E) => { fromAt?: number; toAt?: number },
+  /** chrome every route keeps clear of: words to go round, rules not to follow */
+  chrome: { avoid: Box[]; lines: Point[][] } = { avoid: [], lines: [] },
+): Array<E & { points: Point[] }> {
+  const laid: Array<{ from: string; to: string; line: string; points: Point[] }> = [];
+  return edges.map((edge) => {
+    const from = byId.get(edge.from);
+    const to = byId.get(edge.to);
+    if (!from || !to) {
+      return { ...edge, points: [] };
+    }
+    const line = edgeLine(category, edge);
+    const avoid = nodes
+      .filter(
+        (node) =>
+          node.id !== edge.from &&
+          node.id !== edge.to &&
+          node.type !== "zone" &&
+          !holds(node, from) &&
+          !holds(node, to),
+      )
+      .map(outline)
+      .concat(chrome.avoid);
+    const lines = laid
+      .filter(
+        (other) =>
+          other.line !== line || (other.from !== edge.from && other.to !== edge.to),
+      )
+      .map((other) => other.points)
+      .concat(chrome.lines);
+    const points = routeBetween(outline(from), outline(to), {
+      category,
+      direction,
+      heads: edgeHeads(category, edge),
+      avoid,
+      lines,
+      ...(ports?.(edge) ?? {}),
+    });
+    laid.push({ from: edge.from, to: edge.to, line, points });
+    return { ...edge, points };
   });
 }
 

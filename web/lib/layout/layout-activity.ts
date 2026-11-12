@@ -36,7 +36,8 @@ export const ACTIVITY_BAR_LENGTH = 132;
 export const ACTIVITY_BAR_WEIGHT = 7;
 
 const MARGIN = 60;
-const ROW_GAP = 46;
+/** A row apart is room for a control flow's open head to be drawn whole. */
+const ROW_GAP = 62;
 const COL_PAD = 30;
 const MIN_COL = 190;
 /** the band along the top of the frame that the partitions are named in */
@@ -221,7 +222,7 @@ export function computeActivityLayout(ast: AST): PositionedAST {
     category: ast.category,
     title: ast.title,
     nodes,
-    edges: routeFlowEdges(nodes, ast.edges, "down"),
+    edges: routeFlowEdges(nodes, ast.edges, "down", "activity"),
     pools,
   };
 }

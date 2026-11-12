@@ -287,6 +287,41 @@ Excalidraw stores. Constants that set the feel: `STUB` 16 (how far a line runs
 straight out of a box before it may turn), `SNAP` 6 (anchors this close read
 as lined up), `CLEAR` 18, `MIN_GAP` 10, `ORG_RAIL` 32.
 
+**Every head is drawn whole.** Excalidraw draws an arrowhead at most half as
+long as the leg it sits on (a diamond a quarter), so the same connector came
+out with a full head on one line and a stub of one on the next. `headRoom`
+gives the straight run each head needs — 30 for a triangle or a circle, 40 for
+a crow's foot, 50 for UML's open `arrow`, 48 for a diamond — and `heads` on the
+route options carries it for the two ends. Every route shape leaves at least
+that much under a head: a rail is kept that far from the end (a dragged one
+too), a stub is that long, and a single turn that would land closer takes the
+stub route instead. When two boxes stand closer than the room both ends need,
+the rail shares the gap out in proportion. The layouts leave the room in the
+first place: an activity's rows are 62 apart and a flow's channel turns far
+enough from its target; two use cases one arrow joins stand 62 apart rather
+than 26. Never shorten an end leg to tidy a route; the head shrinks with it.
+
+**A route goes round what is in its way.** `routeBetween` takes `avoid` (the
+other elements' boxes) and `lines` (the other connectors' routes). The
+notation's own route is tried first and kept exactly when it crosses no box
+and runs along no line; only otherwise does `aroundRoute` cut a detour. It
+lays a sparse grid — a rule `LANE` 24 outside every element within `SEARCH`
+360 of the two boxes, the middle of every wide gap, and the stubs each end
+leaves by — and takes the cheapest square walk along it: length, plus `TURN`
+40 a turn, `OFF_SIDE` 60 for leaving or meeting a box by a side the notation
+would not use, `SHARED` 20 per unit laid along another line, and `CROSS` 30
+for touching or crossing one at a grid point. Nothing comes within `KEEP` 12
+of an element it does not join, both ends still leave square from the middle
+of a side on a stub long enough for their head, and a pinned side or an ERD
+port limits the sides it may try. A use case's straight lines never detour.
+`runsAlong` measures how much of a route lies on others.
+
+Which lines may be shared is a rule, not a cost: two connectors **of the same
+kind** that leave the same element, or meet the same one, form a bracket or a
+merge — the org chart's rail is exactly that — and are left out of each
+other's `lines`. Every other pair, a dashed line along a solid one or a loop
+back along the line it returns from, avoids the other.
+
 Anchors, from `sideAnchor`:
 
 - A line running **down** the page leaves from the **middle of the side**. That
@@ -360,7 +395,11 @@ side by side, the axis that separates them wins instead.
   56px channel and each row shares a baseline; a second node in a column sits
   at least 56px below the first. The layout grows zones from the inside out
   before routing connectors, so aligned nodes get straight routes instead of
-  wraparounds caused by gaps too narrow for the router. `at x y` is an initial
+  wraparounds caused by gaps too narrow for the router. Generated routes go
+  through `routeAll` in `lib/layout/graph.ts`, the canvas router with the
+  other components to avoid; a zone may be crossed, but its name band
+  (`zoneBand`) is gone round and its edges are lines a route must not run
+  along, on the sheet as in the layout. `at x y` is an initial
   position hint, not a pin; `size w h` is a zone's minimum, not a limit. An
   unsized zone fits its contents. Only Generate does the arranging: zones do
   not follow later manual moves, which the panel reads back from the canvas.
@@ -916,6 +955,11 @@ inspector, export, and the settable graphs: column edits, reading a caption
 back off the sheet, redrawing an element in place, widening a frame by a
 column). No test framework. Anything that can be answered without a browser
 should be asserted there rather than clicked through.
+
+The connector rules are held there too. `self-check.ts` draws every graph the
+editor ships — templates, catalogue samples and guide examples, both
+directions — and fails on a head drawn small, a route through an element it
+does not join, or two lines sharing a stretch that is not one bracket.
 
 `scripts/site-check.ts` verifies documentation coverage, every displayed
 example and copy prompt, unique policy/guide anchors and agreement-version

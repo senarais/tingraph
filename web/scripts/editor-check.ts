@@ -1087,7 +1087,24 @@ for (const variant of ARCHITECTURE_TEMPLATES) {
   const layout = computeLayout(ast);
   assert.equal(layout.nodes.length, ast.nodes.length);
   assert.ok(layout.edges.every((edge) => edge.points.length >= 2), variant.label);
-  assert.ok(layout.edges.every((edge) => edge.points.length <= 4), `${variant.label}: routes need no wraparound`);
+  // a route steps round a component it does not join rather than through it,
+  // and still never needs the long way round the whole drawing
+  assert.ok(layout.edges.every((edge) => edge.points.length <= 6), `${variant.label}: routes need no wraparound`);
+  for (const edge of layout.edges) {
+    for (const node of layout.nodes) {
+      if (node.type === "zone" || node.id === edge.from || node.id === edge.to) continue;
+      const through = edge.points.slice(1).some((point, index) => {
+        const prev = edge.points[index];
+        return (
+          Math.min(prev.x, point.x) < node.x + node.width &&
+          node.x < Math.max(prev.x, point.x) &&
+          Math.min(prev.y, point.y) < node.y + node.height &&
+          node.y < Math.max(prev.y, point.y)
+        );
+      });
+      assert.ok(!through, `${variant.label}: ${edge.from} -> ${edge.to} runs through ${node.id}`);
+    }
+  }
   assert.equal(layout.nodes[0].type, "zone", "backdrops draw before their contents");
   assert.ok(buildSkeletons(layout).some((piece) => unitOf(piece)?.link), variant.label);
   const components = layout.nodes.filter((node) => node.type !== "zone");

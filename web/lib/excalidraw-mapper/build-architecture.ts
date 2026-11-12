@@ -3,6 +3,7 @@ import type { FileId } from "@excalidraw/excalidraw/element/types";
 import { marked, nodeUnit } from "@/lib/canvas/units";
 import type { PositionedNode } from "@/lib/types";
 import type { Theme } from "@/lib/excalidraw-mapper/theme";
+import { zoneBand } from "@/lib/layout/layout-architecture";
 
 const SYMBOLS: Record<string, { text: string; color: string }> = {
   client: { text: "USER", color: "#2563eb" },
@@ -40,7 +41,7 @@ export function architectureNodeSkeletons(node: PositionedNode, theme: Theme): E
     ...marked({ unit, kind: "node", core: true }),
   } as ExcalidrawElementSkeleton;
   const band = zone
-    ? { x: node.x + 12, y: node.y + 8, width: Math.min(node.width - 24, 260), height: 32 }
+    ? zoneBand(node)
     : { x: node.x + 8, y: node.y + node.height - 39, width: node.width - 16, height: 31 };
   const out: ExcalidrawElementSkeleton[] = [base];
   if (!zone) {

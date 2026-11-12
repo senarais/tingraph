@@ -1,4 +1,5 @@
 import { routeBetween, type Box } from "@/lib/canvas/connect";
+import { edgeHeads } from "@/lib/connectors";
 import { linesWidth, wrapByWidth } from "@/lib/layout/text";
 import type {
   AST,
@@ -37,6 +38,8 @@ export const ACTOR_HEIGHT = 78;
 
 const MARGIN = 60;
 const UC_GAP = 26;
+/** Between two use cases one arrow joins: its head, and its stereotype beside it. */
+const RELATION_GAP = 62;
 const BOUNDARY_PAD_X = 46;
 /** room at the top of a boundary for the system's own name */
 export const BOUNDARY_HEAD = 42;
@@ -152,9 +155,18 @@ export function computeUseCaseLayout(
   const pools: PositionedPool[] = [];
   let cursor = MARGIN;
 
+  // two use cases joined by an include, an extend or a generalisation stand
+  // far enough apart for the open head between them to be drawn whole and
+  // for its «include» to sit beside it rather than across it
+  const related = (a: string, b: string) =>
+    ast.edges.some(
+      (edge) =>
+        ((edge.from === a && edge.to === b) || (edge.from === b && edge.to === a)) &&
+        edgeHeads("usecase", edge).some((room) => room > 0),
+    );
   const column = (nodes: typeof cases, top: number): number => {
     let y = top;
-    for (const node of nodes) {
+    nodes.forEach((node, index) => {
       const size = sizes.get(node.id) as { width: number; height: number };
       placed.set(node.id, {
         ...node,
@@ -164,8 +176,9 @@ export function computeUseCaseLayout(
         height: size.height,
         rank: 0,
       });
-      y += size.height + UC_GAP;
-    }
+      const next = nodes[index + 1];
+      y += size.height + (next && related(node.id, next.id) ? RELATION_GAP : UC_GAP);
+    });
     return nodes.length > 0 ? y - UC_GAP : top;
   };
 
