@@ -30,13 +30,51 @@ function nodeBounds(elements: readonly ExcalidrawElement[]): Map<string, Box> {
   return boxes;
 }
 
+/**
+ * Past any of these, Generate asks before drawing: a diagram this big is slow
+ * to lay out and hard to read once it is fitted to the screen.
+ */
+export const GENERATION_LIMITS = { characters: 12_000, nodes: 60, connectors: 100 } as const;
+
+/** Why a source counts as large, one reason a line; empty when it does not. */
+export function oversize(source: string, nodes: number, connectors: number): string[] {
+  const reasons: string[] = [];
+  const count = (n: number) => n.toLocaleString("en-US");
+  if (nodes > GENERATION_LIMITS.nodes) {
+    reasons.push(`${count(nodes)} nodes (more than ${GENERATION_LIMITS.nodes})`);
+  }
+  if (connectors > GENERATION_LIMITS.connectors) {
+    reasons.push(`${count(connectors)} connectors (more than ${GENERATION_LIMITS.connectors})`);
+  }
+  if (source.length > GENERATION_LIMITS.characters) {
+    reasons.push(
+      `${count(source.length)} characters of source (more than ${count(GENERATION_LIMITS.characters)})`,
+    );
+  }
+  return reasons;
+}
+
+/** What a reader calls an element: the words written on it, else its id. */
+function nameOf(elements: readonly ExcalidrawElement[], unit: string): string {
+  const byId = new Map(elements.map((element) => [element.id, element]));
+  for (const element of elements) {
+    if (element.isDeleted || element.type !== "text") continue;
+    const owner = element.containerId ? byId.get(element.containerId) : element;
+    if (owner && unitOf(owner)?.unit === unit) {
+      const words = (element.text ?? "").replace(/\s+/g, " ").trim();
+      if (words) return `“${words}”`;
+    }
+  }
+  return unit.replace(/^[a-z]+(?:-node)?-/, "");
+}
+
 /** Fail before replacing the sheet or charging quota when rendered nodes collide. */
 export function generationConflict(elements: readonly ExcalidrawElement[]): string | null {
   const boxes = [...nodeBounds(elements)];
   for (let i = 0; i < boxes.length; i++) {
     for (let j = i + 1; j < boxes.length; j++) {
       if (overlaps(boxes[i][1], boxes[j][1])) {
-        return `Elements ${boxes[i][0]} and ${boxes[j][0]} overlap. Shorten their labels or split the diagram, then generate again. Your current sheet has been kept; no generation was used.`;
+        return `Elements ${nameOf(elements, boxes[i][0])} and ${nameOf(elements, boxes[j][0])} overlap. Shorten their labels or split the diagram, then generate again. Your current sheet has been kept; no generation was used.`;
       }
     }
   }

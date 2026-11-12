@@ -79,13 +79,20 @@ has). It is the only moment the code writes over the sheet. Everything after
 it is the reader's, which is why nothing else may re-derive the drawing from
 the source.
 
-Generate asks for confirmation above 12,000 source characters, 60 graph nodes,
-or 100 connectors; the AI panel also confirms prompts over 4,000 characters
-before sending them. Cancelling consumes no allowance. Before replacing the
-sheet or taking an allowance, Generate checks the **rendered** graph-node bounds,
-including external and bound captions (`lib/canvas/generation.ts`). An unresolved
-node collision stops generation with an explanation, preserving the sheet.
-Architecture zones are intentional backdrops and excluded from that node check.
+Generate asks before drawing a source over `GENERATION_LIMITS` in
+`lib/canvas/generation.ts` — 12,000 characters, 60 graph nodes or 100
+connectors. The Source panel already says so under the editor while the source
+is that large, and Generate opens `ConfirmDialog` (the editor's own dialog,
+never the browser's `confirm`), whose cancel button holds the focus.
+Cancelling draws nothing and consumes no allowance. The AI panel still confirms
+prompts over 4,000 characters before sending them. Before replacing the sheet
+or taking an allowance, Generate checks the **rendered** graph-node bounds,
+including external and bound captions. An unresolved node collision stops
+generation with an explanation naming the two elements by their captions,
+preserving the sheet. A failed Generate is shown whole, as an alert under the
+source, for as long as the source it was about is unchanged; the one-line
+status under it only ever reports success. Architecture zones are intentional
+backdrops and excluded from that node check.
 
 All graph connector captions, including flowchart captions, are separate text
 elements in the connector's unit, broken onto a second line past 96px so a

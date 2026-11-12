@@ -6,6 +6,7 @@ import * as monaco from "monaco-editor";
 import {
   ArrowDown,
   ArrowRight,
+  Info,
   RotateCcw,
   Sparkles,
   TriangleAlert,
@@ -116,6 +117,10 @@ interface SourceDrawerProps {
   onReset: () => void;
   generating: boolean;
   generationMessage: string;
+  /** that message reports a failure, and is shown whole rather than cut short */
+  generationFailed: boolean;
+  /** why this source counts as large, if it does: Generate will ask first */
+  large: string[];
   onOpenAi: () => void;
   onEditorMount: OnMount;
 }
@@ -152,6 +157,8 @@ export default function SourceDrawer({
   onReset,
   generating,
   generationMessage,
+  generationFailed,
+  large,
   onOpenAi,
   onEditorMount,
 }: SourceDrawerProps) {
@@ -225,12 +232,30 @@ export default function SourceDrawer({
               </span>
             </p>
           )}
+          {!error && generationFailed && generationMessage && (
+            <p
+              role="alert"
+              className="flex items-start gap-2 border-b-2 border-edge bg-alert-tint px-3 py-2.5 text-[11.5px] leading-relaxed text-alert"
+            >
+              <TriangleAlert size={13} className="mt-0.5 shrink-0" />
+              <span>{generationMessage}</span>
+            </p>
+          )}
+          {!error && large.length > 0 && (
+            <p className="flex items-start gap-2 border-b-2 border-edge bg-blueprint-tint px-3 py-2.5 text-[11.5px] leading-relaxed text-blueprint">
+              <Info size={13} className="mt-0.5 shrink-0" />
+              <span>
+                Large diagram: {large.join(", ")}. It may read small on screen, so
+                Generate will ask before drawing it.
+              </span>
+            </p>
+          )}
 
           <div className="flex items-center gap-2 p-3">
             <span className="min-w-0 flex-1 truncate text-[11px] text-ink-soft">
               {error
                 ? "Source has a syntax error"
-                : generationMessage || summary}
+                : (!generationFailed && generationMessage) || summary}
             </span>
             {!ONE_WAY.has(category) && (
               <div className="w-[86px] shrink-0">

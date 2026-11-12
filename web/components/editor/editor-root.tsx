@@ -20,7 +20,7 @@ import { TEMPLATES } from "@/lib/templates";
 import { styleFor, type SheetStyle } from "@/lib/sheet";
 import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
 import { computeLayout } from "@/lib/layout/compute-layout";
-import { generationConflict } from "@/lib/canvas/generation";
+import { generationConflict, oversize } from "@/lib/canvas/generation";
 import { mapToExcalidrawElements } from "@/lib/excalidraw-mapper/map-to-elements";
 import {
   buildShapeFor,
@@ -74,6 +74,7 @@ import Rail from "@/components/editor/rail";
 import ShapeDrawer from "@/components/editor/shape-drawer";
 import SourceDrawer from "@/components/editor/source-drawer";
 import StartDialog, { type StartChoice } from "@/components/editor/start-dialog";
+import ConfirmDialog from "@/components/editor/confirm-dialog";
 import StyleDrawer from "@/components/editor/style-drawer";
 import TopBar from "@/components/editor/top-bar";
 import { Tick } from "@/components/editor/ui";
@@ -222,6 +223,17 @@ export default function EditorRoot({
   const [saveMessage, setSaveMessage] = useState("");
   const [generating, setGenerating] = useState(false);
   const [generationMessage, setGenerationMessage] = useState("");
+  /**
+   * The source a failed Generate was about. The failure is shown while that is
+   * still the source, and goes once the reader has changed it.
+   */
+  const [failedSource, setFailedSource] = useState<string | null>(null);
+  /** a large diagram waiting on the reader's say-so before it is drawn */
+  const [pendingLarge, setPendingLarge] = useState<{
+    source: string;
+    replaceSource: boolean;
+    reasons: string[];
+  } | null>(null);
   const [imageMessage, setImageMessage] = useState("");
   const [accountGate, setAccountGate] = useState<{
     title: string;
@@ -524,38 +536,46 @@ export default function EditorRoot({
    * This is the only moment the code touches the canvas: everything after it
    * belongs to the reader.
    */
-  const generate = async (source: string = code, replaceSource = false) => {
+  const generate = async (
+    source: string = code,
+    replaceSource = false,
+    confirmed = false,
+  ) => {
     if (generatingRef.current) {
       return;
     }
+    const fail = (message: string) => {
+      setFailedSource(source);
+      setGenerationMessage(message);
+    };
     let ast;
     try {
       ast = parseDSL(source);
     } catch (cause) {
-      setGenerationMessage(cause instanceof Error ? cause.message : String(cause));
+      fail(cause instanceof Error ? cause.message : String(cause));
       return;
     }
-    if (
-      (source.length > 12000 || ast.nodes.length > 60 || ast.edges.length > 100) &&
-      !window.confirm(
-        `This is a large diagram (${ast.nodes.length} nodes, ${ast.edges.length} connectors; ${source.length} source characters). ` +
-        "It may take longer to draw and be hard to read when fitted to the screen. " +
-        "Split it into smaller diagrams for clarity. Continue generating?",
-      )
-    ) return;
+    // a large diagram is drawn only once the reader has said so; nothing is
+    // checked against the allowance until then
+    const reasons = oversize(source, ast.nodes.length, ast.edges.length);
+    if (reasons.length > 0 && !confirmed) {
+      setPendingLarge({ source, replaceSource, reasons });
+      return;
+    }
     const fresh = drawFromSource(source, ink, direction, style);
     if (!api || fresh.length === 0) {
-      setGenerationMessage("The diagram could not be drawn. Check the source and try again.");
+      fail("The diagram could not be drawn. Check the source and try again.");
       return;
     }
     const conflict = generationConflict(fresh);
     if (conflict) {
-      setGenerationMessage(conflict);
+      fail(conflict);
       return;
     }
 
     generatingRef.current = true;
     setGenerating(true);
+    setFailedSource(null);
     setGenerationMessage("");
     try {
       const account = await requireAccount(
@@ -568,7 +588,7 @@ export default function EditorRoot({
         () => null,
       );
       if (!response?.ok) {
-        setGenerationMessage("Generation allowance could not be checked. Try again.");
+        fail("Generation allowance could not be checked. Try again.");
         return;
       }
       const data = (await response.json()) as {
@@ -577,9 +597,7 @@ export default function EditorRoot({
         usage_limit: number | null;
       };
       if (!data.allowed) {
-        setGenerationMessage(
-          `Daily generation limit reached (${data.used}/${data.usage_limit ?? 10}).`,
-        );
+        fail(`Daily generation limit reached (${data.used}/${data.usage_limit ?? 10}).`);
         return;
       }
 
@@ -932,7 +950,12 @@ export default function EditorRoot({
                 onGenerate={() => void generate()}
                 onReset={() => void generate(TEMPLATES[editorCategory], true)}
                 generating={generating}
-                generationMessage={generationMessage}
+                // a failure about a source the reader has since changed is old news
+                generationMessage={
+                  failedSource !== null && failedSource !== code ? "" : generationMessage
+                }
+                generationFailed={failedSource !== null && failedSource === code}
+                large={oversize(code, drawn.nodeCount, drawn.edgeCount)}
                 onOpenAi={() => void openAi()}
                 onEditorMount={handleEditorMount}
               />
@@ -994,6 +1017,31 @@ export default function EditorRoot({
           onClose={() => setExportOpen(false)}
         />
       )}
+      <ConfirmDialog
+        open={pendingLarge !== null}
+        kicker="Large diagram"
+        title="Generate a diagram this big?"
+        confirmLabel="Generate anyway"
+        cancelLabel="Keep editing"
+        onCancel={() => setPendingLarge(null)}
+        onConfirm={() => {
+          const pending = pendingLarge;
+          setPendingLarge(null);
+          if (pending) {
+            void generate(pending.source, pending.replaceSource, true);
+          }
+        }}
+      >
+        <p>This source has</p>
+        <ul className="mt-2 space-y-1 border-l-2 border-edge pl-3 text-ink">
+          {pendingLarge?.reasons.map((reason) => <li key={reason}>{reason}</li>)}
+        </ul>
+        <p className="mt-3">
+          It may take a while to lay out, and reads small once it is fitted to the
+          screen. Splitting it into a few smaller diagrams usually reads better.
+          Nothing is drawn, and no generation is used, until you go on.
+        </p>
+      </ConfirmDialog>
       <StartDialog
         open={starting}
         category={editorCategory}
