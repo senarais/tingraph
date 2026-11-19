@@ -1110,6 +1110,7 @@ export default function EditorRoot({
                 error={result.error}
                 onGenerate={() => void generate()}
                 onReset={() => void generate(TEMPLATES[editorCategory], true)}
+                onTemplate={(source) => void generate(source, true)}
                 generating={generating}
                 // a failure about a source the reader has since changed is old news
                 generationMessage={

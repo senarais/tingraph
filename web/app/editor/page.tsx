@@ -5,6 +5,7 @@ import Catalog from "@/components/site/catalog";
 import { Mark } from "@/components/site/diagram-art";
 import { SiteFooter, SiteNav } from "@/components/site/site-chrome";
 import { PLANNED_DIAGRAMS, READY_DIAGRAMS } from "@/lib/diagrams";
+import { starterFor } from "@/lib/templates";
 import { DiagramCategory } from "@/lib/types";
 
 export const metadata: Metadata = {
@@ -49,17 +50,20 @@ function requested(value: string | string[] | undefined): DiagramCategory | unde
  * the canvas directly, preserving existing editor links.
  */
 export default async function EditorPage({ searchParams }: PageProps<"/editor">) {
-  const { type, diagram, start } = await searchParams;
+  const { type, diagram, start, starter } = await searchParams;
   const category = requested(type);
+  // a starter card opens its notation on the starter's source rather than the template
+  const opening = category && typeof starter === "string" ? starterFor(category, starter) : undefined;
   const diagramId = typeof diagram === "string" ? diagram : undefined;
   // keyed on the notation: asking for another one opens a fresh sheet on it
   // rather than leaving the old drawing under a new palette
   if (category || diagramId) {
     return (
       <EditorShell
-        key={`${category ?? "bpmn"}:${diagramId ?? "new"}`}
+        key={`${category ?? "bpmn"}:${diagramId ?? "new"}:${opening?.id ?? ""}`}
         initialCategory={category ?? "bpmn"}
         diagramId={diagramId}
+        starter={diagramId ? undefined : opening?.source}
         // the catalogue asks for the start dialog; a saved diagram never gets it
         start={start === "1" && !diagramId}
       />

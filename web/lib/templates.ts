@@ -105,6 +105,221 @@ export const ARCHITECTURE_TEMPLATES = [
   },
 ] as const;
 
+/**
+ * Common drawings that are an existing notation started a particular way. Each
+ * has a card of its own in the catalogue, opens with `?type=…&starter=…`, and
+ * is offered again as a starting point inside the editor. The notation is the
+ * same; only the first source differs.
+ */
+export interface Starter {
+  /** the slug the catalogue card and `?starter=` use */
+  id: string;
+  category: DiagramCategory;
+  label: string;
+  source: string;
+}
+
+export const STARTERS: Starter[] = [
+  {
+    id: "system-context",
+    category: "architecture",
+    label: "System context",
+    source: `architecture "Internet Banking - System Context" {
+  zone BANK "Big Bank plc" at 260 60 size 620 380
+  client CUSTOMER "Personal customer" at 40 200
+  service BANKING "Internet banking system" at 330 200
+  external MAINFRAME "Mainframe banking system" at 620 120
+  external EMAIL "E-mail system" at 620 300
+  CUSTOMER [views accounts, pays] -> BANKING
+  BANKING [reads and writes] -> MAINFRAME
+  BANKING [sends e-mail] -> EMAIL
+  EMAIL -.-> CUSTOMER
+}
+`,
+  },
+  {
+    id: "container",
+    category: "architecture",
+    label: "C4 containers",
+    source: `architecture "Internet Banking - Containers" {
+  zone SYSTEM "Internet banking system" at 230 40 size 700 470
+  client CUSTOMER "Personal customer" at 20 230
+  client SPA "Single-page app" at 280 120
+  client MOBILE "Mobile app" at 280 340
+  service API "API application" at 520 230
+  database DB "Accounts database" at 760 120
+  queue EVENTS "Event queue" at 760 340
+  external MAINFRAME "Mainframe banking system" at 1000 230
+  CUSTOMER -> SPA
+  CUSTOMER -> MOBILE
+  SPA [JSON over HTTPS] -> API
+  MOBILE [JSON over HTTPS] -> API
+  API [SQL] -> DB
+  API -.-> EVENTS
+  API [XML over HTTPS] -> MAINFRAME
+}
+`,
+  },
+  {
+    id: "component",
+    category: "architecture",
+    label: "Components",
+    source: `architecture "API Application - Components" {
+  zone APP "API application" at 230 40 size 700 470
+  client SPA "Single-page app" at 20 230
+  service SIGNIN "Sign-in controller" at 280 120
+  service ACCOUNTS "Accounts controller" at 280 340
+  service SECURITY "Security component" at 520 120
+  service FACADE "Mainframe facade" at 520 340
+  database DB "Accounts database" at 1000 120
+  external MAINFRAME "Mainframe banking system" at 1000 340
+  SPA -> SIGNIN
+  SPA -> ACCOUNTS
+  SIGNIN -> SECURITY
+  ACCOUNTS -> FACADE
+  SECURITY [reads users] -> DB
+  FACADE [XML over HTTPS] -> MAINFRAME
+}
+`,
+  },
+  {
+    id: "deployment",
+    category: "architecture",
+    label: "Deployment",
+    source: `architecture "Production Deployment" {
+  zone DEVICE "Customer's device" at 40 150 size 220 230
+  zone CLOUD "Cloud region" at 330 40 size 860 500
+  zone CLUSTER "Kubernetes cluster" at 560 110 size 320 380
+  zone DATA "Managed services" at 920 110 size 240 380
+  client BROWSER "Web browser" at 70 220
+  cloud CDN "CDN" at 370 380
+  service WEB "Web pods" at 600 220
+  service API "API pods" at 600 400
+  storage FILES "Object storage" at 960 220
+  database SQL "Primary database" at 960 400
+  BROWSER [static files] -> CDN
+  BROWSER [HTTPS] -> WEB
+  WEB -> API
+  API -> SQL
+  API -> FILES
+}
+`,
+  },
+  {
+    id: "swot",
+    category: "matrix",
+    label: "SWOT analysis",
+    source: `matrix "SWOT analysis" {
+  corner ""
+  column "Helpful"
+  column "Harmful"
+
+  row "Internal" "Strengths: loyal customers, fast delivery, strong brand" "Weaknesses: small team, thin margins, legacy system"
+  row "External" "Opportunities: new market, online sales, partnerships" "Threats: new competitor, rising costs, regulation"
+
+  style headers
+  align left
+  row-header 110
+  size 760 420
+}
+`,
+  },
+  {
+    id: "raci",
+    category: "matrix",
+    label: "RACI matrix",
+    source: `matrix "Website launch - RACI" {
+  corner "Task / Role"
+  column "Product owner"
+  column "Designer"
+  column "Developer"
+  column "QA"
+  column "Marketing"
+
+  row "Define scope" "A" "C" "C" "I" "C"
+  row "Design pages" "A" "R" "C" "I" "I"
+  row "Build site" "I" "C" "R" "C" "I"
+  row "Test release" "A" "I" "C" "R" "I"
+  row "Announce launch" "A" "I" "I" "I" "R"
+
+  style headers
+  align center
+  row-header 150
+  size 760 360
+}
+`,
+  },
+  {
+    id: "decision-matrix",
+    category: "matrix",
+    label: "Decision matrix",
+    source: `matrix "Choosing a database" {
+  corner "Option / Criterion"
+  column "Cost (x2)"
+  column "Performance (x3)"
+  column "Ease of use (x1)"
+  column "Support (x2)"
+  column "Weighted total"
+
+  row "PostgreSQL" "4" "4" "3" "5" "33"
+  row "MySQL" "5" "3" "4" "4" "31"
+  row "MongoDB" "3" "4" "4" "3" "28"
+
+  style banded
+  align center
+  row-header 140
+  size 760 300
+}
+`,
+  },
+  {
+    id: "heatmap",
+    category: "matrix",
+    label: "Heatmap",
+    source: `matrix "Support tickets by day and hour" {
+  corner "Day / Hour"
+  column "08-10"
+  column "10-12"
+  column "12-14"
+  column "14-16"
+  column "16-18"
+
+  row "Monday" {
+    cell "12" "#fde0dd"
+    cell "31" "#fa9fb5"
+    cell "18" "#fcc5c0"
+    cell "40" "#f768a1"
+    cell "22" "#fcc5c0"
+  }
+  row "Tuesday" {
+    cell "9" "#fff7f3"
+    cell "25" "#fcc5c0"
+    cell "15" "#fde0dd"
+    cell "33" "#fa9fb5"
+    cell "19" "#fde0dd"
+  }
+  row "Wednesday" {
+    cell "14" "#fde0dd"
+    cell "44" "#dd3497"
+    cell "28" "#fa9fb5"
+    cell "51" "#ae017e"
+    cell "26" "#fcc5c0"
+  }
+
+  style heatmap
+  align center
+  row-header 130
+  size 760 320
+}
+`,
+  },
+];
+
+/** The starter a catalogue link names, if there is one for that notation. */
+export function starterFor(category: DiagramCategory, id: string | undefined): Starter | undefined {
+  return STARTERS.find((starter) => starter.id === id && starter.category === category);
+}
+
 export const BPMN_TEMPLATE = `bpmn "Vacation Request" {
   pool P1 "Request" {
     lane L1 "Employee" {

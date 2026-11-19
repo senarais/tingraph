@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { useTingraphStore } from "@/lib/store";
 import { GUIDE_INTRO, GUIDE_SECTIONS } from "@/lib/guide";
+import { STARTERS } from "@/lib/templates";
 import { DiagramCategory, LayoutDirection } from "@/lib/types";
 import { Segmented, SlabButton, Tick } from "@/components/editor/ui";
 import TutorialPrompt from "@/components/editor/tutorial-prompt";
@@ -115,6 +116,8 @@ interface SourceDrawerProps {
   onGenerate: () => void;
   /** draws the starting diagram again, over whatever is on the sheet */
   onReset: () => void;
+  /** replaces the source and the sheet with a starter, as Reset does with the template */
+  onTemplate: (source: string) => void;
   generating: boolean;
   generationMessage: string;
   /** that message reports a failure, and is shown whole rather than cut short */
@@ -155,6 +158,7 @@ export default function SourceDrawer({
   error,
   onGenerate,
   onReset,
+  onTemplate,
   generating,
   generationMessage,
   generationFailed,
@@ -170,6 +174,8 @@ export default function SourceDrawer({
   const setTab = useTingraphStore((s) => s.setSourceTab);
   const codeKeys = useCodeKeys();
   const [armed, setArmed] = useState(false);
+  const starters = STARTERS.filter((starter) => starter.category === category);
+  const [armedStarter, setArmedStarter] = useState<string | null>(null);
 
   /** Back to the drawing this notation opens with, source and sheet alike. */
   const reset = () => {
@@ -251,6 +257,31 @@ export default function SourceDrawer({
             </p>
           )}
 
+          {starters.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 px-3 pt-3 text-[11px]">
+              <span className="text-ink-faint">Start from</span>
+              {starters.map((starter) => (
+                <button
+                  key={starter.id}
+                  type="button"
+                  disabled={generating}
+                  onBlur={() => setArmedStarter(null)}
+                  onClick={() => {
+                    if (armedStarter !== starter.id) {
+                      setArmedStarter(starter.id);
+                      return;
+                    }
+                    setArmedStarter(null);
+                    onTemplate(starter.source);
+                  }}
+                  title="Press twice to replace the source and the sheet"
+                  className={`border-2 border-edge px-1.5 py-0.5 font-semibold disabled:opacity-50 ${armedStarter === starter.id ? "bg-edge text-bone" : "bg-white hover:bg-bone"}`}
+                >
+                  {armedStarter === starter.id ? `Replace with ${starter.label}?` : starter.label}
+                </button>
+              ))}
+            </div>
+          )}
           <div className="flex items-center gap-2 p-3">
             <span className="min-w-0 flex-1 truncate text-[11px] text-ink-soft">
               {error

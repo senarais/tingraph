@@ -54,6 +54,21 @@ nobody can find:
    types out `HERO_DIAGRAMS` — three, deliberately. Curate by reordering
    `READY_DIAGRAMS`, never by adding another card row.
 
+**A common drawing that is an existing notation started a particular way is a
+starter, not a notation.** System context, C4 containers, components and
+deployment are `architecture`; SWOT, RACI, a decision matrix and a heatmap are
+`matrix`. Each is a `STARTERS` entry in `lib/templates.ts` (its source) and a
+`STARTER_DIAGRAMS` card in `lib/diagrams.ts`, which the catalogue lists after
+the notations and opens with `/editor?type=<keyword>&starter=<id>`. The editor
+writes the starter into the source on the way in and then drops `starter` from
+the address, so a reload opens on the reader's work rather than the starter
+again. Inside the editor the Generate panel offers a notation's starters under
+"Start from", and the architecture panel lists them with its starting layouts;
+both ask twice and generate, like Reset. Starters stay out of `READY_DIAGRAMS`,
+so no count of notations, docs page or `DIAGRAM_DOCS` row grows with them. A
+drawing whose notation cannot say it is not a starter: a problem tree needs
+effects above the problem and causes below it, and `tree` only branches down.
+
 ## The pipeline
 
 ```

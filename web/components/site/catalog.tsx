@@ -146,7 +146,10 @@ export default function Catalog() {
 
   // a notation picked here opens on the start dialog: the ways to write it,
   // in front of a reader who has not found the Syntax guide yet
-  const editorHref = (kind: DiagramKind) => `/editor?type=${kind.id}&start=1`;
+  const editorHref = (kind: DiagramKind) =>
+    kind.starter
+      ? `/editor?type=${kind.keyword}&starter=${kind.starter}&start=1`
+      : `/editor?type=${kind.id}&start=1`;
 
   const openDiagram = async (kind: DiagramKind) => {
     const href = editorHref(kind);
@@ -275,7 +278,7 @@ export default function Catalog() {
           </div>
           {view === "browse" ? (
             <p className="slab-tight bg-bone px-3 py-2 font-mono text-[12px] text-ink">
-              {results.length} of {ALL_DIAGRAMS.length} notations
+              {results.length} of {ALL_DIAGRAMS.length} diagrams
             </p>
           ) : (
             <p className="slab-tight bg-bone px-3 py-2 font-mono text-[12px] text-ink">

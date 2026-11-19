@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { existsSync } from "node:fs";
 import { Children, isValidElement, type ReactNode } from "react";
-import { READY_DIAGRAMS } from "../lib/diagrams";
+import { READY_DIAGRAMS, STARTER_DIAGRAMS } from "../lib/diagrams";
 import nextConfig from "../next.config";
 
 function contains(node: ReactNode, component: unknown): boolean {
@@ -28,6 +28,15 @@ async function checkRouting() {
     assert.equal(entry.type, EditorShell, `${diagram.id} must still open its canvas`);
     assert.equal(entry.props.initialCategory, diagram.keyword);
   }
+  // a starter card opens its notation on the starter's source, and a starter
+  // named for another notation opens the plain template
+  for (const diagram of STARTER_DIAGRAMS) {
+    const entry = await page({ type: diagram.keyword, starter: diagram.starter });
+    assert.equal(entry.type, EditorShell, `${diagram.id} must open its notation's canvas`);
+    assert.equal(entry.props.initialCategory, diagram.keyword);
+    assert.equal(entry.props.starter, diagram.sample, `${diagram.id} must open on its own source`);
+  }
+  assert.equal((await page({ type: "flow", starter: "swot" })).props.starter, undefined);
   const id = "12345678-1234-1234-1234-123456789abc";
   for (const query of [{ diagram: id }, { type: "erd", diagram: id }]) {
     const entry = await page(query);

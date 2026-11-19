@@ -946,6 +946,203 @@ export function ArchitectureArt({ accent = "navy", className }: ArtProps) {
   );
 }
 
+/* ------------------------------------------------------- starter drawings */
+
+/** One component card, as `ArchitectureArt` draws it. */
+function Part({ x, y, label, ink, dashed = false }: { x: number; y: number; label: string; ink: string; dashed?: boolean }) {
+  return (
+    <g>
+      <rect x={x} y={y} width="52" height="44" rx="5" fill="white" stroke={ink} strokeWidth="1.5" strokeDasharray={dashed ? "4 3" : undefined} />
+      <rect x={x + 14} y={y + 6} width="24" height="19" rx="3" fill={ink} opacity={dashed ? 0.35 : 1} />
+      <text x={x + 26} y={y + 37} fontSize="8.5" fill={ink} textAnchor="middle">{label}</text>
+    </g>
+  );
+}
+
+function Boundary({ x, y, width, height, label, ink }: { x: number; y: number; width: number; height: number; label: string; ink: string }) {
+  return (
+    <g>
+      <rect x={x} y={y} width={width} height={height} rx="10" stroke={ink} strokeDasharray="5 3" />
+      <text x={x + 10} y={y + 15} fontSize="9" fill={ink}>{label}</text>
+    </g>
+  );
+}
+
+export function ContextArt({ accent = "navy", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <Boundary x={96} y={16} width={212} height={150} label="Enterprise" ink={ink} />
+      <circle cx="40" cy="70" r="11" stroke={ink} strokeWidth="1.5" />
+      <path d="M20 112c0-17 9-27 20-27s20 10 20 27z" stroke={ink} strokeWidth="1.5" />
+      <path d="M62 93h50M164 70l60-24M164 116l60 24" stroke={ink} strokeWidth="1.5" pathLength={1} className="ink-path" />
+      <Part x={112} y={71} label="SYSTEM" ink={ink} />
+      <Part x={226} y={26} label="CORE" ink={ink} dashed />
+      <Part x={226} y={118} label="MAIL" ink={ink} dashed />
+    </svg>
+  );
+}
+
+export function ContainerArt({ accent = "navy", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <Boundary x={64} y={14} width={192} height={154} label="System" ink={ink} />
+      <path d="M54 93h12v-35h12M66 93v35h12M130 58h18v35h18M130 128h18v-35M218 93h48" stroke={ink} strokeWidth="1.5" pathLength={1} className="ink-path" />
+      <Part x={2} y={71} label="USER" ink={ink} />
+      <Part x={78} y={36} label="WEB" ink={ink} />
+      <Part x={78} y={106} label="APP" ink={ink} />
+      <Part x={166} y={71} label="API" ink={ink} />
+      <Part x={266} y={71} label="EXT" ink={ink} dashed />
+    </svg>
+  );
+}
+
+export function ComponentArt({ accent = "slate", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <Boundary x={76} y={14} width={160} height={154} label="API application" ink={ink} />
+      <path d="M58 93h14v-45h14M72 93v45h14M138 48h20M138 138h20M210 48h48M210 138h48" stroke={ink} strokeWidth="1.5" pathLength={1} className="ink-path" />
+      <Part x={6} y={71} label="SPA" ink={ink} />
+      <Part x={86} y={26} label="AUTH" ink={ink} />
+      <Part x={86} y={116} label="ACCT" ink={ink} />
+      <Part x={158} y={26} label="SEC" ink={ink} />
+      <Part x={158} y={116} label="FACADE" ink={ink} />
+      <Part x={258} y={26} label="DB" ink={ink} dashed />
+      <Part x={258} y={116} label="EXT" ink={ink} dashed />
+    </svg>
+  );
+}
+
+export function DeploymentArt({ accent = "slate", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <Boundary x={6} y={46} width={74} height={88} label="Device" ink={ink} />
+      <Boundary x={92} y={8} width={222} height={166} label="Cloud region" ink={ink} />
+      <Boundary x={104} y={28} width={98} height={138} label="Cluster" ink={ink} />
+      <Boundary x={212} y={28} width={92} height={138} label="Managed" ink={ink} />
+      <path d="M69 93h58M153 94v14M179 130h56M179 128v-60h56" stroke={ink} strokeWidth="1.5" pathLength={1} className="ink-path" />
+      <Part x={17} y={71} label="BROWSER" ink={ink} />
+      <Part x={127} y={50} label="WEB" ink={ink} />
+      <Part x={127} y={108} label="API" ink={ink} />
+      <Part x={235} y={46} label="FILES" ink={ink} />
+      <Part x={235} y={108} label="SQL" ink={ink} />
+    </svg>
+  );
+}
+
+/** A table with a heading row and a heading column, filled by `cell`. */
+function Grid({
+  ink,
+  rows,
+  columns,
+  cell,
+  head = "#e8eef5",
+}: {
+  ink: string;
+  rows: number;
+  columns: number;
+  cell: (row: number, column: number) => { text?: string; fill?: string };
+  head?: string;
+}) {
+  const x = 30;
+  const y = 18;
+  const side = 62;
+  const top = 26;
+  const width = (260 - side) / columns;
+  const height = (146 - top) / rows;
+  return (
+    <g>
+      <rect x={x} y={y} width={260} height={146} fill="#ffffff" />
+      <rect x={x} y={y} width={260} height={top} fill={head} />
+      <rect x={x} y={y} width={side} height={146} fill={head} />
+      {Array.from({ length: rows }, (_, r) =>
+        Array.from({ length: columns }, (_, c) => {
+          const { text, fill } = cell(r, c);
+          const cx = x + side + c * width;
+          const cy = y + top + r * height;
+          return (
+            <g key={`${r}-${c}`}>
+              {fill && <rect x={cx} y={cy} width={width} height={height} fill={fill} />}
+              {text && (
+                <text x={cx + width / 2} y={cy + height / 2 + 4} fontSize="10" fontWeight="600" fill={ink} textAnchor="middle">
+                  {text}
+                </text>
+              )}
+            </g>
+          );
+        }),
+      )}
+      <path
+        d={[
+          `M${x} ${y}h260v146h-260z`,
+          `M${x} ${y + top}h260M${x + side} ${y}v146`,
+          ...Array.from({ length: rows - 1 }, (_, r) => `M${x} ${y + top + (r + 1) * height}h260`),
+          ...Array.from({ length: columns - 1 }, (_, c) => `M${x + side + (c + 1) * width} ${y}v146`),
+        ].join("")}
+        stroke={ink}
+        strokeWidth={CONNECTOR}
+        pathLength={1}
+        className="ink-path"
+      />
+      {Array.from({ length: rows }, (_, r) => (
+        <path key={r} d={`M${x + 8} ${y + top + r * height + height / 2}h${side - 18}`} stroke={ink} strokeWidth={3} opacity={0.35} />
+      ))}
+      {Array.from({ length: columns }, (_, c) => (
+        <path key={c} d={`M${x + side + c * width + 8} ${y + top / 2}h${width - 16}`} stroke={ink} strokeWidth={3} opacity={0.35} />
+      ))}
+    </g>
+  );
+}
+
+export function SwotArt({ accent = "forest", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const letters = [["S", "W"], ["O", "T"]];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <Grid ink={ink} rows={2} columns={2} cell={(r, c) => ({ text: letters[r][c] })} />
+    </svg>
+  );
+}
+
+export function RaciArt({ accent = "oxblood", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const marks = [["A", "R", "C", "I"], ["I", "A", "R", "C"], ["C", "I", "A", "R"]];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <Grid ink={ink} rows={3} columns={4} cell={(r, c) => ({ text: marks[r][c] })} />
+    </svg>
+  );
+}
+
+export function DecisionArt({ accent = "oxblood", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const scores = [["4", "4", "5", "33"], ["5", "3", "4", "31"], ["3", "4", "3", "28"]];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <Grid
+        ink={ink}
+        rows={3}
+        columns={4}
+        cell={(r, c) => ({ text: scores[r][c], fill: c === 3 ? ACCENTS[accent].wash : r % 2 ? "#f6f6f4" : undefined })}
+      />
+    </svg>
+  );
+}
+
+export function HeatmapArt({ accent = "oxblood", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const shades = ["#fff7f3", "#fde0dd", "#fcc5c0", "#fa9fb5", "#f768a1", "#dd3497", "#ae017e"];
+  const values = [[1, 3, 2, 4, 2], [0, 2, 1, 3, 1], [1, 5, 3, 6, 2]];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <Grid ink={ink} rows={3} columns={5} cell={(r, c) => ({ fill: shades[values[r][c]] })} />
+    </svg>
+  );
+}
+
 /* ------------------------------------------------ class, dfd, state, tree */
 
 export function GanttArt({ accent = "oxblood", className }: ArtProps) {
@@ -1145,6 +1342,14 @@ export function DiagramArt({
   if (id === "dfd") return <DfdArt accent={accent} className={className} />;
   if (id === "state") return <StateArt accent={accent} className={className} />;
   if (id === "tree") return <TreeArt accent={accent} className={className} />;
+  if (id === "system-context") return <ContextArt accent={accent} className={className} />;
+  if (id === "container") return <ContainerArt accent={accent} className={className} />;
+  if (id === "component") return <ComponentArt accent={accent} className={className} />;
+  if (id === "deployment") return <DeploymentArt accent={accent} className={className} />;
+  if (id === "swot") return <SwotArt accent={accent} className={className} />;
+  if (id === "raci") return <RaciArt accent={accent} className={className} />;
+  if (id === "decision-matrix") return <DecisionArt accent={accent} className={className} />;
+  if (id === "heatmap") return <HeatmapArt accent={accent} className={className} />;
   return <PlannedArt id={id} className={className} />;
 }
 

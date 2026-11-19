@@ -25,11 +25,12 @@ import {
   SEQUENCE_TEMPLATE,
   TEMPLATES,
   ARCHITECTURE_TEMPLATES,
+  STARTERS,
 } from "@/lib/templates";
 import { erdBoxLayout, erdPorts, pairPorts } from "@/lib/layout/layout-erd";
 import { planSequence, sequenceSize } from "@/lib/sequence/layout-sequence";
 import { messagesOf, type SequenceSpec } from "@/lib/sequence/spec";
-import { READY_DIAGRAMS } from "@/lib/diagrams";
+import { READY_DIAGRAMS, STARTER_DIAGRAMS } from "@/lib/diagrams";
 import { DSLError } from "@/lib/types";
 import { renameCopies } from "@/lib/canvas/copies";
 import {
@@ -1023,6 +1024,7 @@ const legCrosses = (points: readonly Point[], box: Box) =>
   const cases: Array<[string, string]> = [
     ...Object.entries(TEMPLATES).map(([key, source]) => [`template ${key}`, source] as [string, string]),
     ...ARCHITECTURE_TEMPLATES.map((entry) => [`architecture ${entry.label}`, entry.source] as [string, string]),
+    ...STARTERS.map((entry) => [`starter ${entry.id}`, entry.source] as [string, string]),
     ...READY_DIAGRAMS.filter((kind) => kind.sample).map(
       (kind) => [`sample ${kind.id}`, kind.sample as string] as [string, string],
     ),
@@ -1803,7 +1805,7 @@ assert.ok(
 
 // the samples the public pages type out are real source, not prose that looks
 // like it: every one of them parses and lays out
-for (const kind of READY_DIAGRAMS) {
+for (const kind of [...READY_DIAGRAMS, ...STARTER_DIAGRAMS]) {
   assert.ok(kind.sample, `${kind.id} has a sample`);
   const ast = parseDSL(kind.sample!);
   assert.equal(ast.category, kind.keyword, `${kind.id} sample opens with its own keyword`);

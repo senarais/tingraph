@@ -6,7 +6,7 @@ import type { ElementOnSheet, LinkOnSheet } from "@/lib/canvas/elements";
 import type { DSLNode } from "@/lib/types";
 import type { LinkMark } from "@/lib/canvas/units";
 import { CONNECTORS } from "@/lib/connectors";
-import { ARCHITECTURE_TEMPLATES } from "@/lib/templates";
+import { ARCHITECTURE_TEMPLATES, STARTERS } from "@/lib/templates";
 import { Picker, TextField } from "@/components/editor/figure-fields";
 import ArchitectureImage from "@/components/editor/architecture-image";
 
@@ -43,7 +43,7 @@ export default function ArchitectureDrawer(props: Props) {
     <section>
       <p className="mb-2 font-bold uppercase tracking-wide">Starting layouts</p>
       <div className="grid grid-cols-2 gap-1.5">
-        {ARCHITECTURE_TEMPLATES.map((template, index) => <button key={template.label} type="button" disabled={props.generating}
+        {[...ARCHITECTURE_TEMPLATES, ...STARTERS.filter((starter) => starter.category === "architecture")].map((template, index) => <button key={template.label} type="button" disabled={props.generating}
           onClick={() => {
             if (armed === index) {
               props.onTemplate(template.source);

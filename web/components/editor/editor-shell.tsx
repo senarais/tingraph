@@ -22,9 +22,12 @@ export default function EditorShell({
   initialCategory,
   diagramId,
   start = false,
+  starter,
 }: {
   initialCategory: DiagramCategory;
   diagramId?: string;
+  /** the source a starter card opens on, in place of the notation's template */
+  starter?: string;
   /** opened from the catalogue: offer the ways to start writing */
   start?: boolean;
 }) {
@@ -34,9 +37,10 @@ export default function EditorShell({
     const store = useTingraphStore.getState();
     if (
       !diagramId &&
-      (store.category !== initialCategory || store.code === "" || store.saved !== null)
+      (starter !== undefined || store.category !== initialCategory || store.code === "" || store.saved !== null)
     ) {
       store.setCategory(initialCategory);
+      if (starter !== undefined) store.setCode(starter);
     }
   });
   const [loaded, setLoaded] = useState<
@@ -49,6 +53,16 @@ export default function EditorShell({
       ? { status: "loading" }
       : null,
   );
+
+  // the starter has been written into the source; a reload or a shared link
+  // must open on the reader's work from now on, not on the starter again
+  useEffect(() => {
+    if (starter === undefined) return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("starter")) return;
+    url.searchParams.delete("starter");
+    window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
+  }, [starter]);
 
   useEffect(() => {
     if (!diagramId) {

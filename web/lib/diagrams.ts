@@ -1,5 +1,5 @@
 import { DiagramCategory } from "@/lib/types";
-import { ARCHITECTURE_TEMPLATES } from "@/lib/templates";
+import { ARCHITECTURE_TEMPLATES, STARTERS } from "@/lib/templates";
 
 /**
  * The notations the site offers, and the ones it has promised. The landing page
@@ -26,6 +26,11 @@ export interface DiagramKind {
   parts: string[];
   accent: Accent;
   sample?: string;
+  /**
+   * Set on a common drawing that is a notation started a particular way: the
+   * `STARTERS` entry it opens on. Its `keyword` is the notation it is drawn in.
+   */
+  starter?: string;
 }
 
 export const FLOW_SAMPLE = `flow "Data Validation" {
@@ -652,11 +657,85 @@ export const READY_DIAGRAMS: DiagramKind[] = [
   },
 ];
 
+/** What a starter's card says, beside the source `STARTERS` holds for it. */
+const STARTER_CARDS: Record<string, Omit<DiagramKind, "id" | "keyword" | "sample" | "starter">> = {
+  "system-context": {
+    name: "System context diagram",
+    family: "Structure",
+    summary: "C4 level 1: the system in the middle, the people who use it and the systems it depends on around it.",
+    parts: ["People", "Your system", "External systems", "Relationships"],
+    accent: "navy",
+  },
+  "container": {
+    name: "C4 container diagram",
+    family: "Structure",
+    summary: "C4 level 2: the apps, services and data stores inside one system boundary, and how they talk.",
+    parts: ["System boundary", "Containers", "Data stores", "Protocols"],
+    accent: "navy",
+  },
+  "component": {
+    name: "Component diagram",
+    family: "Structure",
+    summary: "The components inside one service, with the stores and systems they reach outside it.",
+    parts: ["Container boundary", "Components", "Dependencies", "Outside systems"],
+    accent: "slate",
+  },
+  "deployment": {
+    name: "Deployment diagram",
+    family: "Structure",
+    summary: "Where the software runs: devices, regions, clusters and managed services, with the traffic between them.",
+    parts: ["Nodes and regions", "Deployed services", "Managed stores", "Traffic"],
+    accent: "slate",
+  },
+  "swot": {
+    name: "SWOT analysis",
+    family: "Thinking",
+    summary: "Strengths and weaknesses inside, opportunities and threats outside, in one two-by-two table.",
+    parts: ["Helpful / harmful", "Internal / external", "Four quarters", "Free text"],
+    accent: "forest",
+  },
+  "raci": {
+    name: "RACI matrix",
+    family: "Thinking",
+    summary: "Who is responsible, accountable, consulted and informed for each task, one row per task.",
+    parts: ["Tasks", "Roles", "R, A, C, I", "Headed columns"],
+    accent: "oxblood",
+  },
+  "decision-matrix": {
+    name: "Decision matrix",
+    family: "Thinking",
+    summary: "Options scored against weighted criteria, with the weighted total that ranks them.",
+    parts: ["Options", "Weighted criteria", "Scores", "Totals"],
+    accent: "oxblood",
+  },
+  "heatmap": {
+    name: "Heatmap",
+    family: "Data",
+    summary: "A grid of values shaded by size, so the busy cells stand out at a glance.",
+    parts: ["Rows and columns", "Values", "Cell shading", "Heatmap style"],
+    accent: "oxblood",
+  },
+};
+
+/**
+ * Common drawings that are a notation started a particular way: a card of
+ * their own, a starter source, and the notation's editor. They are not
+ * notations, so they stay out of `READY_DIAGRAMS` and every count of those.
+ */
+export const STARTER_DIAGRAMS: DiagramKind[] = STARTERS.map((starter) => ({
+  ...STARTER_CARDS[starter.id],
+  id: starter.id,
+  keyword: starter.category,
+  sample: starter.source,
+  starter: starter.id,
+}));
+
 /** Announced, not drawable yet. The catalogue greys these out. */
 export const PLANNED_DIAGRAMS: DiagramKind[] = [];
 
 export const ALL_DIAGRAMS: DiagramKind[] = [
   ...READY_DIAGRAMS,
+  ...STARTER_DIAGRAMS,
   ...PLANNED_DIAGRAMS,
 ];
 
