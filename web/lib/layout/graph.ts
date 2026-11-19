@@ -109,12 +109,40 @@ export function routeFlowEdges(
   });
   const lanes = (id: string) => leaving.get(id) ?? 1;
   const laid: Array<{ from: string; to: string; line: string; points: Point[] }> = [];
+  const groups = twinGroups(edges, category);
+  const twins = new Map<number, Point[]>();
 
   return edges.map((edge, index) => {
     const from = byId.get(edge.from);
     const to = byId.get(edge.to);
     if (!from || !to) {
       return { ...edge, points: [] };
+    }
+    const done = twins.get(index);
+    if (done) {
+      return { ...edge, points: done };
+    }
+    const members = groups.get(index);
+    const blockers = nodes.filter((node) => node !== from && node !== to).map(outline);
+    const pair =
+      members &&
+      twinRoutes(members, edges, byId, blockers, (twin) => edgeHeads(category, twin), (extra) => {
+        const head = Math.max(...members.flatMap((at) => edgeHeads(category, edges[at]))) + extra;
+        const line = edgeLine(category, edge);
+        return routeBetween(outline(from), outline(to), {
+          category,
+          direction: "down",
+          heads: [head, head],
+          avoid: blockers,
+          lines: linesToKeepOff(laid, { line, from: edge.from, to: edge.to }),
+        }).map(round);
+      });
+    if (pair) {
+      for (const [at, points] of pair) {
+        twins.set(at, points);
+        laid.push({ from: edges[at].from, to: edges[at].to, line: edgeLine(category, edges[at]), points });
+      }
+      return { ...edge, points: pair.get(index)! };
     }
     const points =
       from === to
@@ -139,11 +167,7 @@ export function routeFlowEdges(
     const toCy = to.y + to.height / 2;
     const downward = to.y >= from.y + from.height;
     // the routes already laid that this one may not run along
-    const others = laid
-      .filter(
-        (other) => !mayShare(other, { line: edgeLine(category, edge), from: edge.from, to: edge.to }),
-      )
-      .map((other) => other.points);
+    const others = linesToKeepOff(laid, { line: edgeLine(category, edge), from: edge.from, to: edge.to });
     /** a route that crosses no box and lies along no line it must keep off */
     const clear = (points: Point[]) => !hits(points, blockers) && runsAlong(points, others) <= 6;
     /** the canvas's own router, round whatever this one could not step past */
@@ -219,8 +243,191 @@ export function routeFlowEdges(
   }
 }
 
+/** Whether two legs cross at a point inside both, rather than touch at an end. */
+function legsCross(a: Point, b: Point, c: Point, d: Point): boolean {
+  const turn = (p: Point, q: Point, r: Point) => Math.sign((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x));
+  return turn(c, d, a) * turn(c, d, b) < 0 && turn(a, b, c) * turn(a, b, d) < 0;
+}
+
+/**
+ * What a set of routes costs to read: every crossing far more than every
+ * corner, and every corner more than length. A layout that tries several
+ * arrangements keeps the cheapest.
+ */
+export function routeCost(routes: readonly (readonly Point[])[]): number {
+  let crossings = 0;
+  let corners = 0;
+  let length = 0;
+  routes.forEach((route, i) => {
+    corners += Math.max(0, route.length - 2);
+    for (let k = 1; k < route.length; k++) {
+      length += Math.abs(route[k].x - route[k - 1].x) + Math.abs(route[k].y - route[k - 1].y);
+    }
+    for (const other of routes.slice(i + 1)) {
+      for (let k = 1; k < route.length; k++) {
+        for (let m = 1; m < other.length; m++) {
+          if (legsCross(route[k - 1], route[k], other[m - 1], other[m])) crossings += 1;
+        }
+      }
+    }
+  });
+  return crossings * 1000 + corners * 60 + length;
+}
+
 /** Room between two line ends spread along one side of a box. */
 const END_SPACING = 14;
+
+/**
+ * Lines that join the same two boxes and may not share a stretch — a request
+ * and its answer between a process and an entity, a transition there and the
+ * one back. Routed one at a time, the second finds the first in its way and
+ * goes the long way round the drawing; drawn side by side, they read as the
+ * pair they are, which is how both notations draw them by hand.
+ *
+ * Each group is keyed by its first edge, and lists every edge in it in the
+ * order written.
+ */
+function twinGroups(edges: readonly DSLEdge[], category: DiagramCategory): Map<number, number[]> {
+  const byPair = new Map<string, number[]>();
+  edges.forEach((edge, index) => {
+    if (edge.from === edge.to || !keepsApart(edgeLine(category, edge))) return;
+    const key = edge.from < edge.to ? `${edge.from}\0${edge.to}` : `${edge.to}\0${edge.from}`;
+    byPair.set(key, [...(byPair.get(key) ?? []), index]);
+  });
+  const groups = new Map<number, number[]>();
+  for (const members of byPair.values()) {
+    if (members.length > 1) groups.set(members[0], members);
+  }
+  return groups;
+}
+
+/**
+ * An orthogonal route moved sideways by `by`, every leg kept square: each leg
+ * moves along its own normal, so a corner moves along both of the legs it
+ * joins, and the ends slide along the sides they sit on.
+ */
+export function offsetRoute(points: readonly Point[], by: number): Point[] {
+  const normals = points.slice(1).map((point, i) => {
+    const sx = Math.sign(point.x - points[i].x);
+    const sy = Math.sign(point.y - points[i].y);
+    return { x: -sy * by, y: sx * by };
+  });
+  return points.map((point, i) => {
+    const before = normals[i - 1] ?? { x: 0, y: 0 };
+    const after = normals[i] ?? { x: 0, y: 0 };
+    return round({ x: point.x + before.x + after.x, y: point.y + before.y + after.y });
+  });
+}
+
+/**
+ * A straight line between two boxes standing apart on one axis and sharing at
+ * least `room` of the other, through the middle of what they share; null when
+ * they do not.
+ */
+function straightBetween(from: Box | undefined, to: Box | undefined, room: number): Point[] | null {
+  if (!from || !to) return null;
+  const share = (a: number, as: number, b: number, bs: number) => {
+    const lo = Math.max(a, b);
+    const hi = Math.min(a + as, b + bs);
+    return hi - lo >= room ? Math.round((lo + hi) / 2) : null;
+  };
+  if (to.y >= from.y + from.height + 2 * MIN_LEG || from.y >= to.y + to.height + 2 * MIN_LEG) {
+    const x = share(from.x, from.width, to.x, to.width);
+    if (x === null) return null;
+    const down = to.y > from.y;
+    return [{ x, y: down ? from.y + from.height : from.y }, { x, y: down ? to.y : to.y + to.height }];
+  }
+  if (to.x >= from.x + from.width + 2 * MIN_LEG || from.x >= to.x + to.width + 2 * MIN_LEG) {
+    const y = share(from.y, from.height, to.y, to.height);
+    if (y === null) return null;
+    const right = to.x > from.x;
+    return [{ x: right ? from.x + from.width : from.x, y }, { x: right ? to.x : to.x + to.width, y }];
+  }
+  return null;
+}
+
+/**
+ * The routes already laid that a new one must keep off: all but the ones it
+ * may share a stretch with. Every line leaves the middle of a side, so two
+ * from one side start on one stub; where both are lines whose ends
+ * `spreadEnds` sets apart afterwards, the end legs at the box they share are
+ * left out, or the router would send the second the long way round.
+ */
+function linesToKeepOff(
+  laid: ReadonlyArray<{ from: string; to: string; line: string; points: Point[] }>,
+  edge: { line: string; from: string; to: string },
+): Point[][] {
+  // only lines whose ends are spread are set apart afterwards
+  const spread = (line: string) => keepsApart(line);
+  const ends = new Set([edge.from, edge.to]);
+  return laid
+    .filter((other) => !mayShare(other, edge))
+    .map((other) =>
+      spread(edge.line) && spread(other.line)
+        ? other.points.slice(ends.has(other.from) ? 1 : 0, ends.has(other.to) ? -1 : undefined)
+        : other.points,
+    )
+    .filter((points) => points.length >= 2);
+}
+
+/** Whether an end lies on its box's outline, far enough in from the corners. */
+function onSide(point: Point, box: Box): boolean {
+  const inX = point.x >= box.x + 4 && point.x <= box.x + box.width - 4;
+  const inY = point.y >= box.y + 4 && point.y <= box.y + box.height - 4;
+  const onX = Math.abs(point.x - box.x) <= 1 || Math.abs(point.x - (box.x + box.width)) <= 1;
+  const onY = Math.abs(point.y - box.y) <= 1 || Math.abs(point.y - (box.y + box.height)) <= 1;
+  return (onY && inX) || (onX && inY);
+}
+
+/**
+ * The routes of one group of twins, cut from one route between the pair: the
+ * route `base` makes from the first edge's start to its end, spread across
+ * `TWIN_GAP` apart, and turned round for an edge that runs the other way.
+ * Null when a copy would leave its box's side, cross a box, or fold a leg
+ * back — the group is then routed one line at a time like any other.
+ */
+function twinRoutes(
+  members: readonly number[],
+  edges: readonly DSLEdge[],
+  byId: ReadonlyMap<string, Box>,
+  blockers: readonly Box[],
+  heads: (edge: DSLEdge) => readonly [number, number],
+  base: (extra: number) => Point[],
+): Map<number, Point[]> | null {
+  const spread = (members.length - 1) / 2;
+  const leader = edges[members[0]];
+  // two boxes that still overlap across the line between them take the pair
+  // as straight lines through the overlap, which no turn can beat
+  const route =
+    straightBetween(byId.get(leader.from), byId.get(leader.to), 2 * spread * END_SPACING + 16) ??
+    base(Math.ceil(spread * END_SPACING));
+  if (route.length < 2) return null;
+  const out = new Map<number, Point[]>();
+  for (const [at, index] of members.entries()) {
+    const edge = edges[index];
+    const moved = offsetRoute(route, (at - spread) * END_SPACING);
+    // every leg keeps its heading; a short one would otherwise turn round
+    for (let i = 1; i < moved.length; i++) {
+      const was = { x: Math.sign(route[i].x - route[i - 1].x), y: Math.sign(route[i].y - route[i - 1].y) };
+      const now = { x: Math.sign(moved[i].x - moved[i - 1].x), y: Math.sign(moved[i].y - moved[i - 1].y) };
+      if (was.x !== now.x || was.y !== now.y) return null;
+    }
+    const points = edge.from === leader.from ? moved : moved.reverse();
+    const from = byId.get(edge.from);
+    const to = byId.get(edge.to);
+    if (!from || !to || !onSide(points[0], from) || !onSide(points[points.length - 1], to)) return null;
+    if (hits(points, blockers.filter((box) => box !== from && box !== to))) return null;
+    // a copy moved to the inside of a corner has a shorter end leg; it must
+    // still hold the head drawn on it whole
+    const [headA, headB] = heads(edge);
+    const leg = (a: Point, b: Point) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+    if (leg(points[0], points[1]) < headA || leg(points[points.length - 2], points[points.length - 1]) < headB) {
+      return null;
+    }
+    out.set(index, points);
+  }
+  return out;
+}
 
 /**
  * Lines that may not share a stretch, given ends of their own.
@@ -284,7 +491,20 @@ export function spreadEnds<E extends { points: Point[] } & Pick<DSLEdge, "from" 
     const step = Math.min(END_SPACING, (span - 12) / (list.length - 1));
     if (step < 6) continue;
     const middle = start + span / 2;
-    list.sort((a, b) => a.toward - b.toward || a.edge - b.edge);
+    // two lines joining the same pair were laid side by side already; their
+    // far ends would sort them the wrong way round on an L-shaped pair, so
+    // they keep the order they are in, at the place the pair is due
+    const pairOf = (end: End) => {
+      const edge = edges[end.edge];
+      return edge.from < edge.to ? `${edge.from}\0${edge.to}` : `${edge.to}\0${edge.from}`;
+    };
+    const keys = new Map<End, number>();
+    for (const end of list) {
+      const pair = list.filter((other) => pairOf(other) === pairOf(end));
+      const toward = pair.reduce((sum, other) => sum + other.toward, 0) / pair.length;
+      keys.set(end, pair.length > 1 ? toward + end.along * 1e-6 : end.toward);
+    }
+    list.sort((a, b) => keys.get(a)! - keys.get(b)! || a.edge - b.edge);
     list.forEach((end, at) => {
       const target = Math.round(middle + (at - (list.length - 1) / 2) * step);
       const shift = target - end.along;
@@ -359,11 +579,17 @@ export function routeAll<E extends DSLEdge>(
   chrome: { avoid: Box[]; lines: Point[][] } = { avoid: [], lines: [] },
 ): Array<E & { points: Point[] }> {
   const laid: Array<{ from: string; to: string; line: string; points: Point[] }> = [];
-  return edges.map((edge) => {
+  const groups = twinGroups(edges, category);
+  const twins = new Map<number, Point[]>();
+  return edges.map((edge, index) => {
     const from = byId.get(edge.from);
     const to = byId.get(edge.to);
     if (!from || !to) {
       return { ...edge, points: [] };
+    }
+    const done = twins.get(index);
+    if (done) {
+      return { ...edge, points: done };
     }
     const line = edgeLine(category, edge);
     const avoid = nodes
@@ -377,10 +603,29 @@ export function routeAll<E extends DSLEdge>(
       )
       .map(outline)
       .concat(chrome.avoid);
-    const lines = laid
-      .filter((other) => !mayShare(other, { line, from: edge.from, to: edge.to }))
-      .map((other) => other.points)
-      .concat(chrome.lines);
+    const lines = linesToKeepOff(laid, { line, from: edge.from, to: edge.to }).concat(chrome.lines);
+    const members = groups.get(index);
+    const pair =
+      members &&
+      !ports?.(edge).fromAt && !ports?.(edge).toAt &&
+      twinRoutes(members, edges, byId, avoid, (twin) => edgeHeads(category, twin), (extra) => {
+        const heads = members.flatMap((at) => edgeHeads(category, edges[at]));
+        const head = Math.max(...heads) + extra;
+        return routeBetween(outline(from), outline(to), {
+          category,
+          direction,
+          heads: [head, head],
+          avoid,
+          lines,
+        });
+      });
+    if (pair) {
+      for (const [at, points] of pair) {
+        twins.set(at, points);
+        laid.push({ from: edges[at].from, to: edges[at].to, line: edgeLine(category, edges[at]), points });
+      }
+      return { ...edge, points: pair.get(index)! };
+    }
     const points = routeBetween(outline(from), outline(to), {
       category,
       direction,

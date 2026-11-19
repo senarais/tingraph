@@ -1,4 +1,5 @@
 import { routeAll } from "@/lib/layout/graph";
+import { textWidth } from "@/lib/layout/text";
 import type { AST, LayoutDirection, PositionedAST, PositionedNode } from "@/lib/types";
 
 const GAP = 56; // enough room for the router's stubs, even between adjacent boxes
@@ -11,8 +12,11 @@ const TOP = 44; // zone title + breathing room
  * The drawing and the router both read it from here, so a connector never
  * runs through the words.
  */
-export function zoneBand(zone: { x: number; y: number; width: number }) {
-  return { x: zone.x + 12, y: zone.y + 8, width: Math.min(zone.width - 24, 260), height: 32 };
+export function zoneBand(zone: { x: number; y: number; width: number; label?: string }) {
+  // as wide as the name, not a fixed strip: a wider one is a wall across the
+  // top of the zone that every line into it has to go round
+  const name = zone.label === undefined ? 260 : textWidth(zone.label, 16) + 32;
+  return { x: zone.x + 12, y: zone.y + 8, width: Math.min(zone.width - 24, 260, name), height: 32 };
 }
 
 /** The four sides of a zone, as lines a connector should not be laid along. */

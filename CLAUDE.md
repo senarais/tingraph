@@ -431,7 +431,8 @@ side by side, the axis that separates them wins instead.
   wraparounds caused by gaps too narrow for the router. Generated routes go
   through `routeAll` in `lib/layout/graph.ts`, the canvas router with the
   other components to avoid; a zone may be crossed, but its name band
-  (`zoneBand`) is gone round and its edges are lines a route must not run
+  (`zoneBand`, as wide as the name and no wider, so it is not a wall across
+  the top of the zone) is gone round and its edges are lines a route must not run
   along, on the sheet as in the layout. `at x y` is an initial
   position hint, not a pin; `size w h` is a zone's minimum, not a limit. An
   unsized zone fits its contents. Only Generate does the arranging: zones do
@@ -456,7 +457,17 @@ merged into one would leave a name with no line of its own. `keepsApart` and
 the router meets a side at its middle, several such ends on one side land on
 one point; `spreadEnds` in `lib/layout/graph.ts` spreads them 14 apart along
 that side after routing, moving each end with the corner after it so the stub
-keeps its length (and its head its size). A box joined to itself — a state's
+keeps its length (and its head its size). Because those ends are spread
+afterwards, the router does not count two such lines sharing the end leg at a
+box they both use (`linesToKeepOff`); counting it sent the second line the long
+way round the sheet. Lines of kinds whose ends are not spread still keep off
+each other's ends. Two or more such lines joining the **same two boxes** — a
+request and its reply, a transition there and back — are twins
+(`twinGroups`): one route is cut between the pair and copied 14 apart by
+`offsetRoute`, turned round for a line running the other way, straight through
+the boxes' overlap when they have one. A copy that would leave its side,
+cross a box, fold a leg or shorten a head is not used, and the group is routed
+one line at a time. A box joined to itself — a state's
 self-transition, a class's self-association — is `selfLoop` in
 `lib/canvas/connect.ts`, which `routeBetween` returns whenever both boxes are
 the same, so a re-cut on the canvas draws the same loop.

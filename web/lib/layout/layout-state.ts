@@ -120,7 +120,9 @@ export function computeStateLayout(
     rankdir: direction === "right" ? "LR" : "TB",
     nodesep: 64,
     // an open head needs 50 straight under it, and a transition is labelled
-    ranksep: 84,
+    // deep enough for a transition and the one back to run side by side, each
+    // with room under its open head
+    ranksep: 100,
     marginx: MARGIN,
     marginy: MARGIN,
   });
