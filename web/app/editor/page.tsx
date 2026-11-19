@@ -22,7 +22,12 @@ const CATEGORIES: DiagramCategory[] = [
   "sequence",
   "erd",
   "architecture",
+  "class",
+  "dfd",
+  "state",
+  "tree",
   "bar",
+  "histogram",
   "line",
   "pie",
   "scatter",
@@ -31,6 +36,8 @@ const CATEGORIES: DiagramCategory[] = [
   "venn",
   "fishbone",
   "prisma",
+  "quadrant",
+  "gantt",
 ];
 
 function requested(value: string | string[] | undefined): DiagramCategory | undefined {

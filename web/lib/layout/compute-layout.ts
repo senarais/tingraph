@@ -28,6 +28,10 @@ import { computeUseCaseLayout, usecaseNodeSize } from "@/lib/layout/layout-useca
 import { computeActivityLayout, activityShapeSize } from "@/lib/layout/layout-activity";
 import { computeErdLayout, erdShapeSize } from "@/lib/layout/layout-erd";
 import { computeArchitectureLayout } from "@/lib/layout/layout-architecture";
+import { classShapeSize, computeClassLayout } from "@/lib/layout/layout-class";
+import { computeDfdLayout, dfdShapeSize } from "@/lib/layout/layout-dfd";
+import { computeStateLayout, stateShapeSize } from "@/lib/layout/layout-state";
+import { computeTreeLayout, treeShapeSize } from "@/lib/layout/layout-tree";
 
 export { textWidth, wrapByWidth } from "@/lib/layout/text";
 
@@ -110,8 +114,20 @@ export function shapeFamily(
   type: NodeType | string,
   category: DiagramCategory,
 ): ShapeFamily {
-  if (category === "org" || category === "erd") {
+  if (category === "org" || category === "erd" || category === "class") {
     return "box";
+  }
+  if (category === "dfd") {
+    return type === "process" ? "task" : "box";
+  }
+  if (category === "state") {
+    if (type === "initial" || type === "final") {
+      return "ellipse";
+    }
+    return type === "choice" ? "diamond" : type === "state" ? "task" : "box";
+  }
+  if (category === "tree") {
+    return type === "leaf" ? "task" : "box";
   }
   if (category === "architecture") {
     return type === "zone" ? "box" : "task";
@@ -166,6 +182,14 @@ export function nodeSize(
       return erdShapeSize(node);
     case "architecture":
       return { width: node.width ?? (node.type === "zone" ? 900 : 150), height: node.height ?? (node.type === "zone" ? 480 : 110) };
+    case "class":
+      return classShapeSize(node);
+    case "dfd":
+      return dfdShapeSize(node);
+    case "state":
+      return stateShapeSize(node);
+    case "tree":
+      return treeShapeSize(node);
     default:
       return bpmnShapeSize(node.type as NodeType, node.label);
   }
@@ -1239,6 +1263,14 @@ export function computeLayout(
       return computeErdLayout(ast, direction);
     case "architecture":
       return computeArchitectureLayout(ast, direction);
+    case "class":
+      return computeClassLayout(ast, direction);
+    case "dfd":
+      return computeDfdLayout(ast, direction);
+    case "state":
+      return computeStateLayout(ast, direction);
+    case "tree":
+      return computeTreeLayout(ast, direction);
     default:
       return computeFlowLayout(ast, direction);
   }

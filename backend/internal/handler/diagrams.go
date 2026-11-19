@@ -21,7 +21,9 @@ var diagramCategories = map[string]bool{
 	"flow": true, "bpmn": true, "org": true, "usecase": true, "activity": true,
 	"sequence": true, "erd": true, "bar": true, "line": true, "pie": true,
 	"scatter": true, "mind": true, "matrix": true, "venn": true, "fishbone": true,
-	"architecture": true, "prisma": true,
+	"architecture": true, "prisma": true, "class": true, "dfd": true, "state": true,
+	"tree": true, "histogram": true, "quadrant": true,
+	"gantt": true,
 }
 
 type diagramInput struct {

@@ -50,3 +50,6 @@ next-env.d.ts
 
 # local agent/tooling state
 /.commandcode/
+
+# local design reference images
+/references/

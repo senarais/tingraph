@@ -301,6 +301,56 @@ export const BAR_TEMPLATE = `bar "Favourite Fruit" {
 }
 `;
 
+export const HISTOGRAM_TEMPLATE = `histogram "Exam Scores" {
+  x "Score"
+  y "Number of students"
+
+  "40-50" 2
+  "50-60" 5
+  "60-70" 11
+  "70-80" 14
+  "80-90" 8
+  "90-100" 3
+}
+`;
+
+export const GANTT_TEMPLATE = `gantt "Thesis Schedule" {
+  unit "Week"
+  today 5
+
+  section "Proposal"
+  task T1 "Literature review" 1 3 done 100
+  task T2 "Write the proposal" after T1 2 done 60
+  milestone M1 "Proposal defence" after T2
+
+  section "Research"
+  task T3 "Build the prototype" after M1 4
+  task T4 "Collect the data" after T3 3
+  task T5 "Analyse the results" after T4 2
+
+  section "Writing"
+  task T6 "Write chapters 4 and 5" after T5 3
+  milestone M2 "Final defence" after T6
+}
+`;
+
+export const QUADRANT_TEMPLATE = `quadrant "Feature Priorities" {
+  x "Effort" "Low" "High"
+  y "Impact" "Low" "High"
+
+  top-left "Quick wins"
+  top-right "Major projects"
+  bottom-left "Fill-ins"
+  bottom-right "Thankless tasks"
+
+  item "Dark mode" 20 72
+  item "Export to PDF" 35 88
+  item "Offline sync" 82 80
+  item "Rename buttons" 15 22
+  item "Legacy importer" 78 18
+}
+`;
+
 export const LINE_TEMPLATE = `line "Wildlife Population" {
   y "Animals counted"
   legend bottom
@@ -461,6 +511,110 @@ export const FISHBONE_TEMPLATE = `fishbone "The part is produced the wrong size"
 }
 `;
 
+export const CLASS_TEMPLATE = `class "Library System" {
+  abstract ITEM "LibraryItem" {
+    attr "# id : String"
+    attr "# title : String"
+    method "+ isAvailable() : Boolean"
+  }
+  class BOOK "Book" {
+    attr "- isbn : String"
+    attr "- pages : Integer"
+    method "+ getAuthor() : Author"
+  }
+  class MEMBER "Member" {
+    attr "- name : String"
+    attr "- email : String"
+    method "+ borrow(item : LibraryItem) : Loan"
+  }
+  class LOAN "Loan" {
+    attr "- dueDate : Date"
+    method "+ isOverdue() : Boolean"
+  }
+  interface NOTIFY "Notifiable" {
+    method "+ notify(message : String) : void"
+  }
+  enum STATUS "LoanStatus" {
+    value "ACTIVE"
+    value "RETURNED"
+    value "OVERDUE"
+  }
+
+  inherit BOOK -> ITEM
+  implement MEMBER -> NOTIFY
+  MEMBER "1" -> "0..*" LOAN "makes"
+  compose LOAN "1" -> "1" STATUS
+  LOAN "0..*" -> "1" ITEM "lends"
+}
+`;
+
+export const DFD_TEMPLATE = `dfd "Online Shop - Level 0" {
+  entity CUST "Customer"
+  entity BANK "Bank"
+  process P1 "Place Order"
+  process P2 "Process Payment"
+  process P3 "Ship Order"
+  store ORDERS "Orders"
+  store STOCK "Inventory"
+
+  CUST -> P1 "Order details"
+  P1 -> ORDERS "New order"
+  STOCK -> P1 "Stock level"
+  P1 -> P2 "Amount due"
+  P2 -> BANK "Payment request"
+  BANK -> P2 "Payment confirmation"
+  P2 -> P3 "Paid order"
+  ORDERS -> P3 "Order lines"
+  P3 -> STOCK "Stock update"
+  P3 -> CUST "Delivery note"
+}
+`;
+
+export const STATE_TEMPLATE = `state "Order Lifecycle" {
+  initial S0
+  state NEW "Pending" {
+    entry "reserveStock()"
+  }
+  choice C1
+  state PAID "Paid"
+  state SHIP "Shipped" {
+    entry "notifyCustomer()"
+    do "trackParcel()"
+  }
+  state CANCEL "Cancelled"
+  final E1
+
+  S0 -> NEW
+  NEW -> C1 "pay"
+  C1 -> PAID "[approved]"
+  C1 -> CANCEL "[declined] / releaseStock()"
+  NEW -> CANCEL "cancel / releaseStock()"
+  PAID -> SHIP "dispatch"
+  SHIP -> E1 "delivered"
+  CANCEL -> E1
+}
+`;
+
+export const TREE_TEMPLATE = `tree "Play Outside?" {
+  node OUT "Outlook?"
+  node HUM "Humidity?"
+  node WIND "Windy?"
+  leaf Y1 "Play"
+  leaf N1 "Don't play"
+  leaf Y2 "Play"
+  leaf Y3 "Play"
+  leaf N2 "Don't play"
+
+  OUT -> HUM "sunny"
+  OUT -> Y1 "overcast"
+  OUT -> WIND "rain"
+  HUM -> N1 "high"
+  HUM -> Y2 "normal"
+  WIND -> N2 "true"
+  WIND -> Y3 "false"
+}
+`;
+
 export const TEMPLATES: Record<DiagramCategory, string> = {
   flow: FLOWCHART_TEMPLATE,
   bpmn: BPMN_TEMPLATE,
@@ -479,6 +633,13 @@ export const TEMPLATES: Record<DiagramCategory, string> = {
   fishbone: FISHBONE_TEMPLATE,
   prisma: PRISMA_TEMPLATE,
   architecture: ARCHITECTURE_TEMPLATES[0].source,
+  class: CLASS_TEMPLATE,
+  dfd: DFD_TEMPLATE,
+  state: STATE_TEMPLATE,
+  tree: TREE_TEMPLATE,
+  histogram: HISTOGRAM_TEMPLATE,
+  quadrant: QUADRANT_TEMPLATE,
+  gantt: GANTT_TEMPLATE,
 };
 
 export const TEMPLATE_LABELS: Record<DiagramCategory, string> = {
@@ -499,4 +660,11 @@ export const TEMPLATE_LABELS: Record<DiagramCategory, string> = {
   fishbone: "Fishbone",
   prisma: "PRISMA flow",
   architecture: "Architecture diagram",
+  class: "Class diagram",
+  dfd: "Data flow",
+  state: "State machine",
+  tree: "Tree",
+  histogram: "Histogram",
+  quadrant: "Quadrant",
+  gantt: "Gantt chart",
 };

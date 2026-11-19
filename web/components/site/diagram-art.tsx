@@ -946,6 +946,172 @@ export function ArchitectureArt({ accent = "navy", className }: ArtProps) {
   );
 }
 
+/* ------------------------------------------------ class, dfd, state, tree */
+
+export function GanttArt({ accent = "oxblood", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const wash = ACCENTS[accent].wash;
+  const bars = [
+    [96, 2, 2, 1],
+    [126, 4, 3, 0.5],
+    [156, 7, 4, 0],
+  ];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <path d="M14 40h292M14 168h292" stroke={ink} strokeWidth={CONNECTOR} />
+      {Array.from({ length: 11 }, (_, at) => (
+        <path key={at} d={`M${86 + at * 20} 26v142`} stroke={ink} strokeWidth={0.5} opacity={0.35} />
+      ))}
+      <rect x={14} y={48} width={292} height={22} fill={wash} />
+      {bars.map(([y, start, length, done]) => (
+        <g key={y}>
+          <path d={`M24 ${y + 8}h48`} stroke={ink} strokeWidth={1} opacity={0.55} />
+          <rect x={86 + (start - 1) * 20} y={y} width={length * 20} height={16} fill={wash} />
+          <rect x={86 + (start - 1) * 20} y={y} width={length * 20 * done} height={16} fill={ink} />
+          <rect x={86 + (start - 1) * 20} y={y} width={length * 20} height={16} stroke={ink} strokeWidth={1} />
+        </g>
+      ))}
+      <path d="M126 104h4v22M190 134h4v22" stroke={ink} strokeWidth={1} />
+      <path d="M286 136l8 8-8 8-8-8z" fill={ink} />
+    </svg>
+  );
+}
+
+export function QuadrantArt({ accent = "forest", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const dots = [
+    [118, 52],
+    [96, 70],
+    [214, 48],
+    [104, 128],
+    [236, 118],
+  ];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <rect x={70} y={14} width={220} height={140} stroke={ink} strokeWidth={CONNECTOR} />
+      <path d="M180 14v140M70 84h220" stroke={ink} strokeWidth={CONNECTOR} />
+      <path d="M70 166h220M58 154V14" stroke={ink} strokeWidth={1} />
+      <path d="M284 162l6 4-6 4M54 20l4-6 4 6" stroke={ink} strokeWidth={1} />
+      {dots.map(([x, y]) => (
+        <circle key={`${x}-${y}`} cx={x} cy={y} r={5} fill={ink} />
+      ))}
+    </svg>
+  );
+}
+
+export function HistogramArt({ accent = "navy", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const wash = ACCENTS[accent].wash;
+  const counts = [3, 7, 12, 9, 5, 2];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <path d="M44 20v140h252" stroke={ink} strokeWidth={CONNECTOR} />
+      {counts.map((count, at) => (
+        <rect
+          key={at}
+          x={58 + at * 38}
+          y={160 - count * 11}
+          width={38}
+          height={count * 11}
+          fill={wash}
+          stroke={ink}
+          strokeWidth={1}
+        />
+      ))}
+    </svg>
+  );
+}
+
+export function ClassArt({ accent = "navy", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const boxes = [
+    { x: 112, y: 10, w: 96, rows: [1, 1] },
+    { x: 30, y: 112, w: 96, rows: [2, 1] },
+    { x: 194, y: 112, w: 96, rows: [2, 1] },
+  ];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      {boxes.map((box) => {
+        const attrs = box.rows[0] * 10 + 8;
+        const ops = box.rows[1] * 10 + 8;
+        const height = 18 + attrs + ops;
+        return (
+          <g key={box.x}>
+            <rect x={box.x} y={box.y} width={box.w} height={height} stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+            <path d={`M${box.x} ${box.y + 18}h${box.w}M${box.x} ${box.y + 18 + attrs}h${box.w}`} stroke={ink} strokeWidth={1} />
+            <path d={`M${box.x + 30} ${box.y + 9}h36`} stroke={ink} strokeWidth={2} />
+            {Array.from({ length: box.rows[0] + box.rows[1] }, (_, at) => (
+              <path
+                key={at}
+                d={`M${box.x + 8} ${box.y + 27 + at * 10 + (at >= box.rows[0] ? 8 : 0)}h${at % 2 ? 46 : 60}`}
+                stroke={ink}
+                strokeWidth={1}
+                opacity={0.55}
+              />
+            ))}
+          </g>
+        );
+      })}
+      <Line d="M78 112V88h164v24M160 88V58" ink={ink} />
+      <path d="M160 46l-8 12h16z" stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+    </svg>
+  );
+}
+
+export function DfdArt({ accent = "forest", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <rect x={14} y={70} width={64} height={38} stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+      <rect x={124} y={56} width={72} height={64} rx={9} stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+      <path d="M124 74h72" stroke={ink} strokeWidth={1} />
+      <path d="M160 63v5" stroke={ink} strokeWidth={2} />
+      <path d="M306 136H232v28h74M256 136v28" stroke={ink} strokeWidth={CONNECTOR} />
+      <rect x={242} y={16} width={64} height={38} stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+      <Line d="M78 89h46" ink={ink} />
+      <Head x={124} y={89} dir="right" ink={ink} />
+      <Line d="M196 72h78V54" ink={ink} />
+      <Head x={274} y={54} dir="up" ink={ink} />
+      <Line d="M160 120v30h72" ink={ink} delay={120} />
+      <Head x={232} y={150} dir="right" ink={ink} delay={120} />
+    </svg>
+  );
+}
+
+export function StateArt({ accent = "oxblood", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <circle cx={30} cy={60} r={8} fill={ink} />
+      <rect x={64} y={42} width={84} height={36} rx={14} stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+      <rect x={186} y={34} width={104} height={52} rx={14} stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+      <path d="M186 54h104" stroke={ink} strokeWidth={1} />
+      <path d="M196 66h58M196 76h44" stroke={ink} strokeWidth={1} opacity={0.55} />
+      <path d="M106 112l14 14-14 14-14-14z" stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+      <circle cx={238} cy={140} r={11} stroke={ink} strokeWidth={CONNECTOR} />
+      <circle cx={238} cy={140} r={6} fill={ink} />
+      <path d="M38 60h18M148 60h30M106 78v26M120 126h106M238 86v34" stroke={ink} strokeWidth={CONNECTOR} />
+      <path d="M50 55l7 5-7 5M172 55l7 5-7 5M101 98l5 7 5-7M220 121l7 5-7 5M233 114l5 7 5-7" stroke={ink} strokeWidth={CONNECTOR} />
+    </svg>
+  );
+}
+
+export function TreeArt({ accent = "slate", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <Line d="M160 42v18M76 60h168M76 60v16M160 60v16M244 60v16M76 104v18M36 122h80M36 122v16M116 122v16" ink={ink} />
+      <rect x={124} y={14} width={72} height={28} stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+      {[40, 124, 208].map((x) => (
+        <rect key={x} x={x} y={76} width={72} height={28} stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" rx={x === 40 ? 0 : 10} />
+      ))}
+      {[4, 84].map((x) => (
+        <rect key={x} x={x} y={138} width={64} height={28} rx={10} stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+      ))}
+    </svg>
+  );
+}
+
 export function DiagramArt({
   id,
   accent,
@@ -972,6 +1138,13 @@ export function DiagramArt({
   if (id === "sequence") return <SequenceArt accent={accent} className={className} />;
   if (id === "erd") return <ErdArt accent={accent} className={className} />;
   if (id === "architecture") return <ArchitectureArt accent={accent} className={className} />;
+  if (id === "gantt") return <GanttArt accent={accent} className={className} />;
+  if (id === "quadrant") return <QuadrantArt accent={accent} className={className} />;
+  if (id === "histogram") return <HistogramArt accent={accent} className={className} />;
+  if (id === "class") return <ClassArt accent={accent} className={className} />;
+  if (id === "dfd") return <DfdArt accent={accent} className={className} />;
+  if (id === "state") return <StateArt accent={accent} className={className} />;
+  if (id === "tree") return <TreeArt accent={accent} className={className} />;
   return <PlannedArt id={id} className={className} />;
 }
 

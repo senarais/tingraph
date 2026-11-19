@@ -281,6 +281,111 @@ export const FISHBONE_SAMPLE = `fishbone "The part is the wrong size" {
 }
 `;
 
+export const GANTT_SAMPLE = `gantt "Website Launch" {
+  unit "Week"
+  today 3
+
+  section "Design"
+  task T1 "Wireframes" 1 2 done 100
+  task T2 "Visual design" after T1 2 done 50
+  section "Build"
+  task T3 "Frontend" after T2 3
+  task T4 "Backend" 3 4
+  milestone M1 "Launch" after T3 T4
+}
+`;
+
+export const QUADRANT_SAMPLE = `quadrant "Eisenhower Matrix" {
+  x "Urgency" "Urgent" "Not urgent"
+  y "Importance" "Not important" "Important"
+
+  top-left "Do"
+  top-right "Schedule"
+  bottom-left "Delegate"
+  bottom-right "Eliminate"
+}
+`;
+
+export const HISTOGRAM_SAMPLE = `histogram "Commute Time" {
+  x "Minutes"
+  y "Employees"
+
+  "0-10" 4
+  "10-20" 12
+  "20-30" 9
+  "30-40" 5
+  "40-50" 2
+}
+`;
+
+export const CLASS_SAMPLE = `class "Shop" {
+  class CUST "Customer" {
+    attr "- name : String"
+    method "+ placeOrder() : Order"
+  }
+  class ORDER "Order" {
+    attr "- total : Decimal"
+  }
+  abstract PAY "Payment"
+  class CARD "CardPayment"
+
+  CUST "1" -> "0..*" ORDER "places"
+  ORDER "1" -> "1" PAY "settled by"
+  inherit CARD -> PAY
+}
+`;
+
+export const DFD_SAMPLE = `dfd "Library - Level 0" {
+  entity MEMBER "Member"
+  process P1 "Lend Book"
+  process P2 "Return Book"
+  store LOANS "Loans"
+
+  MEMBER -> P1 "Loan request"
+  P1 -> LOANS "Loan record"
+  P1 -> MEMBER "Due date"
+  MEMBER -> P2 "Returned book"
+  LOANS -> P2 "Open loan"
+  P2 -> MEMBER "Receipt"
+}
+`;
+
+export const STATE_SAMPLE = `state "Door" {
+  initial S0
+  state CLOSED "Closed"
+  state OPEN "Open" {
+    entry "lightOn()"
+  }
+  state LOCKED "Locked"
+
+  S0 -> CLOSED
+  CLOSED -> OPEN "open"
+  OPEN -> CLOSED "close"
+  CLOSED -> LOCKED "lock [key ok]"
+  LOCKED -> CLOSED "unlock"
+}
+`;
+
+export const TREE_SAMPLE = `tree "Build a Website" {
+  node W "Website"
+  node D "Design"
+  node B "Build"
+  leaf D1 "Wireframes"
+  leaf D2 "Visual style"
+  leaf B1 "Frontend"
+  leaf B2 "Backend"
+  leaf L "Launch"
+
+  W -> D
+  W -> B
+  W -> L
+  D -> D1
+  D -> D2
+  B -> B1
+  B -> B2
+}
+`;
+
 export const READY_DIAGRAMS: DiagramKind[] = [
   {
     id: "flow",
@@ -368,6 +473,83 @@ export const READY_DIAGRAMS: DiagramKind[] = [
     parts: ["Zones", "Services & data", "Flows & events", "Custom images"],
     accent: "navy",
     sample: ARCHITECTURE_TEMPLATES[0].source,
+  },
+  {
+    id: "gantt",
+    name: "Gantt chart",
+    family: "Process",
+    keyword: "gantt",
+    summary:
+      "Tasks in sections across numbered weeks or months, with how long each lasts, what each waits for, how much is done and the milestones on the way.",
+    parts: ["Sections", "Dependencies", "Progress", "Milestones & today"],
+    accent: "oxblood",
+    sample: GANTT_SAMPLE,
+  },
+  {
+    id: "quadrant",
+    name: "2×2 quadrant",
+    family: "Thinking",
+    keyword: "quadrant",
+    summary:
+      "Two axes crossed at their middles, each named with its low and high end, four captioned quarters and items plotted by share of each axis.",
+    parts: ["Named axes", "Four quarters", "Plotted items", "Drag to place"],
+    accent: "forest",
+    sample: QUADRANT_SAMPLE,
+  },
+  {
+    id: "histogram",
+    name: "Histogram",
+    family: "Data",
+    keyword: "histogram",
+    summary:
+      "How one measured quantity is distributed: counts in touching bins of equal width, on one outlined distribution.",
+    parts: ["Touching bins", "Counts", "Axis titles", "Value range"],
+    accent: "navy",
+    sample: HISTOGRAM_SAMPLE,
+  },
+  {
+    id: "class",
+    name: "Class diagram",
+    family: "Structure",
+    keyword: "class",
+    summary:
+      "UML classes with their attributes and operations, joined by association, generalisation, realisation, aggregation, composition and dependency.",
+    parts: ["Three compartments", "Interfaces & enums", "Six relations", "Multiplicity"],
+    accent: "navy",
+    sample: CLASS_SAMPLE,
+  },
+  {
+    id: "dfd",
+    name: "Data flow diagram",
+    family: "Process",
+    keyword: "dfd",
+    summary:
+      "Gane–Sarson processes, external entities and data stores joined by named data flows, from a context diagram down to level 1.",
+    parts: ["Numbered process", "External entity", "Data store", "Named flows"],
+    accent: "forest",
+    sample: DFD_SAMPLE,
+  },
+  {
+    id: "state",
+    name: "State machine",
+    family: "Process",
+    keyword: "state",
+    summary:
+      "UML states and the transitions between them, labelled event [guard] / action, with entry, do and exit activities.",
+    parts: ["Initial and final", "States & activities", "Choice", "Fork and join"],
+    accent: "oxblood",
+    sample: STATE_SAMPLE,
+  },
+  {
+    id: "tree",
+    name: "Tree diagram",
+    family: "Thinking",
+    keyword: "tree",
+    summary:
+      "A hierarchy hung from one root on square rails: a decision tree, a work breakdown structure or any hierarchy.",
+    parts: ["Branches", "Leaves", "Captioned paths", "Cross links"],
+    accent: "slate",
+    sample: TREE_SAMPLE,
   },
   {
     id: "bar",
@@ -471,24 +653,7 @@ export const READY_DIAGRAMS: DiagramKind[] = [
 ];
 
 /** Announced, not drawable yet. The catalogue greys these out. */
-export const PLANNED_DIAGRAMS: DiagramKind[] = [
-  {
-    id: "state",
-    name: "State machine",
-    family: "Process",
-    summary: "States and the events that move a thing from one to the next.",
-    parts: ["States", "Transitions", "Initial and final"],
-    accent: "slate",
-  },
-  {
-    id: "class",
-    name: "Class diagram",
-    family: "Structure",
-    summary: "Classes, what they hold, what they do, and how they are related.",
-    parts: ["Classes", "Attributes", "Operations", "Associations"],
-    accent: "slate",
-  },
-];
+export const PLANNED_DIAGRAMS: DiagramKind[] = [];
 
 export const ALL_DIAGRAMS: DiagramKind[] = [
   ...READY_DIAGRAMS,

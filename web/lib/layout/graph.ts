@@ -1,5 +1,5 @@
-import { routeBetween } from "@/lib/canvas/connect";
-import { edgeHeads, edgeLine } from "@/lib/connectors";
+import { routeBetween, runsAlong, selfLoop } from "@/lib/canvas/connect";
+import { edgeHeads, edgeLine, keepsApart, mayShare } from "@/lib/connectors";
 import type {
   DiagramCategory,
   DSLEdge,
@@ -116,7 +116,10 @@ export function routeFlowEdges(
     if (!from || !to) {
       return { ...edge, points: [] };
     }
-    const points = flowRoute(edge, index, from, to);
+    const points =
+      from === to
+        ? selfLoop(from, edgeHeads(category, edge)[1])
+        : flowRoute(edge, index, from, to);
     laid.push({ from: edge.from, to: edge.to, line: edgeLine(category, edge), points });
     return { ...edge, points };
   });
@@ -135,6 +138,14 @@ export function routeFlowEdges(
     const fromCy = from.y + from.height / 2;
     const toCy = to.y + to.height / 2;
     const downward = to.y >= from.y + from.height;
+    // the routes already laid that this one may not run along
+    const others = laid
+      .filter(
+        (other) => !mayShare(other, { line: edgeLine(category, edge), from: edge.from, to: edge.to }),
+      )
+      .map((other) => other.points);
+    /** a route that crosses no box and lies along no line it must keep off */
+    const clear = (points: Point[]) => !hits(points, blockers) && runsAlong(points, others) <= 6;
     /** the canvas's own router, round whatever this one could not step past */
     const around = (sides?: { fromSide: "left" | "right"; toSide: "left" | "right" }) =>
       routeBetween(outline(from), outline(to), {
@@ -142,13 +153,7 @@ export function routeFlowEdges(
         direction: "down",
         heads: [headA, headB],
         avoid: blockers.map(outline),
-        lines: laid
-          .filter(
-            (other) =>
-              other.line !== edgeLine(category, edge) ||
-              (other.from !== edge.from && other.to !== edge.to),
-          )
-          .map((other) => other.points),
+        lines: others,
         ...sides,
       }).map(round);
 
@@ -160,7 +165,7 @@ export function routeFlowEdges(
         { x: shared, y: from.y + from.height },
         { x: shared, y: to.y },
       ];
-      if (Math.abs(fromCx - toCx) < 1 && !hits(straight, blockers)) {
+      if (Math.abs(fromCx - toCx) < 1 && clear(straight)) {
         return straight.map(round);
       }
       // the channel this branch turns in: the middle of the gap, stepped aside
@@ -184,7 +189,7 @@ export function routeFlowEdges(
         { x: toCx, y: midY },
         { x: toCx, y: to.y },
       ];
-      if (!hits(stepped, blockers)) {
+      if (clear(stepped)) {
         return stepped.map(round);
       }
       return around();
@@ -203,12 +208,116 @@ export function routeFlowEdges(
       { x: channel, y: toCy },
       { x: goLeft ? to.x : to.x + to.width, y: toCy },
     ].map(round);
-    if (!hits(loop, blockers)) {
+    if (clear(loop)) {
       return loop;
     }
     const side = goLeft ? "left" : "right";
-    return around({ fromSide: side, toSide: side });
+    const pinned = around({ fromSide: side, toSide: side });
+    // the side a loop climbs is a preference, not a rule: when a line already
+    // leaves or meets that side, the router picks the side that is free
+    return clear(pinned) ? pinned : around();
   }
+}
+
+/** Room between two line ends spread along one side of a box. */
+const END_SPACING = 14;
+
+/**
+ * Lines that may not share a stretch, given ends of their own.
+ *
+ * The router meets a side of a box at its middle, so every line using that
+ * side lands on one point: a transition leaving a state and another arriving
+ * at it read as one line with two heads, and two named data flows read as
+ * one. Where a box side carries more than one end of such lines, the ends are
+ * spread along it, 14 apart and centred, in the order their far ends lie so
+ * that no two cross. Each end moves with the corner after it, so the leg
+ * leaving the side stays square and keeps its length — and with it the room
+ * the head on it needs. An end that cannot move that way (a two-point line
+ * whose other box does not reach, or a leg too short to give the room) is
+ * left where it was.
+ */
+export function spreadEnds<E extends { points: Point[] } & Pick<DSLEdge, "from" | "to" | "line" | "kind">>(
+  edges: E[],
+  byId: ReadonlyMap<string, Box>,
+  category: DiagramCategory,
+): E[] {
+  type End = { edge: number; first: boolean; side: string; along: number; toward: number };
+  const ends = new Map<string, End[]>();
+  edges.forEach((edge, index) => {
+    const pts = edge.points;
+    if (pts.length < 2 || edge.from === edge.to) return;
+    if (!keepsApart(edgeLine(category, edge))) {
+      return;
+    }
+    for (const first of [true, false]) {
+      const id = first ? edge.from : edge.to;
+      const box = byId.get(id);
+      if (!box) continue;
+      const tip = first ? pts[0] : pts[pts.length - 1];
+      const next = first ? pts[1] : pts[pts.length - 2];
+      const upright = Math.abs(next.x - tip.x) < Math.abs(next.y - tip.y);
+      // which side: a vertical stub meets the top or bottom, a level one a flank
+      const side = upright
+        ? Math.abs(tip.y - box.y) < Math.abs(tip.y - (box.y + box.height)) ? "top" : "bottom"
+        : Math.abs(tip.x - box.x) < Math.abs(tip.x - (box.x + box.width)) ? "left" : "right";
+      const far = first ? pts[pts.length - 1] : pts[0];
+      const key = `${id}:${side}`;
+      const list = ends.get(key) ?? [];
+      list.push({
+        edge: index,
+        first,
+        side,
+        along: upright ? tip.x : tip.y,
+        toward: upright ? far.x : far.y,
+      });
+      ends.set(key, list);
+    }
+  });
+
+  const out = edges.map((edge) => ({ ...edge, points: edge.points.map((p) => ({ ...p })) }));
+  for (const [key, list] of ends) {
+    if (list.length < 2) continue;
+    const box = byId.get(key.slice(0, key.lastIndexOf(":")))!;
+    const upright = list[0].side === "top" || list[0].side === "bottom";
+    const span = upright ? box.width : box.height;
+    const start = upright ? box.x : box.y;
+    const step = Math.min(END_SPACING, (span - 12) / (list.length - 1));
+    if (step < 6) continue;
+    const middle = start + span / 2;
+    list.sort((a, b) => a.toward - b.toward || a.edge - b.edge);
+    list.forEach((end, at) => {
+      const target = Math.round(middle + (at - (list.length - 1) / 2) * step);
+      const shift = target - end.along;
+      if (shift === 0) return;
+      const pts = out[end.edge].points;
+      const i = end.first ? 0 : pts.length - 1;
+      const j = end.first ? 1 : pts.length - 2;
+      const k = end.first ? 2 : pts.length - 3;
+      const axis = upright ? "x" : "y";
+      if (pts.length === 2) {
+        // a straight line moves whole, so its other end must still meet its box
+        const other = byId.get(end.first ? out[end.edge].to : out[end.edge].from);
+        if (!other) return;
+        const lo = upright ? other.x : other.y;
+        const hi = lo + (upright ? other.width : other.height);
+        const moved = pts[j][axis] + shift;
+        if (moved < lo + 4 || moved > hi - 4) return;
+        pts[i][axis] += shift;
+        pts[j][axis] += shift;
+        return;
+      }
+      // the corner after the stub moves too, so the leg after it, which runs
+      // along the side, grows or shrinks; it must not fold back or vanish
+      const before = pts[k][axis] - pts[j][axis];
+      const after = before - shift;
+      if (before === 0 || Math.abs(after) < 4 || Math.sign(after) !== Math.sign(before)) {
+        return;
+      }
+      pts[i][axis] += shift;
+      pts[j][axis] += shift;
+    });
+  }
+  return out;
 }
 
 /** Whether one box sits wholly inside another: a zone round a component. */
@@ -269,10 +378,7 @@ export function routeAll<E extends DSLEdge>(
       .map(outline)
       .concat(chrome.avoid);
     const lines = laid
-      .filter(
-        (other) =>
-          other.line !== line || (other.from !== edge.from && other.to !== edge.to),
-      )
+      .filter((other) => !mayShare(other, { line, from: edge.from, to: edge.to }))
       .map((other) => other.points)
       .concat(chrome.lines);
     const points = routeBetween(outline(from), outline(to), {

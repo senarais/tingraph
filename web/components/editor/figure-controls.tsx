@@ -10,6 +10,8 @@ import VennHandles from "@/components/editor/venn-handles";
 import FishboneHandles from "@/components/editor/fishbone-handles";
 import SequenceHandles from "@/components/editor/sequence-handles";
 import PrismaHandles from "@/components/editor/prisma-handles";
+import QuadrantHandles from "@/components/editor/quadrant-handles";
+import GanttHandles from "@/components/editor/gantt-handles";
 import type { CanvasView } from "@/components/editor/pool-controls";
 
 /**
@@ -43,6 +45,7 @@ export default function FigureControls({
   const { spec, box } = figure;
   switch (spec.kind) {
     case "bar":
+    case "histogram":
     case "line":
     case "pie":
     case "scatter":
@@ -99,6 +102,30 @@ export default function FigureControls({
     case "prisma":
       return (
         <PrismaHandles
+          spec={spec}
+          box={box}
+          view={view}
+          picked={picked}
+          onPick={onPick}
+          onChange={onChange}
+        />
+      );
+    case "quadrant":
+      return (
+        <QuadrantHandles
+          api={api}
+          spec={spec}
+          box={box}
+          view={view}
+          picked={picked}
+          onPick={onPick}
+          onChange={onChange}
+        />
+      );
+    case "gantt":
+      return (
+        <GanttHandles
+          api={api}
           spec={spec}
           box={box}
           view={view}

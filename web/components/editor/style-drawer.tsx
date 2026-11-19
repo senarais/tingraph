@@ -36,8 +36,13 @@ const FIXED: Record<DiagramCategory, string> = {
   activity: "The filled initial dot, the bullseye, the fork bar and the rounded action box come from the notation.",
   erd: "The crow's feet come from the notation. The ink writes the rules; the wash fills the band an entity is named in.",
   architecture: "Components have distinct symbols; zones and routed connections use the sheet's ink.",
+  class: "The three compartments, the guillemets and every relation's head and diamond come from UML.",
+  dfd: "The Gane–Sarson outlines — the numbered process, the square entity and the open store — come from the notation.",
+  state: "The filled initial dot, the bullseye, the choice diamond, the bars and the rounded state come from UML.",
+  tree: "Square rails from each parent come from the notation; a leaf is rounded so a path's end reads at a glance.",
   sequence: FIGURE_FIXED,
   bar: CHART_FIXED,
+  histogram: CHART_FIXED,
   line: CHART_FIXED,
   pie: CHART_FIXED,
   scatter: CHART_FIXED,
@@ -46,6 +51,8 @@ const FIXED: Record<DiagramCategory, string> = {
   venn: FIGURE_FIXED,
   fishbone: FIGURE_FIXED,
   prisma: PRISMA_FIXED,
+  quadrant: FIGURE_FIXED,
+  gantt: FIGURE_FIXED,
 };
 
 /** A shape and a connector, drawn the way the style would draw them. */

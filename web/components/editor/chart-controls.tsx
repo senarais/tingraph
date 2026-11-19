@@ -64,7 +64,7 @@ function handlesOf(spec: ChartSpec, drawing: ChartDrawing): Handle[] {
       grip: { kind: "point", series: dot.series, index: dot.index },
     }));
   }
-  if (spec.kind === "bar") {
+  if (spec.kind === "bar" || spec.kind === "histogram") {
     return drawing.bars.map((bar) => ({
       at: bar.grip,
       grip: { kind: "value", series: bar.series, category: bar.category },

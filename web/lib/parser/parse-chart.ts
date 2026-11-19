@@ -167,6 +167,16 @@ class ChartParser {
 
   private parseSetting(name: string): void {
     const tok = this.advance();
+    // a histogram is one distribution standing upright on touching bins
+    if (this.kind === "histogram" && (name === "series" || name === "categories")) {
+      throw new DSLError(
+        'A histogram draws one distribution: write one bin per line, e.g. "10-20" 14',
+        tok.line,
+      );
+    }
+    if (this.kind === "histogram" && (name === "bars" || name === "layout")) {
+      throw new DSLError(`A histogram's bars always stand upright side by side; "${name}" belongs to a bar chart`, tok.line);
+    }
     switch (name) {
       case "x":
         this.options.xTitle = this.caption(tok);

@@ -291,10 +291,12 @@ export function buildChartSkeletons(
       box(
         id("bar"),
         bar.rect,
+        // a histogram's bars touch, so its outline is drawn whatever the
+        // style, or neighbouring bins would read as one block
         {
-          stroke: style.markWidth > 0 ? paper.ink : bar.color,
+          stroke: style.markWidth > 0 || spec.kind === "histogram" ? paper.ink : bar.color,
           fill: bar.color,
-          width: style.markWidth > 0 ? style.markWidth : 0.5,
+          width: style.markWidth > 0 ? style.markWidth : spec.kind === "histogram" ? 1 : 0.5,
         },
         paper,
         unit,

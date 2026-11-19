@@ -1,6 +1,7 @@
 import { DiagramCategory } from "@/lib/types";
 import {
   BAR_TEMPLATE,
+  HISTOGRAM_TEMPLATE,
   BPMN_TEMPLATE,
   FLOWCHART_TEMPLATE,
   LINE_TEMPLATE,
@@ -12,11 +13,17 @@ import {
   VENN_TEMPLATE,
   FISHBONE_TEMPLATE,
   PRISMA_TEMPLATE,
+  QUADRANT_TEMPLATE,
+  GANTT_TEMPLATE,
   USECASE_TEMPLATE,
   ACTIVITY_TEMPLATE,
   ERD_TEMPLATE,
   SEQUENCE_TEMPLATE,
   ARCHITECTURE_TEMPLATES,
+  CLASS_TEMPLATE,
+  DFD_TEMPLATE,
+  STATE_TEMPLATE,
+  TREE_TEMPLATE,
 } from "@/lib/templates";
 
 /**
@@ -59,6 +66,123 @@ const FLOW_SECTIONS: GuideSection[] = [
       row("A -> B", "directed edge"),
       row("A [Yes] -> B", "edge with a caption"),
       row("A -> B -> C", "chain"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
+const CLASS_SECTIONS: GuideSection[] = [
+  {
+    title: "Diagram",
+    rows: [row('class "Title" {', "open a UML class diagram")],
+  },
+  {
+    title: "Classifiers",
+    rows: [
+      row('class ID "Name" { ... }', "class: name, attributes, operations"),
+      row('abstract ID "Name" { ... }', "abstract class, «abstract» over the name"),
+      row('interface ID "Name" { ... }', "interface, «interface» over the name"),
+      row('enum ID "Name" { ... }', "enumeration, «enumeration» over the name"),
+      row('attr "- name : String"', "an attribute, inside the block"),
+      row('method "+ save() : void"', "an operation, inside the block"),
+      row('value "ACTIVE"', "an enumeration literal, inside the block"),
+    ],
+  },
+  {
+    title: "Relations",
+    rows: [
+      row("A -> B", "association (plain line)"),
+      row('A "1" -> "0..*" B "places"', "association with multiplicities and a name"),
+      row("navigate A -> B", "directed association (open arrow at B)"),
+      row("inherit A -> B", "generalisation: A is a kind of B"),
+      row("implement A -> B", "realisation: A implements interface B"),
+      row("aggregate A -> B", "aggregation: A has B (hollow diamond at A)"),
+      row("compose A -> B", "composition: A owns B (filled diamond at A)"),
+      row("depend A -> B", "dependency: A uses B (dashed); also A -.-> B"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
+const DFD_SECTIONS: GuideSection[] = [
+  {
+    title: "Diagram",
+    rows: [row('dfd "Title" {', "open a data flow diagram (Gane–Sarson)")],
+  },
+  {
+    title: "Shapes",
+    rows: [
+      row('process ID "Verb + noun"', "process, numbered 1, 2, 3 in order written"),
+      row('process ID "Check stock" "1.2"', "process with its own number (level 1)"),
+      row('entity ID "Name"', "external entity: a source or a sink"),
+      row('store ID "Name"', "data store, coded D1, D2, D3 in order written"),
+      row('store ID "Orders" "D3"', "data store with its own code"),
+    ],
+  },
+  {
+    title: "Flows",
+    rows: [
+      row('A -> B "Data name"', "data flow, named with the data it carries"),
+      row("A [Data name] -> B", "the same, caption in brackets"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
+const STATE_SECTIONS: GuideSection[] = [
+  {
+    title: "Diagram",
+    rows: [row('state "Title" {', "open a UML state machine diagram")],
+  },
+  {
+    title: "States",
+    rows: [
+      row("initial ID", "initial pseudostate (filled dot); alias: start"),
+      row('state ID "Name"', "state (rounded box)"),
+      row('state ID "Name" { ... }', "state listing its internal activities"),
+      row('entry "action()"', "runs on entering, inside the block"),
+      row('do "activity()"', "runs while in the state, inside the block"),
+      row('exit "action()"', "runs on leaving, inside the block"),
+      row("final ID", "final state (bullseye); alias: end"),
+    ],
+  },
+  {
+    title: "Pseudostates",
+    rows: [
+      row("choice ID", "choice (diamond): branch on guards"),
+      row("fork ID", "fork bar: one transition into several"),
+      row("join ID", "join bar: several transitions into one"),
+    ],
+  },
+  {
+    title: "Transitions",
+    rows: [
+      row("A -> B", "transition with no trigger (completion)"),
+      row('A -> B "event [guard] / action"', "labelled transition, every part optional"),
+      row('A -> A "tick"', "self-transition"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
+const TREE_SECTIONS: GuideSection[] = [
+  {
+    title: "Diagram",
+    rows: [row('tree "Title" {', "open a tree: decision tree, WBS or hierarchy")],
+  },
+  {
+    title: "Boxes",
+    rows: [
+      row('node ID "Label"', "branch: a box with boxes under it"),
+      row('leaf ID "Label"', "leaf (rounded): a path ends here"),
+    ],
+  },
+  {
+    title: "Branches",
+    rows: [
+      row("A -> B", "B hangs from A"),
+      row('A -> B "sunny"', "branch with a caption, e.g. a decision's answer"),
+      row("A -.-> B", "cross link (dashed), outside the hierarchy"),
       row("# comment", "line comment (also //)"),
     ],
   },
@@ -313,6 +437,73 @@ const AXIS_ROWS: GuideRow[] = [
   row("range 0 250", "pin where the value axis runs"),
 ];
 
+const GANTT_SECTIONS: GuideSection[] = [
+  {
+    title: "Chart",
+    rows: [
+      row('gantt "Title" {', "open a Gantt chart"),
+      row('unit "Week"', "what one numbered unit is called"),
+      row("today 5", "a dashed line through the unit the chart is read in"),
+    ],
+  },
+  {
+    title: "Tasks",
+    rows: [
+      row('section "Research"', "a section; the tasks after it are listed under it"),
+      row('task T1 "Survey" 1 3', "starts in unit 1, lasts 3 units"),
+      row('task T2 "Write" after T1 2', "starts once T1 ends, lasts 2"),
+      row('task T3 "Test" after T1 T2 2', "starts once both have ended"),
+      row('task T1 "Survey" 1 3 done 60', "60% of it done"),
+      row('milestone M1 "Defence" after T2', "a diamond where T2 ends"),
+      row('milestone M2 "Launch" 12', "a diamond at the start of unit 12"),
+    ],
+  },
+  {
+    title: "Look",
+    rows: [
+      row('color "#2a78d6"', "the colour every bar takes"),
+      row("text 12", "caption size, 9 to 20"),
+      row("size 760 400", "width and height on the sheet"),
+    ],
+  },
+];
+
+const QUADRANT_SECTIONS: GuideSection[] = [
+  {
+    title: "Figure",
+    rows: [row('quadrant "Title" {', "open a 2×2 quadrant")],
+  },
+  {
+    title: "Axes",
+    rows: [
+      row('x "Effort" "Low" "High"', "across axis: its name, then its low and high ends"),
+      row('y "Impact" "Low" "High"', "up axis: its name, then its low and high ends"),
+    ],
+  },
+  {
+    title: "Quarters",
+    rows: [
+      row('top-left "Quick wins"', "caption of the top-left quarter"),
+      row('top-right "Major projects"', "caption of the top-right quarter"),
+      row('bottom-left "Fill-ins"', "caption of the bottom-left quarter"),
+      row('bottom-right "Thankless tasks"', "caption of the bottom-right quarter"),
+    ],
+  },
+  {
+    title: "Items",
+    rows: [row('item "Name" 30 80', "a dot at 30% across and 80% up")],
+  },
+  {
+    title: "Look",
+    rows: [
+      row("style tint", "outline or tint"),
+      row('color "#2a78d6"', "the colour every item takes"),
+      row("text 13", "caption size, 9 to 22"),
+      row("size 560 500", "width and height on the sheet"),
+    ],
+  },
+];
+
 const BAR_SECTIONS: GuideSection[] = [
   {
     title: "Chart",
@@ -333,6 +524,22 @@ const BAR_SECTIONS: GuideSection[] = [
     rows: [
       row("bars horizontal", "vertical or horizontal"),
       row("layout stacked", "grouped or stacked, for several series"),
+    ],
+  },
+  { title: "Axes", rows: AXIS_ROWS },
+  { title: "Look", rows: LOOK_ROWS },
+];
+
+const HISTOGRAM_SECTIONS: GuideSection[] = [
+  {
+    title: "Chart",
+    rows: [row('histogram "Title" {', "open a histogram; close it with }")],
+  },
+  {
+    title: "Bins",
+    rows: [
+      row('"40-50" 2', "one bin and its count, in order along the axis"),
+      row('"<40" 1', "an open bin at either end"),
     ],
   },
   { title: "Axes", rows: AXIS_ROWS },
@@ -611,6 +818,7 @@ export const GUIDE_SECTIONS: Record<DiagramCategory, GuideSection[]> = {
   bpmn: BPMN_SECTIONS,
   org: ORG_SECTIONS,
   bar: BAR_SECTIONS,
+  histogram: HISTOGRAM_SECTIONS,
   line: LINE_SECTIONS,
   pie: PIE_SECTIONS,
   scatter: SCATTER_SECTIONS,
@@ -618,12 +826,18 @@ export const GUIDE_SECTIONS: Record<DiagramCategory, GuideSection[]> = {
   activity: ACTIVITY_SECTIONS,
   erd: ERD_SECTIONS,
   architecture: ARCHITECTURE_SECTIONS,
+  class: CLASS_SECTIONS,
+  dfd: DFD_SECTIONS,
+  state: STATE_SECTIONS,
+  tree: TREE_SECTIONS,
   sequence: SEQUENCE_SECTIONS,
   mind: MIND_SECTIONS,
   matrix: MATRIX_SECTIONS,
   venn: VENN_SECTIONS,
   fishbone: FISHBONE_SECTIONS,
   prisma: PRISMA_SECTIONS,
+  quadrant: QUADRANT_SECTIONS,
+  gantt: GANTT_SECTIONS,
 };
 
 /** One line of orientation, shown at the top of the guide. */
@@ -635,7 +849,12 @@ export const GUIDE_INTRO: Record<DiagramCategory, string> = {
   activity: "Declare a partition, then the nodes inside it, then wire them. Partitions are drawn as columns and the flow reads down the page.",
   erd: "Declare every entity with its attributes, then the relations between them. The crow's foot at each end says how many, and a relation runs from the key it names to the key it names.",
   architecture: "Place components roughly inside zones, then connect them. Generate aligns nearby rows and columns, spaces them apart and sizes the zones. Afterwards edit freely on the sheet.",
+  class: "Declare every class with its attributes and operations, then the relations between them. A parent is drawn above what specialises it.",
+  dfd: "Declare the external entities, processes and data stores, then name every flow with the data it carries. Every flow passes through a process.",
+  state: "Declare the states, starting with the initial dot, then the transitions between them. A transition is labelled event [guard] / action.",
+  tree: "Declare every box, then hang each one from its parent. Every box has one parent, and a leaf ends a path.",
   sequence: "Declare the participants across the top, then the messages in the order they are sent. The execution bars are read off the messages, so there is nothing to place.",
+  histogram: "Write one bin per line, in order along the axis, with the count that falls in it. The bars touch because the bins do.",
   bar: "Write the readings one to a line, then any settings you want. Everything here is also a control in the Chart panel, and the two always agree.",
   line: "Name the readings along the axis, then one series per line you want drawn. Everything here is also a control in the Chart panel.",
   pie: "Write one slice per line. Shares are worked out for you, so the numbers can be counts rather than percentages.",
@@ -644,6 +863,8 @@ export const GUIDE_INTRO: Record<DiagramCategory, string> = {
   matrix: "Declare the columns, then each row and its cell values. Cells are text on purpose: an x, a number, a status or a sentence all work, and every one can be edited again on the sheet.",
   venn: "Name the sets, then say what falls in each region between them. A region is named by the sets it is in: A, AB, ABC.",
   fishbone: "The title is the effect, in the head. Each bone is a category of cause, and what is written inside it are the causes themselves.",
+  gantt: "Name the unit, open a section, then list its tasks: each starts in a unit or after other tasks, and lasts a whole number of units.",
+  quadrant: "Name the two axes and both ends of each, then caption the four quarters and plot any items at a share of each axis.",
   prisma: "Write the counts in the order the review moved through them. Each row is a step in the flow, a side box says what was dropped there, and the four phase bands are read off the rows themselves.",
 };
 
@@ -694,6 +915,18 @@ export const RULES: Record<DiagramCategory, string[]> = {
     "A cause may take a `{ ... }` block of its own for what is behind it, one level deep.",
     "Bones alternate above and below the spine in the order they are written.",
   ]),
+  gantt: FIGURE_RULES("gantt", [
+    "Time is counted in whole units from 1 (week 1, week 2, …); `unit` only says what a unit is called.",
+    "A task is `task ID \"Name\"`, then either the unit it starts in or `after` the IDs it waits for, then how many units it lasts. It may end with `done` and a percentage.",
+    "A milestone is `milestone ID \"Name\"` then a unit or `after` IDs; it lasts nothing and takes no `done`.",
+    "`section \"Name\"` lists every task after it under that section, until the next section.",
+    "Every ID after `after` is a task or milestone in the chart, and following them never loops back.",
+  ]),
+  quadrant: FIGURE_RULES("quadrant", [
+    "Write each axis as its name and then the words at its low and high ends: `x \"Effort\" \"Low\" \"High\"`. The low end of the up axis is at the bottom.",
+    "A quarter is named by its corner: `top-left`, `top-right`, `bottom-left`, `bottom-right`. A quarter nobody names is left empty.",
+    "An item is `item \"Name\" across up`, both shares of their axis from 0 at the low end to 100 at the high.",
+  ]),
   prisma: FIGURE_RULES("prisma", [
     "The title is the name of the flow, written above it.",
     "A `band` names the phase every row after it stands in, until the next `band`. Consecutive rows naming the same band share one strip, so Screening may cover two rows.",
@@ -701,6 +934,39 @@ export const RULES: Record<DiagramCategory, string[]> = {
     "A `side` box follows the row it belongs to and says what left the flow there. It takes the same caption, total and block.",
     "Counts are written plainly and drawn as `(n = 955)`. Leave the number out to draw the caption on its own.",
   ]),
+  class: [
+    'The file is one `class "Title" { ... }` block.',
+    "A classifier is `class`, `abstract`, `interface` or `enum`, then an ID and its name in quotes. Its block lists `attr` and `method` lines (an enum lists `value` lines); write each member in UML form, e.g. `attr \"- name : String\"`, `method \"+ total() : Decimal\"`.",
+    "Visibility is the first character of a member: `+` public, `-` private, `#` protected, `~` package.",
+    "Write a generalisation and a realisation child first: `inherit Cat -> Animal`, `implement Repo -> Store`. They carry no multiplicity.",
+    "Write an aggregation and a composition whole first: `compose Order -> OrderLine`. The diamond is drawn on the whole.",
+    "A bare `A -> B` is an association. Multiplicities are quoted on either side of the arrow and the relation's name follows the second class: `Customer \"1\" -> \"0..*\" Order \"places\"`.",
+  ],
+  dfd: [
+    'The file is one `dfd "Title" { ... }` block, in Gane–Sarson notation.',
+    "Name a process with a verb and a noun (`Validate Order`), an external entity and a data store with a noun.",
+    "Every data flow has a process at one end at least. An entity never connects straight to another entity or to a store, and a store never connects straight to another store.",
+    "Every process has at least one flow in and one flow out: none that only takes data in (a black hole) or only sends it out (a miracle).",
+    "Name every flow with the data it carries: `CUSTOMER -> P1 \"Order details\"`. A caption in quotes names one flow; a chain takes captions in brackets.",
+    "Processes are numbered 1, 2, 3 and stores coded D1, D2, D3 in the order written; give a process `\"1.1\"` or a store `\"D3\"` after its name to set it, as a level-1 diagram does. An entity carries no number.",
+  ],
+  state: [
+    'The file is one `state "Title" { ... }` block.',
+    "Start with one `initial` pseudostate. It leaves by exactly one transition and nothing transitions into it.",
+    "A `final` state ends the machine: no transition leaves it.",
+    "Label a transition `\"event [guard] / action\"`; any part may be left out, and a transition with no label fires when the state's work is done.",
+    "Branch on guards at a `choice`: one transition in, one out per guard, e.g. `C1 -> PAID \"[approved]\"`.",
+    "A `fork` takes one transition in and sends several out; a `join` takes several in and sends one out.",
+    "A state's block lists `entry`, `do` and `exit` activities, each at most once, drawn in that order.",
+  ],
+  tree: [
+    'The file is one `tree "Title" { ... }` block.',
+    "Declare every box with `node` (has boxes under it) or `leaf` (ends a path), then hang each from its parent with `A -> B`.",
+    "Every box has exactly one parent, the boxes never loop back, and nothing hangs from a leaf.",
+    "Children are drawn left to right in the order their branches are written.",
+    "A caption on a branch says what leads there: `OUTLOOK -> HUMIDITY \"sunny\"`.",
+    "`A -.-> B` is a dashed cross link between two boxes the hierarchy has already placed.",
+  ],
   usecase: [
     'The file is one `usecase "Title" { ... }` block.',
     'Actors are declared at the top level; use cases go inside `system S "Name" { ... }`.',
@@ -745,6 +1011,14 @@ export const RULES: Record<DiagramCategory, string[]> = {
     "A data object is joined with a dotted association `A -.-> D1`, never with a sequence flow.",
   ],
   bar: CHART_RULES("bar", "a bar per reading"),
+  histogram: [
+    'The file is one `histogram "Title" { ... }` block. Nothing may sit outside it.',
+    "A bin is its range in quotes and the count in it: `\"40-50\" 2`, one per line, in order along the axis.",
+    "Give every bin the same width and leave no gaps in the range; write an empty bin with a count of 0.",
+    "A histogram has one distribution: it takes no `series`, `categories`, `bars` or `layout` lines.",
+    "Settings are written as `name value`, in any order, before or after the bins.",
+    "Do not invent settings. Every one the language has is listed above.",
+  ],
   line: CHART_RULES("line", "a line through the readings"),
   pie: CHART_RULES("pie", "a slice per reading"),
   scatter: CHART_RULES("scatter", "a point per reading"),
@@ -765,8 +1039,13 @@ export const KEYWORD: Record<DiagramCategory, string> = {
   activity: "activity",
   erd: "erd",
   architecture: "architecture",
+  class: "class",
+  dfd: "dfd",
+  state: "state",
+  tree: "tree",
   sequence: "sequence",
   bar: "bar",
+  histogram: "histogram",
   line: "line",
   pie: "pie",
   scatter: "scatter",
@@ -775,6 +1054,8 @@ export const KEYWORD: Record<DiagramCategory, string> = {
   venn: "venn",
   fishbone: "fishbone",
   prisma: "prisma",
+  quadrant: "quadrant",
+  gantt: "gantt",
 };
 
 export const EXAMPLE: Record<DiagramCategory, string> = {
@@ -785,8 +1066,13 @@ export const EXAMPLE: Record<DiagramCategory, string> = {
   activity: ACTIVITY_TEMPLATE,
   erd: ERD_TEMPLATE,
   architecture: ARCHITECTURE_TEMPLATES[0].source,
+  class: CLASS_TEMPLATE,
+  dfd: DFD_TEMPLATE,
+  state: STATE_TEMPLATE,
+  tree: TREE_TEMPLATE,
   sequence: SEQUENCE_TEMPLATE,
   bar: BAR_TEMPLATE,
+  histogram: HISTOGRAM_TEMPLATE,
   line: LINE_TEMPLATE,
   pie: PIE_TEMPLATE,
   scatter: SCATTER_TEMPLATE,
@@ -795,6 +1081,8 @@ export const EXAMPLE: Record<DiagramCategory, string> = {
   venn: VENN_TEMPLATE,
   fishbone: FISHBONE_TEMPLATE,
   prisma: PRISMA_TEMPLATE,
+  quadrant: QUADRANT_TEMPLATE,
+  gantt: GANTT_TEMPLATE,
 };
 
 export const NOTATION_NAME: Record<DiagramCategory, string> = {
@@ -805,8 +1093,13 @@ export const NOTATION_NAME: Record<DiagramCategory, string> = {
   activity: "UML activity diagram",
   erd: "entity relationship diagram",
   architecture: "software architecture diagram",
+  class: "UML class diagram",
+  dfd: "data flow diagram (Gane–Sarson)",
+  state: "UML state machine diagram",
+  tree: "tree diagram",
   sequence: "UML sequence diagram",
   bar: "bar chart",
+  histogram: "histogram",
   line: "line chart",
   pie: "pie chart",
   scatter: "scatter plot",
@@ -815,6 +1108,8 @@ export const NOTATION_NAME: Record<DiagramCategory, string> = {
   venn: "Venn diagram",
   fishbone: "fishbone diagram",
   prisma: "PRISMA 2020 flow diagram",
+  quadrant: "2×2 quadrant",
+  gantt: "Gantt chart",
 };
 
 /**

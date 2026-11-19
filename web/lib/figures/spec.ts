@@ -5,6 +5,8 @@ import type { VennSpec } from "@/lib/venn/spec";
 import type { FishboneSpec } from "@/lib/fishbone/spec";
 import type { SequenceSpec } from "@/lib/sequence/spec";
 import type { PrismaSpec } from "@/lib/prisma/spec";
+import type { QuadrantSpec } from "@/lib/quadrant/spec";
+import type { GanttSpec } from "@/lib/gantt/spec";
 
 /**
  * A figure is a notation whose whole state is one object.
@@ -29,7 +31,9 @@ export type FigureSpec =
   | VennSpec
   | FishboneSpec
   | SequenceSpec
-  | PrismaSpec;
+  | PrismaSpec
+  | QuadrantSpec
+  | GanttSpec;
 
 /** Every figure says how big it is drawn, because every figure can be resized. */
 export interface FigureSize {

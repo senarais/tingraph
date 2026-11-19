@@ -107,6 +107,14 @@ export function nodeUnit(category: DiagramCategory, id: string): string {
       return `erd-${id}`;
     case "architecture":
       return `arch-${id}`;
+    case "class":
+      return `class-${id}`;
+    case "dfd":
+      return `dfd-${id}`;
+    case "state":
+      return `state-${id}`;
+    case "tree":
+      return `tree-${id}`;
     default:
       return `flow-node-${id}`;
   }

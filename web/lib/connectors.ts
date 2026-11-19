@@ -163,6 +163,116 @@ const ACTIVITY: ConnectorKind[] = [
 ];
 
 /**
+ * UML class relations. The ids carry the notation's name because a use case
+ * diagram already has an `association` and an `inherit` drawn differently, and
+ * a line is looked up by id across every notation when a sheet is read back.
+ *
+ * Aggregation and composition carry their diamond at the *start*: the source
+ * writes the whole first (`compose Order -> Line`), and the diamond belongs on
+ * the whole.
+ */
+const CLASS: ConnectorKind[] = [
+  {
+    id: "class-association",
+    label: "Association",
+    hint: "the two know each other",
+    strokeStyle: "solid",
+    startArrowhead: null,
+    endArrowhead: null,
+  },
+  {
+    id: "class-directed",
+    label: "Directed association",
+    hint: "only this end knows the other",
+    strokeStyle: "solid",
+    startArrowhead: null,
+    endArrowhead: "arrow",
+  },
+  {
+    id: "class-inherit",
+    label: "Generalisation",
+    hint: "is a kind of, hollow head",
+    strokeStyle: "solid",
+    startArrowhead: null,
+    endArrowhead: "triangle_outline",
+  },
+  {
+    id: "class-implement",
+    label: "Realisation",
+    hint: "implements the interface",
+    strokeStyle: "dashed",
+    startArrowhead: null,
+    endArrowhead: "triangle_outline",
+  },
+  {
+    id: "class-aggregate",
+    label: "Aggregation",
+    hint: "has, hollow diamond on the whole",
+    strokeStyle: "solid",
+    startArrowhead: "diamond_outline",
+    endArrowhead: null,
+  },
+  {
+    id: "class-compose",
+    label: "Composition",
+    hint: "owns, filled diamond on the whole",
+    strokeStyle: "solid",
+    startArrowhead: "diamond",
+    endArrowhead: null,
+  },
+  {
+    id: "class-depend",
+    label: "Dependency",
+    hint: "uses, dashed",
+    strokeStyle: "dashed",
+    startArrowhead: null,
+    endArrowhead: "arrow",
+  },
+];
+
+/** A data flow diagram has one line: data, moving, and always named. */
+const DFD: ConnectorKind[] = [
+  {
+    id: "data",
+    label: "Data flow",
+    hint: "named data, moving one way",
+    strokeStyle: "solid",
+    startArrowhead: null,
+    endArrowhead: "triangle",
+  },
+];
+
+const STATE: ConnectorKind[] = [
+  {
+    id: "transition",
+    label: "Transition",
+    hint: "event [guard] / action",
+    strokeStyle: "solid",
+    startArrowhead: null,
+    endArrowhead: "arrow",
+  },
+];
+
+const TREE: ConnectorKind[] = [
+  {
+    id: "branch",
+    label: "Branch",
+    hint: "parent to child, on the rail",
+    strokeStyle: "solid",
+    startArrowhead: null,
+    endArrowhead: null,
+  },
+  {
+    id: "cross-link",
+    label: "Cross link",
+    hint: "dashed, outside the hierarchy",
+    strokeStyle: "dashed",
+    startArrowhead: null,
+    endArrowhead: null,
+  },
+];
+
+/**
  * The four ends a crow's foot is written with. Excalidraw carries a head for
  * each of them but has none that rings a fork, so "many" stands for zero or
  * many — the pairing every ERD leans on — and one-or-many is written out.
@@ -243,8 +353,13 @@ export const CONNECTORS: Record<DiagramCategory, ConnectorKind[]> = {
   activity: ACTIVITY,
   erd: ERD,
   architecture: ARCHITECTURE,
+  class: CLASS,
+  dfd: DFD,
+  state: STATE,
+  tree: TREE,
   sequence: [],
   bar: [],
+  histogram: [],
   line: [],
   pie: [],
   scatter: [],
@@ -253,9 +368,23 @@ export const CONNECTORS: Record<DiagramCategory, ConnectorKind[]> = {
   venn: [],
   fishbone: [],
   prisma: [],
+  quadrant: [],
+  gantt: [],
 };
 
-const ALL = [...BPMN, ...FLOW, ...ORG, ...USECASE, ...ACTIVITY, ...ERD, ...ARCHITECTURE];
+const ALL = [
+  ...BPMN,
+  ...FLOW,
+  ...ORG,
+  ...USECASE,
+  ...ACTIVITY,
+  ...ERD,
+  ...ARCHITECTURE,
+  ...CLASS,
+  ...DFD,
+  ...STATE,
+  ...TREE,
+];
 
 /** The line a notation draws unless the reader picks another, if it draws any. */
 export function defaultConnector(category: DiagramCategory): string | null {
@@ -270,6 +399,38 @@ export function connectorKind(id: string, category: DiagramCategory): ConnectorK
     CONNECTORS[category][0] ??
     BPMN[0]
   );
+}
+
+/**
+ * The lines that each say something of their own, so two of them are never
+ * drawn as one even when they leave or meet the same element. A data flow is
+ * named with the data it carries and a transition with the event that fires
+ * it; two that merged into one stretch would leave a reader unable to tell
+ * which name belongs to which. A class association is named too, and its
+ * multiplicities sit at its own ends. Every other line of the same kind that
+ * leaves or meets one element may share a stretch: that is a bracket.
+ */
+const NEVER_SHARED = new Set([
+  "data",
+  "transition",
+  "class-association",
+  "class-directed",
+  "class-aggregate",
+  "class-compose",
+  "class-depend",
+]);
+
+/** Whether a line is one of those that never shares a stretch with another. */
+export function keepsApart(line: string): boolean {
+  return NEVER_SHARED.has(line);
+}
+
+/** Whether two connectors may run along one stretch: a bracket, or a merge. */
+export function mayShare(
+  a: { line: string; from: string; to: string },
+  b: { line: string; from: string; to: string },
+): boolean {
+  return a.line === b.line && !NEVER_SHARED.has(a.line) && (a.from === b.from || a.to === b.to);
 }
 
 /** Just the part of a connector Excalidraw draws from. */
@@ -295,6 +456,8 @@ const DASHED: Partial<Record<DiagramCategory, string>> = {
   activity: "object-flow",
   erd: "non-identifying",
   architecture: "event",
+  class: "class-depend",
+  tree: "cross-link",
 };
 
 export function edgeLine(

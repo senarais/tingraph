@@ -144,6 +144,58 @@ const ARCHITECTURE_GROUPS: PaletteGroup[] = [
   ] },
 ];
 
+const CLASS_GROUPS: PaletteGroup[] = [
+  {
+    title: "Classifiers",
+    items: [
+      { type: "class", label: "Class", hint: "name, attributes, operations", droppable: true },
+      { type: "abstract", label: "Abstract class", hint: "«abstract» over the name", droppable: true },
+      { type: "interface", label: "Interface", hint: "«interface» over the name", droppable: true },
+      { type: "enum", label: "Enumeration", hint: "a list of values", droppable: true },
+    ],
+  },
+];
+
+const DFD_GROUPS: PaletteGroup[] = [
+  {
+    title: "Gane–Sarson",
+    items: [
+      { type: "process", label: "Process", hint: "numbered, changes data", droppable: true },
+      { type: "entity", label: "External entity", hint: "a source or a sink", droppable: true },
+      { type: "store", label: "Data store", hint: "open box, data at rest", droppable: true },
+    ],
+  },
+];
+
+const STATE_GROUPS: PaletteGroup[] = [
+  {
+    title: "States",
+    items: [
+      { type: "state", label: "State", hint: "rounded box", droppable: true },
+      { type: "initial", label: "Initial", hint: "filled dot", droppable: true },
+      { type: "final", label: "Final", hint: "bullseye", droppable: true },
+    ],
+  },
+  {
+    title: "Pseudostates",
+    items: [
+      { type: "choice", label: "Choice", hint: "branch on a guard", droppable: true },
+      { type: "fork", label: "Fork", hint: "split into regions", droppable: true },
+      { type: "join", label: "Join", hint: "regions back into one", droppable: true },
+    ],
+  },
+];
+
+const TREE_GROUPS: PaletteGroup[] = [
+  {
+    title: "Boxes",
+    items: [
+      { type: "node", label: "Branch", hint: "has boxes under it", droppable: true },
+      { type: "leaf", label: "Leaf", hint: "rounded, a path ends here", droppable: true },
+    ],
+  },
+];
+
 /**
  * A chart has no shapes to drop: what a reader adds to one is a reading, and
  * that is the Chart panel's job rather than the shape drawer's. The rail hides
@@ -157,8 +209,13 @@ export const PALETTE_GROUPS: Record<DiagramCategory, PaletteGroup[]> = {
   activity: ACTIVITY_GROUPS,
   erd: ERD_GROUPS,
   architecture: ARCHITECTURE_GROUPS,
+  class: CLASS_GROUPS,
+  dfd: DFD_GROUPS,
+  state: STATE_GROUPS,
+  tree: TREE_GROUPS,
   sequence: [],
   bar: [],
+  histogram: [],
   line: [],
   pie: [],
   scatter: [],
@@ -167,9 +224,19 @@ export const PALETTE_GROUPS: Record<DiagramCategory, PaletteGroup[]> = {
   venn: [],
   fishbone: [],
   prisma: [],
+  quadrant: [],
+  gantt: [],
 };
 
 function idPrefix(type: string): string {
+  if (type === "class" || type === "abstract") return "C";
+  if (type === "interface") return "I";
+  if (type === "enum") return "EN";
+  if (type === "store") return "D";
+  if (type === "state") return "S";
+  if (type === "choice") return "C";
+  if (type === "node") return "N";
+  if (type === "leaf") return "L";
   if (type === "usecase") return "U";
   if (type === "actor") return "A";
   if (type === "action") return "A";
@@ -259,6 +326,34 @@ export function sampleNode(
   if (category === "architecture") {
     return { id, type: type as NodeType, label: type === "zone" ? "New zone" : `${type[0].toUpperCase()}${type.slice(1)} ${counter}` };
   }
+  if (category === "class") {
+    return {
+      id,
+      type: type as NodeType,
+      label: type === "enum" ? `Kind${counter}` : `Class${counter}`,
+      entries:
+        type === "enum"
+          ? [{ label: "attr", name: "VALUE" }]
+          : [
+              { label: "attr", name: "- name : String" },
+              { label: "method", name: "+ run() : void" },
+            ],
+    };
+  }
+  if (category === "dfd") {
+    return {
+      id,
+      type: type as NodeType,
+      label: type === "process" ? "Process data" : type === "store" ? "Records" : `Entity ${counter}`,
+      ...(type === "entity" ? {} : { name: type === "store" ? `D${counter}` : String(counter) }),
+    };
+  }
+  if (category === "state") {
+    return { id, type: type as NodeType, label: type === "state" ? `State ${counter}` : "" };
+  }
+  if (category === "tree") {
+    return { id, type: type as NodeType, label: type === "leaf" ? `Leaf ${counter}` : `Branch ${counter}` };
+  }
   const item = PALETTE_GROUPS[category]
     .flatMap((group) => group.items)
     .find((entry) => entry.type === type);
@@ -306,6 +401,20 @@ export function snippetFor(item: PaletteItem, counter: number): string {
     item.type === "join"
   ) {
     return `\n  ${item.type} ${idPrefix(item.type)}${counter}`;
+  }
+  if (["class", "abstract", "interface"].includes(item.type)) {
+    return (
+      `\n  ${item.type} C${counter} "Class${counter}" {` +
+      `\n    attr "- name : String"` +
+      `\n    method "+ run() : void"` +
+      `\n  }`
+    );
+  }
+  if (item.type === "enum") {
+    return `\n  enum EN${counter} "Kind${counter}" {\n    value "VALUE"\n  }`;
+  }
+  if (item.type === "choice") {
+    return `\n  choice C${counter}`;
   }
   if (item.type === "pool") {
     return `\n  pool P${counter} "Pool ${counter}" {\n    lane L${counter} "Lane ${counter}" {\n    }\n  }\n`;

@@ -1,4 +1,9 @@
 import assert from "node:assert";
+import { mayShare } from "@/lib/connectors";
+import { planQuadrant, quadrantPoint, quadrantShare } from "@/lib/quadrant/build-quadrant";
+import type { QuadrantSpec } from "@/lib/quadrant/spec";
+import { planGantt } from "@/lib/gantt/build-gantt";
+import { ROW_STEP, dropTask, ganttRows, ganttSpan, ganttStarts, type GanttSpec } from "@/lib/gantt/spec";
 import { parseDSL, detectCategory } from "@/lib/parser/parse-dsl";
 import { computeLayout, flowDimensions } from "@/lib/layout/compute-layout";
 import {
@@ -1061,9 +1066,10 @@ const legCrosses = (points: readonly Point[], box: Box) =>
       for (let i = 0; i < routes.length; i++) {
         for (const other of routes.slice(i + 1)) {
           const mine = routes[i];
-          const bracket =
-            mine.link.line === other.link.line &&
-            (mine.link.from.unit === other.link.from.unit || mine.link.to.unit === other.link.to.unit);
+          const bracket = mayShare(
+            { line: mine.link.line, from: mine.link.from.unit, to: mine.link.to.unit },
+            { line: other.link.line, from: other.link.from.unit, to: other.link.to.unit },
+          );
           if (bracket) continue;
           assert.ok(
             runsAlong(mine.points, [other.points]) <= 6,
@@ -1817,5 +1823,220 @@ assert.ok(
   attachmentsProblem(1, MAX_ATTACHMENTS_BYTES + 1),
   "attachment total has a size cap",
 );
+
+// ---- class, dfd, state, tree: the rules each notation is defined by
+
+{
+  const ast = parseDSL(`class "c" {
+  interface I "Store" { method "+ save() : void" }
+  class A "Repo" { attr "- n : int"  method "+ go()" }
+  class B "Line"
+  implement A -> I
+  compose A "1" -> "1..*" B "holds"
+  A -> A "next"
+}`);
+  const repo = ast.nodes.find((node) => node.id === "A")!;
+  assert.deepEqual(
+    repo.entries,
+    [
+      { label: "attr", name: "- n : int" },
+      { label: "method", name: "+ go()" },
+    ],
+    "a class keeps its members, attributes and operations apart",
+  );
+  const [real, comp, self] = ast.edges;
+  assert.equal(real.line, "class-implement", "implement draws a realisation");
+  assert.equal(comp.line, "class-compose", "compose draws a composition");
+  assert.equal(comp.fromEnd, "1", "the multiplicity before the arrow belongs to the first class");
+  assert.equal(comp.toEnd, "1..*", "the multiplicity after the arrow belongs to the second class");
+  assert.equal(comp.label, "holds", "the caption after the second class names the relation");
+  assert.equal(self.from, self.to, "a class may be associated with itself");
+  const laid = computeLayout(ast, "down");
+  const at = (id: string) => laid.nodes.find((node) => node.id === id)!;
+  assert.ok(at("I").y + at("I").height <= at("A").y, "an interface stands above what realises it");
+  const loop = laid.edges[2].points;
+  assert.ok(loop.length === 4 && loop[0].x === loop[3].x, "a self-association leaves and returns on one side");
+  expectDSLError(`class "c" { class A "A" class B "B" inherit A "1" -> B }`, "no multiplicity");
+}
+
+{
+  const ast = parseDSL(`dfd "d" {
+  entity C "Customer"
+  process P "Check order"
+  process Q "Bill" "1.2"
+  store S "Orders"
+  C -> P "Order"
+  P -> S "Valid order"
+  S -> Q "Order lines"
+  Q -> C "Invoice"
+}`);
+  const laid = computeLayout(ast, "down");
+  const number = (id: string) => laid.nodes.find((node) => node.id === id)!.name;
+  assert.equal(number("P"), "1", "a process is numbered in the order it is written");
+  assert.equal(number("Q"), "1.2", "a process keeps the number the source gives it");
+  assert.equal(number("S"), "D1", "a store is coded D1, D2 in the order it is written");
+  assert.equal(number("C"), undefined, "an external entity carries no number");
+  expectDSLError(`dfd "d" { entity A "A" entity B "B" A -> B }`, "two external entities");
+  expectDSLError(`dfd "d" { entity A "A" store B "B" A -> B }`, "cannot read or write a data store");
+  expectDSLError(`dfd "d" { store A "A" store B "B" A -> B }`, "one data store to another");
+  expectDSLError(`dfd "d" { entity A "A" process P "P" A -> P }`, "black hole");
+  expectDSLError(`dfd "d" { entity A "A" process P "P" P -> A }`, "miracle");
+  expectDSLError(`dfd "d" { entity A "A" "1" }`, "carries no number");
+  expectDSLError(`dfd "d" { entity A "A" process P "P" A -> P -> A "x" }`, "names one flow");
+}
+
+{
+  const ast = parseDSL(`state "s" {
+  initial S
+  state A "Heating" { exit "off()" entry "on()" do "heat()" }
+  final F
+  S -> A
+  A -> A "tick / count()"
+  A -> F "done"
+}`);
+  assert.deepEqual(
+    ast.nodes[1].entries!.map((entry) => entry.label),
+    ["entry", "do", "exit"],
+    "a state lists its activities entry, do, exit whatever order they were written in",
+  );
+  const laid = computeLayout(ast, "down");
+  const loop = laid.edges[1].points;
+  const box = laid.nodes[1];
+  assert.equal(loop[0].x, box.x + box.width, "a self-transition leaves the right side of its state");
+  assert.ok(
+    Math.abs(loop[3].x - loop[2].x) >= 50,
+    "a self-transition's last leg is long enough for its open head",
+  );
+  expectDSLError(`state "s" { initial S state A "A" A -> S }`, "nothing may transition into it");
+  expectDSLError(`state "s" { initial S state A "A" state B "B" S -> A S -> B }`, "exactly one transition");
+  expectDSLError(`state "s" { final F state A "A" F -> A }`, "no transition may leave it");
+  expectDSLError(`state "s" { state A "A" state B "B" A -.-> B }`, "one solid line");
+  expectDSLError(`state "s" { choice C { entry "x" } }`, "Only a state lists activities");
+}
+
+{
+  const ast = parseDSL(`tree "t" {
+  node R "Root"
+  node A "A"
+  leaf B "B"
+  leaf A1 "A1"
+  leaf A2 "A2"
+  R -> A "left"
+  R -> B "right"
+  A -> A1
+  A -> A2
+  A1 -.-> B
+}`);
+  for (const direction of ["down", "right"] as const) {
+    const laid = computeLayout(ast, direction);
+    const at = (id: string) => laid.nodes.find((node) => node.id === id)!;
+    const mid = (id: string) =>
+      direction === "down" ? at(id).x + at(id).width / 2 : at(id).y + at(id).height / 2;
+    assert.ok(
+      Math.abs(mid("A") - (mid("A1") + mid("A2")) / 2) <= 1,
+      `a branch stands over the middle of its children (${direction})`,
+    );
+    assert.ok(mid("A") < mid("B"), `children keep the order they are written in (${direction})`);
+    const level = (id: string) => (direction === "down" ? at(id).y : at(id).x);
+    assert.equal(level("A"), level("B"), `boxes one level down start on one line (${direction})`);
+    assert.ok(level("A1") > level("A"), `a child stands a level past its parent (${direction})`);
+  }
+  expectDSLError(`tree "t" { node A "A" node B "B" node C "C" A -> C B -> C }`, "one parent");
+  expectDSLError(`tree "t" { leaf A "A" node B "B" A -> B }`, "is a leaf");
+  expectDSLError(`tree "t" { node A "A" node B "B" A -> B B -> A }`, "no cycles");
+}
+
+{
+  const ast = parseDSL(`histogram "h" {
+  "0-10" 4
+  "10-20" 9
+  "20-30" 6
+}`);
+  const spec = ast.figure as ChartSpec;
+  assert.equal(spec.kind, "histogram", "a histogram parses as its own chart");
+  assert.deepEqual(spec.categories, ["0-10", "10-20", "20-30"], "bins keep their written order");
+  const drawn = layoutChart(spec, { x: 0, y: 0, width: spec.options.width, height: spec.options.height });
+  const bars = drawn.bars.slice().sort((a, b) => a.rect.x - b.rect.x);
+  for (let i = 1; i < bars.length; i++) {
+    const gap = bars[i].rect.x - (bars[i - 1].rect.x + bars[i - 1].rect.width);
+    assert.ok(Math.abs(gap) <= 1, `a histogram's neighbouring bins touch (gap ${gap})`);
+  }
+  expectDSLError(`histogram "h" { series "A" 1 2 }`, "one distribution");
+  expectDSLError(`histogram "h" { bars horizontal }`, "always stand upright");
+}
+
+{
+  const spec = parseDSL(`quadrant "q" {
+  x "Effort" "Low" "High"
+  y "Impact" "Low" "High"
+  top-left "Quick wins"
+  item "A" 0 100
+  item "B" 100 0
+}`).figure as QuadrantSpec;
+  assert.equal(spec.quarters["top-left"], "Quick wins", "a quarter is named by its corner");
+  assert.equal(spec.quarters["top-right"], undefined, "an unnamed quarter stays empty");
+  const plan = planQuadrant(spec, { x: 0, y: 0, width: 560, height: 500 });
+  const [a, b] = plan.items.map((item) => item.at);
+  assert.equal(a.x, plan.field.x, "0 across sits on the field's left edge");
+  assert.equal(a.y, plan.field.y, "100 up sits on the field's top edge");
+  assert.equal(b.x, plan.field.x + plan.field.width, "100 across sits on the right edge");
+  assert.equal(b.y, plan.field.y + plan.field.height, "0 up sits on the bottom edge");
+  const back = quadrantShare(plan.field, quadrantPoint(plan.field, 30, 80));
+  assert.ok(Math.abs(back.x - 30) < 1e-9 && Math.abs(back.y - 80) < 1e-9, "a dragged dot reads back the shares it was drawn at");
+  assert.ok(plan.items[1].label.x + plan.items[1].label.width <= b.x, "a name near the right edge runs left, onto the field");
+  const near = planQuadrant(
+    { ...spec, items: [{ label: "A rather long name", x: 40, y: 60 }] },
+    { x: 0, y: 0, width: 560, height: 500 },
+  ).items[0];
+  assert.ok(
+    near.label.x + near.label.width <= plan.field.x + plan.field.width / 2,
+    "a name close to the middle runs back into its own quarter rather than across the divide",
+  );
+  expectDSLError(`quadrant "q" { item "A" 120 50 }`, "between 0 and 100");
+  expectDSLError(`quadrant "q" { middle "x" }`, "not part of a quadrant");
+}
+
+{
+  const spec = parseDSL(`gantt "g" {
+  unit "Week"
+  section "A"
+  task T1 "One" 2 3 done 50
+  task T2 "Two" after T1 2
+  section "B"
+  task T3 "Three" 1 1
+  milestone M1 "Done" after T2 T3
+}`).figure as GanttSpec;
+  assert.deepEqual(ganttStarts(spec), [2, 5, 1, 7], "a task after others starts once the last of them ends");
+  assert.equal(ganttSpan(spec), 7, "the header runs to the last unit anything uses");
+  assert.deepEqual(
+    ganttRows(spec).map((row) => `${row.kind}${row.index}`),
+    ["section0", "task0", "task1", "section1", "task2", "task3"],
+    "each section's name is followed by its own tasks",
+  );
+  const plan = planGantt(spec, { x: 0, y: 0, width: spec.options.width, height: spec.options.height });
+  const [one, two] = plan.bars;
+  assert.ok(Math.abs(two.box.x - (one.box.x + one.box.width)) < 1e-6, "a task after another begins where it ends");
+  assert.ok(plan.bars[3].milestone, "a milestone is drawn as one");
+  assert.ok(
+    Math.abs(plan.bars[3].box.x + plan.bars[3].box.width / 2 - (two.box.x + two.box.width)) < 1e-6,
+    "a milestone after a task stands where that task ends",
+  );
+  const dropped = dropTask(spec, 0);
+  assert.equal(dropped.tasks[0].start, 5, "a task left with nothing to follow keeps its place");
+  assert.equal(dropped.options.height, spec.options.height - ROW_STEP, "removing a task gives its row back");
+  expectDSLError(`gantt "g" { task T1 "A" after T9 2 }`, "not a task here");
+  expectDSLError(`gantt "g" { task A "A" after B 1  task B "B" after A 1 }`, "cannot loop");
+  expectDSLError(`gantt "g" { milestone M "M" 3 done 50 }`, "no share done");
+  expectDSLError(`gantt "g" { task T "T" 0 2 }`, "the unit it starts in");
+  expectDSLError(`gantt "g" { task T "T" 1 1.5 }`, "how many units it lasts");
+  const next = parseDSL(`gantt "g" {
+  task T1 "A" 1 2
+  milestone M1 "B" after T1
+  section "Next"
+  task T2 "C" after M1 1
+}`).figure as GanttSpec;
+  assert.deepEqual(next.tasks[1].after, ["T1"], "after reads the ids on its own line only");
+  assert.equal(next.sections[0], "Next", "a section on the next line is still a section");
+}
 
 console.log("parse + layout self-check: all assertions passed");

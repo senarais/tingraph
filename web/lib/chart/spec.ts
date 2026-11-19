@@ -11,9 +11,19 @@
  * and `build-chart.ts` turns that into shapes, so all of this runs under `tsx`.
  */
 
-export type ChartKind = "bar" | "line" | "pie" | "scatter";
+export type ChartKind = "bar" | "line" | "pie" | "scatter" | "histogram";
 
-export const CHART_KINDS: ChartKind[] = ["bar", "line", "pie", "scatter"];
+export const CHART_KINDS: ChartKind[] = ["bar", "line", "pie", "scatter", "histogram"];
+
+/**
+ * The charts whose marks are bars. A histogram is a bar chart whose bars
+ * stand on touching bins of one measured quantity, so it is drawn by the same
+ * code and differs only where `isHistogram` says: no gap between the bars, an
+ * outline between neighbours, one series, and upright bars only.
+ */
+export function hasBars(kind: ChartKind): boolean {
+  return kind === "bar" || kind === "histogram";
+}
 
 export function isChartKind(value: string): value is ChartKind {
   return (CHART_KINDS as string[]).includes(value);
@@ -308,7 +318,8 @@ export function defaultOptions(kind: ChartKind): ChartOptions {
     layout: "grouped",
     palette: "auto",
     color: DEFAULT_MARK,
-    style: kind === "pie" ? "plain" : "ruled",
+    // a histogram's bars touch, so they are outlined or they run together
+    style: kind === "pie" ? "plain" : kind === "histogram" ? "framed" : "ruled",
     legend: "auto",
     values: kind === "pie",
     percent: kind === "pie",
@@ -344,7 +355,7 @@ export function allValues(spec: ChartSpec): number[] {
   if (spec.kind === "scatter") {
     return spec.series.flatMap((series) => (series.points ?? []).map((p) => p.y));
   }
-  if (spec.kind === "bar" && spec.options.layout === "stacked") {
+  if (hasBars(spec.kind) && spec.options.layout === "stacked") {
     return spec.categories.map((_, index) =>
       spec.series.reduce((sum, series) => sum + (series.values[index] ?? 0), 0),
     );

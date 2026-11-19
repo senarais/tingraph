@@ -15,6 +15,7 @@ import { marked, nodeUnit, unitOf, type UnitMark } from "@/lib/canvas/units";
 
 export { nodeUnit };
 import { connectorInk, connectorKind, edgeLine } from "@/lib/connectors";
+import { headRoom } from "@/lib/canvas/connect";
 import { buildFigure } from "@/lib/figures/registry";
 import { architectureNodeSkeletons } from "@/lib/excalidraw-mapper/build-architecture";
 import {
@@ -55,6 +56,13 @@ import {
   usecaseNodeSkeletons,
   usecaseSystemSkeletons,
 } from "@/lib/excalidraw-mapper/build-uml";
+
+import {
+  classNodeSkeletons,
+  dfdNodeSkeletons,
+  stateNodeSkeletons,
+  treeNodeSkeletons,
+} from "@/lib/excalidraw-mapper/build-graphs";
 
 export { ACADEMIC_MONOCHROME_THEME };
 
@@ -591,6 +599,74 @@ function edgeLabelSkeletons(
   return out;
 }
 
+/**
+ * The multiplicity written at each end of a class relation: `1` beside the
+ * box at one end, `0..*` beside the box at the other. Each is a caption in
+ * the connector's own unit, so it moves and is deleted with the line, set a
+ * little off the box and to one side of the line so neither touches it.
+ */
+function endCaptionSkeletons(
+  positioned: PositionedAST,
+  theme: Theme,
+): ExcalidrawElementSkeleton[] {
+  const out: ExcalidrawElementSkeleton[] = [];
+  positioned.edges.forEach((edge, index) => {
+    const points = edge.points;
+    if (points.length < 2) {
+      return;
+    }
+    const kind = connectorKind(edgeLine(positioned.category, edge), positioned.category);
+    const ends: Array<
+      [string | undefined, { x: number; y: number }, { x: number; y: number }, string, number]
+    > = [
+      [edge.fromEnd, points[0], points[1], "from", headRoom(kind.startArrowhead)],
+      [edge.toEnd, points[points.length - 1], points[points.length - 2], "to", headRoom(kind.endArrowhead)],
+    ];
+    for (const [text, end, inner, side, room] of ends) {
+      if (!text) {
+        continue;
+      }
+      const width = textWidth(text, BPMN_LABEL_FONT_SIZE);
+      const height = BPMN_LINE_HEIGHT;
+      const upright = Math.abs(inner.x - end.x) < Math.abs(inner.y - end.y);
+      // along the line, away from the box and past the head on that end (a
+      // head is drawn half as long as the run it needs); then beside the line,
+      // clear of the head's width
+      const along = room > 0 ? room / 2 + 3 : 6;
+      // a head is half its room long and about as wide as half that again
+      const beside = room > 0 ? Math.round(room * 0.275) + 7 : 7;
+      const away = upright ? Math.sign(inner.y - end.y) : Math.sign(inner.x - end.x);
+      const x = upright
+        ? end.x + beside
+        : away > 0
+          ? end.x + along
+          : end.x - along - width;
+      const y = upright
+        ? away > 0
+          ? end.y + along
+          : end.y - along - height
+        : end.y - height - beside;
+      out.push({
+        type: "text",
+        id: `edge-${index}-${side}-end`,
+        text,
+        x: Math.round(x),
+        y: Math.round(y),
+        groupIds: [`flow-${index}`],
+        ...marked({ unit: `flow-${index}`, kind: "edge", core: true }),
+        ...ACADEMIC_MONOCHROME_THEME,
+        roughness: theme.roughness,
+        strokeColor: theme.strokeColor,
+        fontSize: BPMN_LABEL_FONT_SIZE,
+        fontFamily: theme.fontFamily,
+        textAlign: "left",
+        verticalAlign: "top",
+      } as ExcalidrawElementSkeleton);
+    }
+  });
+  return out;
+}
+
 function diagramBounds(positioned: PositionedAST): {
   minX: number;
   maxX: number;
@@ -895,6 +971,14 @@ function drawNode(
       return erdNodeSkeletons(node, theme);
     case "architecture":
       return architectureNodeSkeletons(node, theme);
+    case "class":
+      return classNodeSkeletons(node, theme);
+    case "dfd":
+      return dfdNodeSkeletons(node, theme);
+    case "state":
+      return stateNodeSkeletons(node, theme);
+    case "tree":
+      return treeNodeSkeletons(node, theme);
     default:
       return flowNodeSkeletons(node, theme);
   }
@@ -960,6 +1044,7 @@ export function buildSkeletons(
       skeletons.push(skeleton);
     }
   });
+  skeletons.push(...endCaptionSkeletons(positioned, theme));
   skeletons.push(...edgeLabelSkeletons(positioned, theme));
 
   if (positioned.nodes.length > 0) {

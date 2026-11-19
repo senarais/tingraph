@@ -13,6 +13,8 @@ import VennDrawer from "@/components/editor/venn-drawer";
 import FishboneDrawer from "@/components/editor/fishbone-drawer";
 import SequenceDrawer from "@/components/editor/sequence-drawer";
 import PrismaDrawer from "@/components/editor/prisma-drawer";
+import QuadrantDrawer from "@/components/editor/quadrant-drawer";
+import GanttDrawer from "@/components/editor/gantt-drawer";
 import { SlabButton } from "@/components/editor/ui";
 
 /**
@@ -63,6 +65,7 @@ export default function FigureDrawer({
   const panel = () => {
     switch (spec.kind) {
       case "bar":
+      case "histogram":
       case "line":
       case "pie":
       case "scatter":
@@ -79,6 +82,10 @@ export default function FigureDrawer({
         return <SequenceDrawer spec={spec} onChange={onChange} />;
       case "prisma":
         return <PrismaDrawer spec={spec} onChange={onChange} />;
+      case "quadrant":
+        return <QuadrantDrawer spec={spec} onChange={onChange} />;
+      case "gantt":
+        return <GanttDrawer spec={spec} onChange={onChange} />;
       default:
         return <FishboneDrawer spec={spec} onChange={onChange} />;
     }

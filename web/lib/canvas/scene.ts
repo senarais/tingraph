@@ -20,7 +20,7 @@ import {
   type Rules,
 } from "@/lib/canvas/connect";
 import { buildFigure } from "@/lib/figures/registry";
-import { connectorInk, connectorKind } from "@/lib/connectors";
+import { connectorInk, connectorKind, mayShare } from "@/lib/connectors";
 import { themeFor } from "@/lib/excalidraw-mapper/theme";
 import type { DiagramCategory } from "@/lib/types";
 import type { FigureSpec } from "@/lib/figures/spec";
@@ -673,8 +673,10 @@ export function routeContext(
     const other = unitOf(element)?.link;
     if (
       !other ||
-      (other.line === link.line &&
-        (other.from.unit === link.from.unit || other.to.unit === link.to.unit))
+      mayShare(
+        { line: other.line, from: other.from.unit, to: other.to.unit },
+        { line: link.line ?? "", from: link.from.unit, to: link.to.unit },
+      )
     ) {
       continue;
     }

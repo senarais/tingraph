@@ -38,6 +38,14 @@ export function summarise(ast: AST): string {
     const exclusions = figure.steps.filter((step) => step.side).length;
     return `${figure.steps.length} rows · ${exclusions} exclusion boxes`;
   }
+  if (figure.kind === "gantt") {
+    const milestones = figure.tasks.filter((task) => task.length === 0).length;
+    return `${figure.tasks.length - milestones} tasks · ${milestones} milestones`;
+  }
+  if (figure.kind === "quadrant") {
+    const named = Object.values(figure.quarters).filter(Boolean).length;
+    return `${named} quarters · ${figure.items.length} items`;
+  }
   const chart = figure;
   if (chart.kind === "scatter") {
     const points = chart.series.reduce(
@@ -45,6 +53,9 @@ export function summarise(ast: AST): string {
       0,
     );
     return `${points} points · ${chart.series.length} series`;
+  }
+  if (chart.kind === "histogram") {
+    return `${chart.categories.length} bins`;
   }
   const marks = chart.kind === "pie" ? "slices" : "readings";
   return `${chart.categories.length} ${marks} · ${chart.series.length} series`;

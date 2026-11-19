@@ -20,6 +20,8 @@ import {
   parseFishbone,
   parseMatrix,
   parsePrisma,
+  parseQuadrant,
+  parseGantt,
   parseVenn,
 } from "@/lib/parser/parse-figures";
 import { parseSequence } from "@/lib/parser/parse-sequence";
@@ -89,6 +91,59 @@ const ERD_NODE_TYPES = new Map<string, NodeType>([
   ["weak", "weak"],
 ]);
 
+const CLASS_NODE_TYPES = new Map<string, NodeType>([
+  ["class", "class"],
+  ["interface", "interface"],
+  ["abstract", "abstract"],
+  ["enum", "enum"],
+]);
+
+const DFD_NODE_TYPES = new Map<string, NodeType>([
+  ["process", "process"],
+  ["entity", "entity"],
+  ["store", "store"],
+]);
+
+const STATE_NODE_TYPES = new Map<string, NodeType>([
+  ["initial", "initial"],
+  ["start", "initial"],
+  ["final", "final"],
+  ["end", "final"],
+  ["state", "state"],
+  ["choice", "choice"],
+  ["fork", "fork"],
+  ["join", "join"],
+]);
+
+const TREE_NODE_TYPES = new Map<string, NodeType>([
+  ["node", "node"],
+  ["leaf", "leaf"],
+]);
+
+/** The class relations written with a keyword, and the line each one draws. */
+const CLASS_RELATIONS = new Map<string, string>([
+  ["inherit", "class-inherit"],
+  ["implement", "class-implement"],
+  ["aggregate", "class-aggregate"],
+  ["compose", "class-compose"],
+  ["depend", "class-depend"],
+  ["navigate", "class-directed"],
+  ["associate", "class-association"],
+]);
+
+/** What a member line inside a class block is, by its opening word. */
+const CLASS_MEMBERS = new Map<string, string>([
+  ["attr", "attr"],
+  ["value", "attr"],
+  ["method", "method"],
+]);
+
+/** The three internal activities a state may list, in the order UML lists them. */
+const STATE_ACTIVITIES = ["entry", "do", "exit"];
+
+/** The notations whose single flows may carry a caption written after them. */
+const TRAILING_CAPTION = new Set<DiagramCategory>(["class", "dfd", "state", "tree"]);
+
 /** The three use case relations that are not a plain association. */
 const USECASE_RELATIONS = new Map<string, { line: string; label: string }>([
   ["include", { line: "include", label: "«include»" }],
@@ -114,6 +169,10 @@ const OPENERS: Partial<Record<DiagramCategory, string>> = {
   activity: "action A1",
   erd: "entity E1",
   architecture: "service API",
+  class: "class C1",
+  dfd: "process P1",
+  state: "state S1",
+  tree: "node N1",
 };
 
 interface EdgeEndpoint {
@@ -187,6 +246,8 @@ class Parser {
       }
     }
 
+    checkNotation(this.category, [...this.nodes.values()], this.edges);
+
     return {
       category: this.category,
       title: title.value,
@@ -223,6 +284,13 @@ class Parser {
       this.parseRelation();
       return;
     }
+    if (this.category === "class" && CLASS_RELATIONS.has(tok.value)) {
+      // `inherit A -> B`; a class called `depend` is joined as `depend -> B`
+      if (this.tokens[this.pos + 1]?.kind === "id") {
+        this.parseClassRelation(CLASS_RELATIONS.get(tok.value) as string);
+        return;
+      }
+    }
     if (this.category === "org" && tok.value === "unit") {
       throw new DSLError(
         '"unit" only belongs inside a role block, e.g. role R "Head" { unit "Lab" "Name" }',
@@ -236,6 +304,8 @@ class Parser {
       this.parseDeclaration();
     } else if (this.category === "erd") {
       this.parseErdRelation();
+    } else if (this.category === "class") {
+      this.parseClassRelation(null);
     } else {
       this.parseEdgeChain();
     }
@@ -325,6 +395,97 @@ class Parser {
       line: weak ? "non-identifying" : erdLine(fromEnd, toEnd),
       ...(label ? { label } : {}),
     });
+  }
+
+  /**
+   * `inherit Cat -> Animal`, `compose Order "1" -> "1..*" Line "contains"`,
+   * `Book -> Author` (a plain association) and `A -.-> B` (a dependency).
+   * A multiplicity is a quoted caption on either side of the arrow; the one
+   * after the second class is the name of the relation.
+   */
+  private parseClassRelation(line: string | null): void {
+    if (line !== null) {
+      this.advance();
+    }
+    const from = this.eat("id", "A relation is written A -> B, or inherit A -> B");
+    const fromEnd = this.peekIs("string") ? this.advance().value : undefined;
+    if (!this.peekIsArrow()) {
+      throw new DSLError(
+        `Expected "->" after "${from.value}" (or declare it, e.g. class ${from.value} "Name")`,
+        this.tokens[this.pos]?.line ?? from.line,
+      );
+    }
+    const dashed = this.peekIs("dashed-arrow");
+    this.advance();
+    const toEnd = this.peekIs("string") ? this.advance().value : undefined;
+    const to = this.eat("id", `Expected the class "${from.value}" is related to`);
+    const label = this.peekIs("string") ? this.advance().value : undefined;
+    const kind = line ?? (dashed ? "class-depend" : "class-association");
+    if ((kind === "class-inherit" || kind === "class-implement") && (fromEnd || toEnd)) {
+      throw new DSLError(
+        "A generalisation or a realisation has no multiplicity; write it on an association",
+        from.line,
+      );
+    }
+    this.edges.push({
+      from: from.value,
+      to: to.value,
+      line: kind,
+      ...(fromEnd ? { fromEnd } : {}),
+      ...(toEnd ? { toEnd } : {}),
+      ...(label ? { label } : {}),
+    });
+  }
+
+  /** `{ attr "- name : String"  method "+ save() : void" }` — one class's members. */
+  private parseClassMembers(openLine: number): DSLEntry[] {
+    this.advance();
+    const members: DSLEntry[] = [];
+    while (!this.peekIs("rbrace")) {
+      if (this.pos >= this.tokens.length) {
+        throw new DSLError('Missing "}" for the class block', openLine);
+      }
+      const word = this.eat(
+        "id",
+        'A member is written attr "- name : String" or method "+ save() : void"',
+      );
+      const kind = CLASS_MEMBERS.get(word.value);
+      if (!kind) {
+        throw new DSLError(
+          `"${word.value}" is not a member — write attr, method or (in an enum) value`,
+          word.line,
+        );
+      }
+      const text = this.eat("string", `Expected the ${kind} in quotes after "${word.value}"`);
+      members.push({ label: kind, name: text.value });
+    }
+    this.advance();
+    return members;
+  }
+
+  /** `{ entry "lamp_on()"  do "heat()"  exit "lamp_off()" }` — what runs inside a state. */
+  private parseStateActivities(openLine: number): DSLEntry[] {
+    this.advance();
+    const rows: DSLEntry[] = [];
+    while (!this.peekIs("rbrace")) {
+      if (this.pos >= this.tokens.length) {
+        throw new DSLError('Missing "}" for the state block', openLine);
+      }
+      const word = this.eat("id", 'An activity is written entry "…", do "…" or exit "…"');
+      if (!STATE_ACTIVITIES.includes(word.value)) {
+        throw new DSLError(
+          `"${word.value}" is not an activity — a state lists entry, do and exit`,
+          word.line,
+        );
+      }
+      const text = this.eat("string", `Expected what runs in quotes after "${word.value}"`);
+      rows.push({ label: word.value, name: text.value });
+    }
+    this.advance();
+    // UML lists them entry, do, exit whatever order they were written in
+    return rows.sort(
+      (a, b) => STATE_ACTIVITIES.indexOf(a.label) - STATE_ACTIVITIES.indexOf(b.label),
+    );
   }
 
   private parseErdEnd(fallback: ErdEnd): ErdEnd {
@@ -514,6 +675,22 @@ class Parser {
     if (this.category === "erd" && this.peekIs("lbrace")) {
       fields = this.parseFields(idTok.line);
     }
+    if (this.category === "class" && this.peekIs("lbrace")) {
+      entries = this.parseClassMembers(idTok.line);
+    }
+    if (this.category === "state" && this.peekIs("lbrace")) {
+      if (canonical !== "state") {
+        throw new DSLError(`Only a state lists activities, not a ${typeTok.value}`, idTok.line);
+      }
+      entries = this.parseStateActivities(idTok.line);
+    }
+    // dfd: `process P1 "Check order" "1.1"` — the second caption is its number
+    if (this.category === "dfd" && this.peekIs("string")) {
+      if (canonical === "entity") {
+        throw new DSLError("An external entity carries no number; only processes and stores do", idTok.line);
+      }
+      name = this.advance().value;
+    }
     // usecase: an actor may be pinned to one side of the boundary. Left out,
     // it takes the left when it starts anything and the right otherwise
     if (this.category === "usecase" && canonical === "actor") {
@@ -607,6 +784,7 @@ class Parser {
       );
     }
     let prev = first;
+    const before = this.edges.length;
     while (this.peekIsArrow()) {
       const kind: EdgeKind =
         this.tokens[this.pos].kind === "dashed-arrow"
@@ -621,6 +799,21 @@ class Parser {
         ...(kind === "association" ? { kind } : {}),
       });
       prev = next;
+    }
+    // `A -> B "Order details"`: a caption after one flow names that flow
+    if (TRAILING_CAPTION.has(this.category) && this.peekIs("string")) {
+      const caption = this.advance();
+      const last = this.edges[this.edges.length - 1];
+      if (this.edges.length - before > 1) {
+        throw new DSLError(
+          "A caption in quotes names one flow; write a chain's captions in brackets, e.g. A [Order] -> B",
+          caption.line,
+        );
+      }
+      if (last.label) {
+        throw new DSLError("This flow already has a caption in brackets", caption.line);
+      }
+      last.label = caption.value;
     }
   }
 
@@ -684,13 +877,128 @@ class Parser {
   }
 }
 
+/**
+ * The rules a notation is defined by, beyond what its grammar can say. A data
+ * flow that skips its process, a state machine that flows back into its start,
+ * a tree with two parents: each parses, and each draws a picture the notation
+ * does not allow. The parser refuses them with the rule in words, so the
+ * reader and the assistant both learn it from the error.
+ */
+function checkNotation(category: DiagramCategory, nodes: DSLNode[], edges: DSLEdge[]): void {
+  const typeOf = new Map(nodes.map((node) => [node.id, node.type]));
+  const labelOf = (id: string) => {
+    const node = nodes.find((entry) => entry.id === id);
+    return node && node.label !== id ? `"${node.label}"` : id;
+  };
+  const into = (id: string) => edges.filter((edge) => edge.to === id && edge.kind !== "association");
+  const out = (id: string) => edges.filter((edge) => edge.from === id && edge.kind !== "association");
+
+  if (category === "dfd") {
+    for (const edge of edges) {
+      if (edge.kind === "association") {
+        throw new DSLError("A data flow is one solid line, written A -> B", 0);
+      }
+      if (edge.from === edge.to) {
+        throw new DSLError(`${labelOf(edge.from)} flows into itself; a data flow joins two shapes`, 0);
+      }
+      const a = typeOf.get(edge.from);
+      const b = typeOf.get(edge.to);
+      if (a === "process" || b === "process") {
+        continue;
+      }
+      const pair = `${labelOf(edge.from)} -> ${labelOf(edge.to)}`;
+      if (a === "entity" && b === "entity") {
+        throw new DSLError(`${pair}: data cannot move directly between two external entities; a process must stand between them`, 0);
+      }
+      if (a === "store" && b === "store") {
+        throw new DSLError(`${pair}: data cannot move directly from one data store to another; a process must move it`, 0);
+      }
+      throw new DSLError(`${pair}: an external entity cannot read or write a data store directly; a process must stand between them`, 0);
+    }
+    if (edges.length > 0) {
+      for (const node of nodes) {
+        if (node.type !== "process") continue;
+        const ins = into(node.id).length;
+        const outs = out(node.id).length;
+        if (ins === 0 && outs === 0) {
+          throw new DSLError(`Process ${labelOf(node.id)} has no data flows; every process takes data in and sends data out`, 0);
+        }
+        if (outs === 0) {
+          throw new DSLError(`Process ${labelOf(node.id)} only takes data in (a black hole); give it an output flow`, 0);
+        }
+        if (ins === 0) {
+          throw new DSLError(`Process ${labelOf(node.id)} only sends data out (a miracle); give it an input flow`, 0);
+        }
+      }
+    }
+  }
+
+  if (category === "state") {
+    for (const edge of edges) {
+      if (edge.kind === "association") {
+        throw new DSLError("A transition is one solid line, written A -> B", 0);
+      }
+    }
+    for (const node of nodes) {
+      const ins = into(node.id).length;
+      const outs = out(node.id).length;
+      if (node.type === "initial" && ins > 0) {
+        throw new DSLError(`The initial state ${node.id} is where the machine starts; nothing may transition into it`, 0);
+      }
+      if (node.type === "initial" && outs > 1) {
+        throw new DSLError(`The initial state ${node.id} leaves by exactly one transition; branch at a choice after it`, 0);
+      }
+      if (node.type === "final" && outs > 0) {
+        throw new DSLError(`The final state ${node.id} ends the machine; no transition may leave it`, 0);
+      }
+      if (node.type === "fork" && ins > 1) {
+        throw new DSLError(`Fork ${node.id} splits one transition into several; it takes one in`, 0);
+      }
+      if (node.type === "join" && outs > 1) {
+        throw new DSLError(`Join ${node.id} merges several transitions into one; it sends one out`, 0);
+      }
+    }
+  }
+
+  if (category === "tree") {
+    const parent = new Map<string, string>();
+    for (const edge of edges) {
+      if (edge.from === edge.to) {
+        throw new DSLError(`${labelOf(edge.from)} branches to itself; a branch joins a parent to a child`, 0);
+      }
+      if (edge.kind === "association") {
+        continue;
+      }
+      if (typeOf.get(edge.from) === "leaf") {
+        throw new DSLError(`${labelOf(edge.from)} is a leaf, so a path ends there; declare it with node to branch from it`, 0);
+      }
+      const had = parent.get(edge.to);
+      if (had) {
+        throw new DSLError(`${labelOf(edge.to)} hangs from both ${labelOf(had)} and ${labelOf(edge.from)}; in a tree every box has one parent (use -.-> for a cross link)`, 0);
+      }
+      parent.set(edge.to, edge.from);
+    }
+    for (const node of nodes) {
+      const seen = new Set<string>([node.id]);
+      let at = parent.get(node.id);
+      while (at) {
+        if (seen.has(at)) {
+          throw new DSLError(`The branches through ${labelOf(at)} go round in a circle; a tree has no cycles`, 0);
+        }
+        seen.add(at);
+        at = parent.get(at);
+      }
+    }
+  }
+}
+
 export function detectCategory(code: string): DiagramCategory | null {
   const stripped = code
     .replace(/(?:#|\/\/)[^\n]*/g, "")
     .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
     .trimStart();
   const head = stripped.match(
-    /^(flow|bpmn|org|usecase|activity|erd|architecture|bar|line|pie|scatter|mind|matrix|venn|fishbone|sequence|prisma)\b/,
+    /^(flow|bpmn|org|usecase|activity|erd|architecture|class|dfd|state|tree|bar|histogram|line|pie|scatter|mind|matrix|venn|fishbone|sequence|prisma|quadrant|gantt)\b/,
   );
   return head ? (head[1] as DiagramCategory) : null;
 }
@@ -699,7 +1007,7 @@ export function parseDSL(code: string): AST {
   const category = detectCategory(code);
   if (!category) {
     throw new DSLError(
-      'A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are flow, bpmn, org, usecase, activity, erd, architecture, sequence, bar, line, pie, scatter, mind, matrix, venn, fishbone and prisma',
+      'A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are flow, bpmn, org, usecase, activity, erd, architecture, class, dfd, state, tree, sequence, bar, histogram, line, pie, scatter, mind, matrix, venn, fishbone, prisma, quadrant and gantt',
       1,
     );
   }
@@ -716,7 +1024,11 @@ export function parseDSL(code: string): AST {
               ? parseSequence(code)
               : category === "prisma"
                 ? parsePrisma(code)
-                : parseFishbone(code);
+                : category === "quadrant"
+                  ? parseQuadrant(code)
+                  : category === "gantt"
+                    ? parseGantt(code)
+                    : parseFishbone(code);
     return { category, title: figure.title, nodes: [], edges: [], figure };
   }
   const nodeTypes =
@@ -732,6 +1044,14 @@ export function parseDSL(code: string): AST {
         ? ERD_NODE_TYPES
         : category === "architecture"
           ? ARCHITECTURE_NODE_TYPES
+        : category === "class"
+          ? CLASS_NODE_TYPES
+        : category === "dfd"
+          ? DFD_NODE_TYPES
+        : category === "state"
+          ? STATE_NODE_TYPES
+        : category === "tree"
+          ? TREE_NODE_TYPES
         : BPMN_NODE_TYPES;
   return new Parser(tokenize(code), category, nodeTypes).parse();
 }

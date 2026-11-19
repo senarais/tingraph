@@ -53,6 +53,29 @@ export type ActivityNodeType =
 export type ErdNodeType = "entity" | "weak";
 export type ArchitectureNodeType = "zone" | "client" | "service" | "database" | "storage" | "queue" | "cloud" | "external";
 
+/**
+ * UML class: the classifier boxes. Each is the same three compartments; the
+ * keyword only decides the stereotype written above the name.
+ */
+export type ClassNodeType = "class" | "interface" | "abstract" | "enum";
+
+/**
+ * A data flow diagram in Gane–Sarson notation: the process that changes data,
+ * the external entity it comes from or goes to, and the store it rests in.
+ * (`process` and `entity` are spelled the same as a flowchart step and an ERD
+ * table; the category is what tells them apart.)
+ */
+export type DfdNodeType = "process" | "entity" | "store";
+
+/**
+ * UML state machine: the states, and the pseudostates a transition starts
+ * from, ends on, branches at, splits at and joins at.
+ */
+export type StateNodeType = "initial" | "final" | "state" | "choice" | "fork" | "join";
+
+/** A tree: a branch that has something under it, and the leaf a path ends on. */
+export type TreeNodeType = "node" | "leaf";
+
 export type EdgeKind = "sequence" | "association";
 
 export type NodeType =
@@ -62,9 +85,18 @@ export type NodeType =
   | UseCaseNodeType
   | ActivityNodeType
   | ErdNodeType
-  | ArchitectureNodeType;
+  | ArchitectureNodeType
+  | ClassNodeType
+  | DfdNodeType
+  | StateNodeType
+  | TreeNodeType;
 
-/** A sub-role listed inside an org box, e.g. one lab under a lab head. */
+/**
+ * A row listed inside a box. An org box lists sub-roles (`label` the role,
+ * `name` who holds it); a class lists members (`label` is `attr` or `method`,
+ * `name` the member as written); a state lists its internal activities
+ * (`label` is `entry`, `do` or `exit`, `name` what runs).
+ */
 export interface DSLEntry {
   label: string;
   name?: string;
@@ -91,9 +123,9 @@ export interface DSLNode {
   label: string;
   /** id of the container this node sits in: a BPMN lane, an activity column, a use case boundary */
   lane?: string;
-  /** org: the person holding the role */
+  /** org: the person holding the role; dfd: the number or code in the id cell */
   name?: string;
-  /** org: sub-roles listed inside the same box */
+  /** org: sub-roles; class: members; state: internal activities */
   entries?: DSLEntry[];
   /** erd: the rows inside the entity box */
   fields?: DSLField[];
@@ -130,6 +162,9 @@ export interface DSLEdge {
   fromPort?: string;
   toPort?: string;
   label?: string;
+  /** class: the multiplicity written at each end, e.g. "1" and "0..*" */
+  fromEnd?: string;
+  toEnd?: string;
   kind?: EdgeKind;
   /**
    * Which of the notation's lines this is, from `lib/connectors.ts`, when the
@@ -156,6 +191,10 @@ export const GRAPH_CATEGORIES = [
   "activity",
   "erd",
   "architecture",
+  "class",
+  "dfd",
+  "state",
+  "tree",
 ] as const;
 
 export type GraphCategory = (typeof GRAPH_CATEGORIES)[number];
@@ -172,6 +211,8 @@ export const FIGURE_KINDS = [
   "fishbone",
   "sequence",
   "prisma",
+  "quadrant",
+  "gantt",
 ] as const;
 
 export type FigureKind = (typeof FIGURE_KINDS)[number];

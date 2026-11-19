@@ -42,6 +42,8 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
   const { options } = spec;
   const palette = effectivePalette(spec);
   const bar = spec.kind === "bar";
+  // a histogram is one distribution: it has no second series to add
+  const histogram = spec.kind === "histogram";
   const line = spec.kind === "line";
   const pie = spec.kind === "pie";
   const scatter = spec.kind === "scatter";
@@ -207,10 +209,12 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
             </div>
           ))}
         </div>
-        <SlabButton onClick={addSeries} className="mt-2">
-          <Plus size={12} />
-          Add a series
-        </SlabButton>
+        {!histogram && (
+          <SlabButton onClick={addSeries} className="mt-2">
+            <Plus size={12} />
+            Add a series
+          </SlabButton>
+        )}
         {spec.series.some((entry) => entry.color) && (
           <button
             type="button"

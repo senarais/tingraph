@@ -18,6 +18,10 @@ import { buildSequenceSkeletons } from "@/lib/sequence/build-sequence";
 import { blankSequence } from "@/lib/sequence/spec";
 import { buildPrismaSkeletons } from "@/lib/prisma/build-prisma";
 import { blankPrisma } from "@/lib/prisma/spec";
+import { buildQuadrantSkeletons } from "@/lib/quadrant/build-quadrant";
+import { blankQuadrant } from "@/lib/quadrant/spec";
+import { buildGanttSkeletons } from "@/lib/gantt/build-gantt";
+import { blankGantt } from "@/lib/gantt/spec";
 
 /**
  * The one place that knows which figure is which.
@@ -55,6 +59,7 @@ const CHART: Record<ChartKind, FigureDef> = {
   line: chartDef("line"),
   pie: chartDef("pie"),
   scatter: chartDef("scatter"),
+  histogram: chartDef("histogram"),
 };
 
 function chartDef(kind: ChartKind): FigureDef {
@@ -102,6 +107,16 @@ export const FIGURES: Partial<Record<DiagramCategory, FigureDef>> = {
     label: "PRISMA diagram",
     build: buildPrismaSkeletons as FigureDef["build"],
     blank: blankPrisma,
+  },
+  quadrant: {
+    label: "Quadrant",
+    build: buildQuadrantSkeletons as FigureDef["build"],
+    blank: blankQuadrant,
+  },
+  gantt: {
+    label: "Gantt chart",
+    build: buildGanttSkeletons as FigureDef["build"],
+    blank: blankGantt,
   },
 };
 

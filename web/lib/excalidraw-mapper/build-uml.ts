@@ -37,14 +37,14 @@ import { wrapByWidth } from "@/lib/layout/text";
 
 const ACTION_ROUNDNESS = { type: 3, value: 14 } as const;
 
-interface Piece {
+export interface Piece {
   unit: string;
   parent?: string;
   theme: Theme;
   id: (part: string) => string;
 }
 
-function shape(piece: Piece, body: Record<string, unknown>): ExcalidrawElementSkeleton {
+export function shape(piece: Piece, body: Record<string, unknown>): ExcalidrawElementSkeleton {
   return {
     ...ACADEMIC_MONOCHROME_THEME,
     roughness: piece.theme.roughness,
@@ -62,7 +62,7 @@ function shape(piece: Piece, body: Record<string, unknown>): ExcalidrawElementSk
 }
 
 /** A caption written on the paper rather than bound inside a shape. */
-function caption(
+export function caption(
   piece: Piece,
   lines: string[],
   at: { x: number; y: number },
@@ -99,7 +99,7 @@ function caption(
  * reaching back to the origin, and everything that reads an element's box
  * would read it wrong.
  */
-function stroke(
+export function stroke(
   piece: Piece,
   points: Array<[number, number]>,
   options: { width?: number; mark?: "lane" | "frame" } = {},
@@ -128,7 +128,7 @@ function stroke(
   });
 }
 
-function maker(unit: string, theme: Theme, parent?: string): Piece {
+export function maker(unit: string, theme: Theme, parent?: string): Piece {
   let n = 0;
   return { unit, parent, theme, id: (part) => `${unit}-${part}-${n++}` };
 }

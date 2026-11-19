@@ -7,16 +7,17 @@ paths in this file are relative to `web/`.
 
 A diagram editor. The reader writes a small DSL, Tingraph parses it, lays it
 out, and draws it onto an Excalidraw canvas; from that moment the sheet is
-theirs to edit by hand. Seventeen notations ship today, in two families:
+theirs to edit by hand. Twenty-four notations ship today, in two families:
 
 - **graphs** — `flow` (flowchart), `bpmn` (BPMN 2.0 with pools and lanes),
   `org` (org chart), `usecase` (UML use case), `activity` (UML activity with
-  partitions), `erd` (entity relationship) and `architecture` (placed systems
-  and components): elements joined by connectors,
-  edited one at a time.
-- **figures** — `bar`, `line`, `pie`, `scatter`, `mind` (mind map), `matrix`
-  (matrix table), `venn`, `fishbone`, `sequence` (UML sequence) and `prisma`
-  (PRISMA 2020 flow): one object, drawn.
+  partitions), `erd` (entity relationship), `architecture` (placed systems
+  and components), `class` (UML class), `dfd` (data flow, Gane–Sarson),
+  `state` (UML state machine) and `tree` (decision tree, WBS, hierarchy):
+  elements joined by connectors, edited one at a time.
+- **figures** — `bar`, `histogram`, `line`, `pie`, `scatter`, `mind` (mind map), `matrix`
+  (matrix table), `venn`, `fishbone`, `sequence` (UML sequence), `prisma`
+  (PRISMA 2020 flow), `quadrant` (2×2) and `gantt`: one object, drawn.
 
 **Which family a notation belongs in is the first decision, and the only one
 that is hard to undo.** A notation whose elements can be anywhere on the sheet
@@ -70,7 +71,8 @@ up: `lib/layout/text.ts` measures a caption without a browser, and
 `lib/layout/graph.ts` holds the ranking and the top-down routing a flowchart
 and an activity diagram share. `build-skeletons.ts` does the same on the way
 out — `lib/excalidraw-mapper/theme.ts` is what every notation draws with, and
-`build-uml.ts` is the three UML graphs' own shapes.
+`build-uml.ts` is the three UML graphs' own shapes, and `build-graphs.ts` the
+class, DFD, state and tree shapes, put together from the same pieces.
 
 The pipeline runs once, when the reader presses Generate — in the source
 drawer, or on an answer from Tingraph AI (`generate()` in
@@ -237,7 +239,8 @@ Two rules follow from this and are easy to break by accident:
   the same element. Never copy a mark onto something new without renaming it.
 - The unit name each notation stamps a node with comes from `nodeUnit` in
   `lib/canvas/units.ts`: `bpmn-<id>`, `org-<id>`, `uc-<id>`, `act-<id>`,
-  `erd-<id>`, `arch-<id>`, `flow-node-<id>`. Connectors from the source use `flow-<index>`;
+  `erd-<id>`, `arch-<id>`, `class-<id>`, `dfd-<id>`, `state-<id>`, `tree-<id>`,
+  `flow-node-<id>`. Connectors from the source use `flow-<index>`;
   ones drawn by hand use `line-<random>`.
 - A `UnitKind` of `frame` is chrome a notation draws round its elements but
   does not edit on the sheet: a use case boundary, an activity's partitions.
@@ -419,11 +422,47 @@ side by side, the axis that separates them wins instead.
   not follow later manual moves, which the panel reads back from the canvas.
 - **flow** reads down the page, like org, but splits the channel at the
   midpoint instead of hanging it off a rail.
+- **tree** hangs its children off a rail the way org does (`railBetween`).
+  `layout-tree.ts` is a tidy tree, not dagre: a leaf takes its own width, a
+  branch the width of its subtree, and stands centred over it; every box on a
+  level starts on one line. Only solid branches place boxes; a dashed cross
+  link joins two already placed.
+- **class**, **dfd** and **state** are ranked by dagre. Class ranks a
+  generalisation or realisation backwards, because it is written child first
+  but a parent stands above its children. State is routed by the flowchart's
+  `routeFlowEdges`, class and DFD by `routeAll`.
+
+**Some lines never share a stretch.** A DFD data flow, a state transition and
+every class relation except generalisation and realisation are named, so two
+merged into one would leave a name with no line of its own. `keepsApart` and
+`mayShare` in `lib/connectors.ts` are the one rule, read by `routeAll`,
+`routeFlowEdges`, the canvas's `routeContext` and the self-check alike. Since
+the router meets a side at its middle, several such ends on one side land on
+one point; `spreadEnds` in `lib/layout/graph.ts` spreads them 14 apart along
+that side after routing, moving each end with the corner after it so the stub
+keeps its length (and its head its size). A box joined to itself — a state's
+self-transition, a class's self-association — is `selfLoop` in
+`lib/canvas/connect.ts`, which `routeBetween` returns whenever both boxes are
+the same, so a re-cut on the canvas draws the same loop.
+
+**A class relation carries its multiplicities** as `fromEnd` / `toEnd` on the
+edge, drawn by `endCaptionSkeletons` as captions in the connector's unit, past
+the head on that end and clear of its width.
 - An org chart turned sideways (`direction: "right"`) reads across; that is why
   `Rules` carries the direction as well as the category.
 
 Adding a notation means adding a branch to `readsUpright`/`railBetween` here,
 and a row to `lib/connectors.ts`. Nothing else needs to know.
+
+### The rules a notation is defined by
+
+`checkNotation` in `lib/parser/parse-dsl.ts` refuses what parses but breaks
+the notation, with the rule in words: a DFD flow with no process at either
+end, a process that only takes in (black hole) or only sends out (miracle); a
+transition into the initial state or out of the final one, an initial state
+with more than one way out, a fork with two in or a join with two out; a tree
+box with two parents, a cycle, or a branch hanging from a leaf. The guide's
+`RULES` say the same things to the reader and to Tingraph AI.
 
 ### When a route is cut again
 
@@ -637,13 +676,15 @@ One folder per notation, and they share nothing but the mechanism:
 
 | Folder | Notation |
 |---|---|
-| `lib/chart/` | `bar`, `line`, `pie`, `scatter` |
+| `lib/chart/` | `bar`, `histogram`, `line`, `pie`, `scatter` (`hasBars`: a histogram is a bar chart on touching bins, one series, always upright, always outlined) |
 | `lib/mind/` | `mind` |
 | `lib/matrix/` | `matrix` |
 | `lib/venn/` | `venn` |
 | `lib/fishbone/` | `fishbone` |
 | `lib/sequence/` | `sequence` |
 | `lib/prisma/` | `prisma` |
+| `lib/gantt/` | `gantt` (tasks in sections over numbered units; a task starts in a unit or `after` others, a milestone lasts 0; `ganttStarts` resolves the dependencies, `withRows` grows the height a row at a time) |
+| `lib/quadrant/` | `quadrant` (2×2: two named axes with low/high ends, four captioned quarters, items at a share 0–100 of each axis) |
 
 Inside each, the split is the same and is worth keeping: `spec.ts` is what the
 thing *is* (no geometry), a layout step is where every mark goes in sheet units
@@ -710,6 +751,8 @@ stay different:
 | `fishbone` | press a bone to put a cause on it, a cause to put what is behind it |
 | `sequence` | drag a lifeline along the top to reorder the participants, press a message to move it up or down the order it is sent in |
 | `prisma` | press any caption to rename it; add or remove a line of the flow, and the box beside a row |
+| `gantt` | drag a bar to move it, its right end to change its length, both snapped to whole units; a task placed `after` another has no body to drag; rename tasks and sections in place; `+` adds a task after the last |
+| `quadrant` | drag an item's dot to place it (read back as shares of each axis); rename any caption in place; `+` under the field plots a new item |
 
 Three things every figure has on the sheet, built from
 `components/editor/figure-handles.tsx` so they behave alike:

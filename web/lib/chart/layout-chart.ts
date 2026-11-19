@@ -11,6 +11,7 @@
 
 import { textWidth } from "@/lib/layout/compute-layout";
 import {
+  hasBars,
   allValues,
   chartStyle,
   effectivePalette,
@@ -617,7 +618,7 @@ function axisDrawing(spec: ChartSpec, box: Rect, place: LegendPlace): ChartDrawi
   };
 
   // --- the marks themselves
-  if (spec.kind === "bar") {
+  if (hasBars(spec.kind)) {
     fillBars(spec, drawing, valueAt, horizontal, palette);
   } else if (spec.kind === "line") {
     fillRuns(spec, drawing, valueAt, palette);
@@ -692,7 +693,7 @@ function axisDrawing(spec: ChartSpec, box: Rect, place: LegendPlace): ChartDrawi
   // --- the value written on every mark, when the reader asks for it
   if (spec.options.values && spec.kind !== "scatter") {
     const piled =
-      spec.kind === "bar" && spec.options.layout === "stacked" && spec.series.length > 1;
+      hasBars(spec.kind) && spec.options.layout === "stacked" && spec.series.length > 1;
     for (const bar of drawing.bars) {
       // a stacked reading is written inside the piece it belongs to, because
       // over the piece is inside the one above it and reads as that one's
@@ -749,7 +750,9 @@ function fillBars(
   const stacked = spec.options.layout === "stacked" && spec.series.length > 1;
   const count = stacked ? 1 : Math.max(1, spec.series.length);
   drawing.slots.forEach((slot, category) => {
-    const band = Math.min(MAX_BAND * count, slot.size * BAND);
+    // a histogram's bins are contiguous, so each bar fills its whole slot
+    const band =
+      spec.kind === "histogram" ? slot.size : Math.min(MAX_BAND * count, slot.size * BAND);
     const each = (band - SPACER * (count - 1)) / count;
     let piled = 0;
     spec.series.forEach((series, index) => {

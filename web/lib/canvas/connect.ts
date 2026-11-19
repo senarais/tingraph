@@ -221,12 +221,14 @@ function tidy(points: Point[]): Point[] {
  *
  * An org chart puts it a fixed distance under the box the line leaves, so
  * every child of that box turns on the same rail and the chart reads as one
- * bracket rather than as a fan. Every other notation splits the gap.
+ * bracket rather than as a fan. A tree hangs its children the same way. Every
+ * other notation splits the gap.
  */
 function railBetween(leave: number, meet: number, category: DiagramCategory): number {
   const span = meet - leave;
   const middle = leave + span / 2;
-  if (category !== "org" || Math.abs(span) < 2 * MIN_GAP + ORG_RAIL) {
+  const hangs = category === "org" || category === "tree";
+  if (!hangs || Math.abs(span) < 2 * MIN_GAP + ORG_RAIL) {
     return middle;
   }
   return leave + Math.sign(span) * ORG_RAIL;
@@ -325,11 +327,38 @@ function sameSide(from: Box, to: Box): Side {
 }
 
 /**
+ * A line from a box back to itself: out of the right side above the middle,
+ * round, and back in below it. The last leg is as long as the head on it
+ * needs, so a self-transition's arrow is drawn whole like any other.
+ */
+export function selfLoop(box: Box, head: number): Point[] {
+  const right = box.x + box.width;
+  const cy = box.y + box.height / 2;
+  const rise = Math.min(14, box.height / 3);
+  const reach = right + Math.max(36, head + 6);
+  return [
+    { x: right, y: cy - rise },
+    { x: reach, y: cy - rise },
+    { x: reach, y: cy + rise },
+    { x: right, y: cy + rise },
+  ].map((point) => ({ x: Math.round(point.x), y: Math.round(point.y) }));
+}
+
+/**
  * The corners of one connector, from the outline of one box to the outline of
  * the other. The first and last points always sit on a box, and every leg runs
  * either straight down the page or straight across it.
  */
 export function routeBetween(from: Box, to: Box, options: RouteOptions): Point[] {
+  // one box joined to itself: a state's self-transition
+  if (
+    from.x === to.x &&
+    from.y === to.y &&
+    from.width === to.width &&
+    from.height === to.height
+  ) {
+    return selfLoop(from, options.heads?.[1] ?? 0);
+  }
   if (readsStraight(options.category)) {
     const here = { x: from.x + from.width / 2, y: from.y + from.height / 2 };
     const there = { x: to.x + to.width / 2, y: to.y + to.height / 2 };

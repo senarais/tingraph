@@ -1,5 +1,11 @@
 import { DSLError } from "@/lib/types";
-import { tokenize } from "@/lib/parser/tokens";
+import { tokenize, type Token } from "@/lib/parser/tokens";
+import {
+  defaultGanttOptions,
+  ganttHeight,
+  ganttRows,
+  type GanttSpec,
+} from "@/lib/gantt/spec";
 import { HEX, Reader } from "@/lib/parser/reader";
 import {
   MATRIX_STYLES,
@@ -8,6 +14,13 @@ import {
   type MatrixSpec,
 } from "@/lib/matrix/spec";
 import { VENN_STYLES, defaultVennOptions, type VennSpec } from "@/lib/venn/spec";
+import {
+  QUADRANT_CORNERS,
+  QUADRANT_STYLES,
+  blankQuadrant,
+  type QuadrantCorner,
+  type QuadrantSpec,
+} from "@/lib/quadrant/spec";
 import {
   FISHBONE_STYLES,
   defaultFishboneOptions,
@@ -205,6 +218,207 @@ class MatrixParser extends Reader {
 // --------------------------------------------------------------------- venn
 
 const REGIONS = new Set(["A", "B", "C", "AB", "AC", "BC", "ABC", "out"]);
+
+/**
+ * `quadrant "Title" { x "Effort" "Low" "High"  top-left "Quick wins"  item "Login" 30 80 }`.
+ * An axis is its name and then the words at its low and high ends; a quarter
+ * is named by its corner; an item is plotted at a share of each axis, 0 to 100.
+ */
+class QuadrantParser extends Reader {
+  parse(): QuadrantSpec {
+    const { title, line } = this.open("quadrant");
+    const spec = blankQuadrant();
+    spec.title = title;
+    spec.quarters = {};
+    spec.x = { label: "", low: "", high: "" };
+    spec.y = { label: "", low: "", high: "" };
+    while (!this.peekIs("rbrace")) {
+      const tok = this.peek();
+      if (!tok) {
+        throw new DSLError(`Missing closing "}" for the block opened on line ${line}`, line);
+      }
+      if (tok.kind !== "id") {
+        throw new DSLError(
+          `Expected an axis, a quarter or an item, e.g. top-left "Quick wins", got "${tok.value}"`,
+          tok.line,
+        );
+      }
+      this.advance();
+      if (tok.value === "x" || tok.value === "y") {
+        const label = this.eat("string", `"${tok.value}" takes the axis name, then its low and high ends, e.g. ${tok.value} "Effort" "Low" "High"`).value;
+        const low = this.peekIs("string") ? this.advance().value : "";
+        const high = this.peekIs("string") ? this.advance().value : "";
+        spec[tok.value] = { label, low, high };
+      } else if ((QUADRANT_CORNERS as string[]).includes(tok.value)) {
+        spec.quarters[tok.value as QuadrantCorner] = this.eat(
+          "string",
+          `"${tok.value}" takes a caption in quotes, e.g. ${tok.value} "Quick wins"`,
+        ).value;
+      } else if (tok.value === "item") {
+        const label = this.eat("string", 'An item is written item "Name" across up, e.g. item "Login" 30 80').value;
+        const x = this.amount(tok, "item", 0, 100);
+        const y = this.amount(tok, "item", 0, 100);
+        spec.items.push({ label, x, y });
+      } else if (tok.value === "style") {
+        spec.options.style = this.word(tok, "style", QUADRANT_STYLES.map((entry) => entry.id)) as QuadrantSpec["options"]["style"];
+      } else if (tok.value === "color" || tok.value === "colour") {
+        const hex = this.eat("string", `"${tok.value}" takes a colour in quotes, e.g. ${tok.value} "#2a78d6"`);
+        if (!HEX.test(hex.value)) {
+          throw new DSLError(`"${hex.value}" is not a colour; write it as "#2a78d6"`, hex.line);
+        }
+        spec.options.color = hex.value.toLowerCase();
+      } else if (tok.value === "text") {
+        spec.options.fontSize = this.amount(tok, "text", 9, 22);
+      } else if (tok.value === "size") {
+        spec.options.width = this.amount(tok, "size", 280, 2400);
+        spec.options.height = this.amount(tok, "size", 240, 2400);
+      } else {
+        throw new DSLError(
+          `"${tok.value}" is not part of a quadrant — write x, y, top-left, top-right, bottom-left, bottom-right, item, style, color, text or size`,
+          tok.line,
+        );
+      }
+    }
+    this.close(line);
+    return spec;
+  }
+}
+
+/**
+ * `gantt "Plan" { unit "Week"  section "Research"  task T1 "Survey" 1 3  task T2 "Write" after T1 2 done 40
+ * milestone M1 "Submit" after T2 }`. A task starts in a unit, or after other tasks,
+ * and lasts a whole number of units; a milestone lasts none.
+ */
+class GanttParser extends Reader {
+  parse(): GanttSpec {
+    const { title, line } = this.open("gantt");
+    const spec: GanttSpec = { kind: "gantt", title, sections: [], tasks: [], options: defaultGanttOptions() };
+    let sized = false;
+    const lines = new Map<string, number>();
+    while (!this.peekIs("rbrace")) {
+      const tok = this.peek();
+      if (!tok) {
+        throw new DSLError(`Missing closing "}" for the block opened on line ${line}`, line);
+      }
+      if (tok.kind !== "id") {
+        throw new DSLError(`Expected a section, a task or a milestone, e.g. task T1 "Survey" 1 3, got "${tok.value}"`, tok.line);
+      }
+      this.advance();
+      switch (tok.value) {
+        case "section":
+          spec.sections.push(this.eat("string", 'A section is written section "Name"').value);
+          break;
+        case "task":
+        case "milestone": {
+          const milestone = tok.value === "milestone";
+          const id = this.eat("id", `Expected an id after "${tok.value}", e.g. ${tok.value} T1 "Name"`);
+          if (lines.has(id.value)) {
+            throw new DSLError(`Duplicate id "${id.value}"`, id.line);
+          }
+          lines.set(id.value, id.line);
+          const label = this.peekIs("string") ? this.advance().value : id.value;
+          let start: number | null = null;
+          const after: string[] = [];
+          if (this.peek()?.kind === "id" && this.peek()?.value === "after") {
+            const word = this.advance();
+            // the tasks it follows are the ids on the same line, up to `done`
+            while (
+              this.peek()?.kind === "id" &&
+              this.peek()?.line === word.line &&
+              this.peek()?.value !== "done"
+            ) {
+              after.push(this.advance().value);
+            }
+            if (after.length === 0) {
+              throw new DSLError(`"after" names the tasks it follows, e.g. after T1`, tok.line);
+            }
+          } else {
+            start = this.whole(tok, `${tok.value} ${id.value} needs the unit it starts in, e.g. ${tok.value} ${id.value} "${label}" 1${milestone ? "" : " 3"}, or after another task`, 1);
+          }
+          const length = milestone
+            ? 0
+            : this.whole(tok, `task ${id.value} needs how many units it lasts, e.g. task ${id.value} "${label}" ${start ?? `after ${after.join(" ")}`} 3`, 1);
+          let done = 0;
+          if (this.peek()?.kind === "id" && this.peek()?.value === "done") {
+            if (milestone) {
+              throw new DSLError("A milestone is reached or not; it has no share done", tok.line);
+            }
+            this.advance();
+            done = this.amount(tok, "done", 0, 100);
+          }
+          spec.tasks.push({ id: id.value, label, section: spec.sections.length - 1, start, after, length, done });
+          break;
+        }
+        case "unit":
+          spec.options.unit = this.eat("string", 'unit takes a word in quotes, e.g. unit "Week"').value;
+          break;
+        case "today":
+          spec.options.today = this.whole(tok, "today takes the unit the chart is read in, e.g. today 6", 1);
+          break;
+        case "color":
+        case "colour": {
+          const hex = this.eat("string", `"${tok.value}" takes a colour in quotes, e.g. ${tok.value} "#2a78d6"`);
+          if (!HEX.test(hex.value)) {
+            throw new DSLError(`"${hex.value}" is not a colour; write it as "#2a78d6"`, hex.line);
+          }
+          spec.options.color = hex.value.toLowerCase();
+          break;
+        }
+        case "text":
+          spec.options.fontSize = this.amount(tok, "text", 9, 20);
+          break;
+        case "size":
+          spec.options.width = this.amount(tok, "size", 320, 3000);
+          spec.options.height = this.amount(tok, "size", 160, 3000);
+          sized = true;
+          break;
+        default:
+          throw new DSLError(
+            `"${tok.value}" is not part of a Gantt chart — write section, task, milestone, unit, today, color, text or size`,
+            tok.line,
+          );
+      }
+    }
+    this.close(line);
+
+    // every task it follows exists, and following never comes back round
+    const ids = new Set(spec.tasks.map((task) => task.id));
+    for (const task of spec.tasks) {
+      for (const id of task.after) {
+        if (!ids.has(id)) {
+          throw new DSLError(`${task.id} starts after "${id}", which is not a task here`, lines.get(task.id) ?? line);
+        }
+      }
+    }
+    const byId = new Map(spec.tasks.map((task) => [task.id, task]));
+    for (const task of spec.tasks) {
+      const seen = new Set<string>();
+      const walk = (id: string): void => {
+        if (id === task.id && seen.size > 0) {
+          throw new DSLError(`${task.id} ends up starting after itself; a schedule cannot loop`, lines.get(task.id) ?? line);
+        }
+        if (seen.has(id)) return;
+        seen.add(id);
+        for (const next of byId.get(id)?.after ?? []) walk(next);
+      };
+      for (const next of task.after) walk(next);
+    }
+    if (!sized) {
+      spec.options.height = ganttHeight(ganttRows(spec).length, Boolean(spec.title));
+    }
+    return spec;
+  }
+
+  /** A whole number of units, at least `least`. */
+  private whole(tok: Token, message: string, least: number): number {
+    const next = this.peek();
+    if (!next || next.kind !== "number" || !Number.isInteger(Number(next.value)) || Number(next.value) < least) {
+      throw new DSLError(message, next?.line ?? tok.line);
+    }
+    this.advance();
+    return Number(next.value);
+  }
+}
 
 class VennParser extends Reader {
   parse(): VennSpec {
@@ -529,6 +743,14 @@ class PrismaParser extends Reader {
 
 export function parseMatrix(code: string): MatrixSpec {
   return new MatrixParser(tokenize(code)).parse();
+}
+
+export function parseQuadrant(code: string): QuadrantSpec {
+  return new QuadrantParser(tokenize(code)).parse();
+}
+
+export function parseGantt(code: string): GanttSpec {
+  return new GanttParser(tokenize(code)).parse();
 }
 
 export function parseVenn(code: string): VennSpec {
