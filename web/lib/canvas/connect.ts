@@ -118,10 +118,12 @@ function gap(aStart: number, aSize: number, bStart: number, bSize: number): numb
 function readsUpright(rules: Rules): boolean {
   // an ERD relation joins a key to a key, which is a run across the page, so
   // an ERD reads across the way a BPMN sheet does rather than down
+  // a block diagram's signals run left to right along its forward path
   if (
     rules.category === "bpmn" ||
     rules.category === "usecase" ||
-    rules.category === "erd"
+    rules.category === "erd" ||
+    rules.category === "block"
   ) {
     return false;
   }

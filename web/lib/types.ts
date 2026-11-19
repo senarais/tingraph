@@ -76,6 +76,9 @@ export type StateNodeType = "initial" | "final" | "state" | "choice" | "fork" | 
 /** A tree: a branch that has something under it, and the leaf a path ends on. */
 export type TreeNodeType = "node" | "leaf";
 
+/** A block diagram's elements; `node` is a signal-flow graph's variable. */
+export type BlockNodeType = "block" | "sum" | "point" | "input" | "output" | "node";
+
 export type EdgeKind = "sequence" | "association";
 
 export type NodeType =
@@ -89,7 +92,8 @@ export type NodeType =
   | ClassNodeType
   | DfdNodeType
   | StateNodeType
-  | TreeNodeType;
+  | TreeNodeType
+  | BlockNodeType;
 
 /**
  * A row listed inside a box. An org box lists sub-roles (`label` the role,
@@ -162,9 +166,17 @@ export interface DSLEdge {
   fromPort?: string;
   toPort?: string;
   label?: string;
-  /** class: the multiplicity written at each end, e.g. "1" and "0..*" */
+  /** class: the multiplicity written at each end, e.g. "1" and "0..*"; block: a junction's + or − */
   fromEnd?: string;
   toEnd?: string;
+  /**
+   * The side each end leaves or meets its box by, when the layout decides it
+   * rather than the notation's axis: a block diagram's loop leaves the bottom
+   * of its takeoff point and comes up into the bottom of its junction. Stamped
+   * on the connector, so a re-cut on the sheet keeps it.
+   */
+  fromSide?: "top" | "right" | "bottom" | "left";
+  toSide?: "top" | "right" | "bottom" | "left";
   kind?: EdgeKind;
   /**
    * Which of the notation's lines this is, from `lib/connectors.ts`, when the
@@ -195,6 +207,7 @@ export const GRAPH_CATEGORIES = [
   "dfd",
   "state",
   "tree",
+  "block",
 ] as const;
 
 export type GraphCategory = (typeof GRAPH_CATEGORIES)[number];
@@ -213,6 +226,8 @@ export const FIGURE_KINDS = [
   "prisma",
   "quadrant",
   "gantt",
+  "timeline",
+  "sankey",
 ] as const;
 
 export type FigureKind = (typeof FIGURE_KINDS)[number];

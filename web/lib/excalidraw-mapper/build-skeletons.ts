@@ -62,6 +62,7 @@ import {
   dfdNodeSkeletons,
   stateNodeSkeletons,
   treeNodeSkeletons,
+  blockNodeSkeletons,
 } from "@/lib/excalidraw-mapper/build-graphs";
 
 export { ACADEMIC_MONOCHROME_THEME };
@@ -466,10 +467,12 @@ function edgeSkeleton(
         from: {
           unit: nodeUnit(category, edge.from),
           ...(edge.fromPort ? { port: edge.fromPort } : {}),
+          ...(edge.fromSide ? { side: edge.fromSide } : {}),
         },
         to: {
           unit: nodeUnit(category, edge.to),
           ...(edge.toPort ? { port: edge.toPort } : {}),
+          ...(edge.toSide ? { side: edge.toSide } : {}),
         },
       },
     }),
@@ -979,6 +982,8 @@ function drawNode(
       return stateNodeSkeletons(node, theme);
     case "tree":
       return treeNodeSkeletons(node, theme);
+    case "block":
+      return blockNodeSkeletons(node, theme);
     default:
       return flowNodeSkeletons(node, theme);
   }

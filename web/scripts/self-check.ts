@@ -1,4 +1,10 @@
 import assert from "node:assert";
+import { planTimeline, timeAt } from "@/lib/timeline/build-timeline";
+import type { TimelineSpec } from "@/lib/timeline/spec";
+import { planSankey } from "@/lib/sankey/build-sankey";
+import type { SankeySpec } from "@/lib/sankey/spec";
+import { waterfallRuns } from "@/lib/chart/spec";
+import { BLOCK_TEMPLATE } from "@/lib/templates";
 import { mayShare } from "@/lib/connectors";
 import { planQuadrant, quadrantPoint, quadrantShare } from "@/lib/quadrant/build-quadrant";
 import type { QuadrantSpec } from "@/lib/quadrant/spec";
@@ -2039,6 +2045,69 @@ assert.ok(
 }`).figure as GanttSpec;
   assert.deepEqual(next.tasks[1].after, ["T1"], "after reads the ids on its own line only");
   assert.equal(next.sections[0], "Next", "a section on the next line is still a section");
+}
+
+// --- the seven later notations
+{
+  // a waterfall's runs: a start sets the total, a change steps on from it, a total is the sum so far
+  const fall = parseDSL(`waterfall "w" { "Revenue" 140 start  "Costs" -30  "Margin" total  "Other" 8  "End" total }`).figure as ChartSpec;
+  assert.deepEqual(
+    waterfallRuns(fall).map((run) => [run.from, run.to]),
+    [[0, 140], [140, 110], [0, 110], [110, 118], [0, 118]],
+    "a waterfall steps on from the running total",
+  );
+  expectDSLError(`waterfall "w" { series "A" 1 2 }`, "one run of steps");
+  expectDSLError(`funnel "f" { categories A B }`, "one run of stages");
+  expectDSLError(`radar "r" {
+  categories A B
+  series "S" 1 2
+}`, "at least three axes");
+
+  // a timeline drawn to scale reads each dot back as the time it was drawn at
+  const line = parseDSL(`timeline "t" { event 1957 "A"  event 1961 "B"  event 1969 "C" "note" }`).figure as TimelineSpec;
+  const lined = planTimeline(line, { x: 0, y: 0, width: line.options.width, height: line.options.height });
+  line.events.forEach((event, index) => {
+    const back = timeAt(line, lined, lined.events[index].dot);
+    assert.ok(back !== null && Math.abs(back - (event.at as number)) < 0.01, `timeline dot ${index} reads back as its time`);
+  });
+  for (let a = 0; a < lined.events.length; a++) {
+    for (let b = a + 1; b < lined.events.length; b++) {
+      const one = lined.events[a].block;
+      const two = lined.events[b].block;
+      const clear = one.x + one.width <= two.x || two.x + two.width <= one.x || one.y + one.height <= two.y || two.y + two.height <= one.y;
+      assert.ok(clear, `timeline captions ${a} and ${b} do not overlap`);
+    }
+  }
+  const words = parseDSL(`timeline "t" { event "Mar 2024" "Kick-off"  event 2025 "Launch" }`).figure as TimelineSpec;
+  assert.equal(planTimeline(words, { x: 0, y: 0, width: 600, height: 240 }).range, null, "a time in words draws in sequence");
+
+  // a Sankey's bands are as wide as their flows on one scale, and fill their nodes
+  const sank = parseDSL(`sankey "s" { A -> C 30  B -> C 10  C -> D 25  C -> E 15 }`).figure as SankeySpec;
+  const planned = planSankey(sank, { x: 0, y: 0, width: sank.options.width, height: sank.options.height });
+  const unit = planned.flows[0].width / sank.flows[0].value;
+  sank.flows.forEach((flow, index) =>
+    assert.ok(Math.abs(planned.flows[index].width - flow.value * unit) < 0.01, `sankey band ${index} is to scale`),
+  );
+  const named = (label: string) => planned.nodes[sank.nodes.findIndex((node) => node.label === label)];
+  assert.ok(Math.abs(named("C").box.height - 40 * unit) < 0.02, "a node is as tall as what passes through it");
+  assert.deepEqual(["A", "B", "C", "D", "E"].map((label) => named(label).column), [0, 0, 1, 2, 2], "sankey columns follow the flows");
+  expectDSLError(`sankey "s" { A -> B 1  B -> A 1 }`, "flows back round");
+  expectDSLError(`sankey "s" { A -> B 0 }`, "above 0");
+
+  // a block diagram: the feedback block under the path, the loop out of the
+  // bottom of the takeoff point and up into the bottom of the junction
+  const loop = computeLayout(parseDSL(BLOCK_TEMPLATE));
+  const at = (id: string) => loop.nodes.find((node) => node.id === id)!;
+  assert.ok(at("H").y > at("P").y + at("P").height, "a feedback block stands under the forward path");
+  assert.ok(at("R").x < at("E").x && at("E").x < at("C").x && at("C").x < at("P").x && at("P").x < at("Y").x, "the forward path runs left to right");
+  const back = loop.edges.find((edge) => edge.from === "H" && edge.to === "E")!;
+  const end = back.points[back.points.length - 1];
+  assert.ok(Math.abs(end.y - (at("E").y + at("E").height)) < 0.5, "the loop comes up into the bottom of its junction");
+  assert.equal(back.toEnd, "−", "the loop carries its minus sign");
+  expectDSLError(`block "b" { input R "R"  sum S  block G "G"  output Y "Y"  R -> S  S -> G  G -> Y  G -> S minus }`, "carries its sign");
+  expectDSLError(`block "b" { input R "R"  sum S  block G "G"  R -> S plus  S -> G }`, "two or more signals");
+  expectDSLError(`block "b" { block A "A"  block B "B"  A -> B plus }`, "Only a signal into a summing junction");
+  assert.equal(detectCategory('sankey "x" {'), "sankey", "every notation's keyword is recognised");
 }
 
 console.log("parse + layout self-check: all assertions passed");

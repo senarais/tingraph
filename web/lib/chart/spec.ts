@@ -11,9 +11,28 @@
  * and `build-chart.ts` turns that into shapes, so all of this runs under `tsx`.
  */
 
-export type ChartKind = "bar" | "line" | "pie" | "scatter" | "histogram";
+export type ChartKind =
+  | "bar"
+  | "line"
+  | "pie"
+  | "scatter"
+  | "histogram"
+  | "area"
+  | "waterfall"
+  | "funnel"
+  | "radar";
 
-export const CHART_KINDS: ChartKind[] = ["bar", "line", "pie", "scatter", "histogram"];
+export const CHART_KINDS: ChartKind[] = [
+  "bar",
+  "line",
+  "pie",
+  "scatter",
+  "histogram",
+  "area",
+  "waterfall",
+  "funnel",
+  "radar",
+];
 
 /**
  * The charts whose marks are bars. A histogram is a bar chart whose bars
@@ -24,6 +43,34 @@ export const CHART_KINDS: ChartKind[] = ["bar", "line", "pie", "scatter", "histo
 export function hasBars(kind: ChartKind): boolean {
   return kind === "bar" || kind === "histogram";
 }
+
+/**
+ * The charts that read one sequence of readings rather than series side by
+ * side: a histogram's bins, a waterfall's steps to a total, a funnel's stages.
+ * Each draws one series, so the language and the panel offer no second one.
+ */
+export function isSingleSeries(kind: ChartKind): boolean {
+  return kind === "histogram" || kind === "waterfall" || kind === "funnel";
+}
+
+/**
+ * The charts with no category axis along the bottom: a pie is a circle, a
+ * funnel a stack of centred bars, a radar a wheel of axes. They draw their own
+ * frame, and the axis captions and rules of the others do not apply.
+ */
+export function isAxisless(kind: ChartKind): boolean {
+  return kind === "pie" || kind === "funnel" || kind === "radar";
+}
+
+/**
+ * What one step of a waterfall is. A `change` floats from the running total to
+ * the running total plus its reading. A `total` stands on zero and reaches the
+ * running total, which it works out for itself — a subtotal is never written,
+ * so it can never disagree with the steps above it. A `start` stands on zero
+ * too but carries its own reading, and the running total starts again from it:
+ * an opening balance.
+ */
+export type WaterfallStep = "change" | "total" | "start";
 
 export function isChartKind(value: string): value is ChartKind {
   return (CHART_KINDS as string[]).includes(value);
@@ -117,7 +164,59 @@ export interface ChartSpec {
   categories: string[];
   series: ChartSeries[];
   options: ChartOptions;
+  /** waterfall only: what each category is, in step with `categories` */
+  steps?: WaterfallStep[];
 }
+
+/** A waterfall's steps, one per category, a missing one read as a change. */
+export function stepsOf(spec: ChartSpec): WaterfallStep[] {
+  return spec.categories.map((_, index) => spec.steps?.[index] ?? "change");
+}
+
+/**
+ * Where every step of a waterfall starts and stops. A total's own reading is
+ * the running total, so the values a total holds in the spec are ignored.
+ */
+export function waterfallRuns(spec: ChartSpec): Array<{ from: number; to: number; step: WaterfallStep }> {
+  const values = spec.series[0]?.values ?? [];
+  let running = 0;
+  return stepsOf(spec).map((step, index) => {
+    const value = values[index] ?? 0;
+    if (step === "total") {
+      return { from: 0, to: running, step };
+    }
+    if (step === "start") {
+      running = value;
+      return { from: 0, to: value, step };
+    }
+    const from = running;
+    running += value;
+    return { from, to: running, step };
+  });
+}
+
+/**
+ * A stacked area's readings, piled: for each series, where its band starts and
+ * stops at every category. An overlapping area chart starts every band on zero.
+ */
+export function areaBands(spec: ChartSpec): Array<{ low: number[]; high: number[] }> {
+  const stacked = spec.options.layout === "stacked";
+  const piled = spec.categories.map(() => 0);
+  return spec.series.map((series) =>
+    spec.categories.map((_, at) => series.values[at] ?? 0),
+  ).map((values) => {
+    const low = stacked ? piled.slice() : spec.categories.map(() => 0);
+    const high = values.map((value, at) => low[at] + value);
+    if (stacked) high.forEach((value, at) => (piled[at] = value));
+    return { low, high };
+  });
+}
+
+/** The colours a waterfall tells its three kinds of step apart by. */
+export const WATERFALL_COLOURS = {
+  increase: "#2a78d6",
+  decrease: "#eb6834",
+} as const;
 
 // ------------------------------------------------------------------ colours
 
@@ -319,16 +418,25 @@ export function defaultOptions(kind: ChartKind): ChartOptions {
     palette: "auto",
     color: DEFAULT_MARK,
     // a histogram's bars touch, so they are outlined or they run together
-    style: kind === "pie" ? "plain" : kind === "histogram" ? "framed" : "ruled",
+    style:
+      kind === "pie" || kind === "funnel"
+        ? "plain"
+        : kind === "histogram" || kind === "radar"
+          ? "framed"
+          : "ruled",
     legend: "auto",
-    values: kind === "pie",
-    percent: kind === "pie",
-    grid: kind === "pie" ? "none" : "value",
+    // a waterfall and a funnel are read by their numbers, so they show them
+    values: kind === "pie" || kind === "waterfall" || kind === "funnel",
+    // a funnel's share is of its first stage, which is what conversion means
+    percent: kind === "pie" || kind === "funnel",
+    grid: kind === "pie" || kind === "funnel" ? "none" : "value",
     xTitle: "",
     yTitle: "",
-    markers: true,
+    // an area is read by its bands; a dot on every reading only clutters them
+    markers: kind !== "area",
     curve: false,
-    area: false,
+    // a radar is outlined by default, the formal way; area is its fill
+    area: kind === "area",
     trend: false,
     donut: 0,
     min: null,
@@ -347,13 +455,25 @@ export function legendFor(spec: ChartSpec): LegendPlace {
   if (spec.options.legend !== "auto") {
     return spec.options.legend;
   }
-  return spec.kind !== "pie" && spec.series.length > 1 ? "bottom" : "none";
+  // a waterfall's colours mean increase, decrease and total, so it says which
+  if (spec.kind === "waterfall") {
+    return "bottom";
+  }
+  return spec.kind !== "pie" && spec.kind !== "funnel" && spec.series.length > 1
+    ? "bottom"
+    : "none";
 }
 
 /** Every number a chart holds, for working out where the value axis runs. */
 export function allValues(spec: ChartSpec): number[] {
   if (spec.kind === "scatter") {
     return spec.series.flatMap((series) => (series.points ?? []).map((p) => p.y));
+  }
+  if (spec.kind === "waterfall") {
+    return waterfallRuns(spec).flatMap((run) => [run.from, run.to]);
+  }
+  if (spec.kind === "area") {
+    return areaBands(spec).flatMap((band) => [...band.low, ...band.high]);
   }
   if (hasBars(spec.kind) && spec.options.layout === "stacked") {
     return spec.categories.map((_, index) =>

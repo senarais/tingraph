@@ -830,6 +830,86 @@ export const TREE_TEMPLATE = `tree "Play Outside?" {
 }
 `;
 
+export const AREA_TEMPLATE = `area "Energy use by source" {
+  x "Year"
+  y "TWh"
+  categories 2015 2016 2017 2018 2019 2020
+  series "Coal" 40 38 35 30 26 22
+  series "Gas" 25 27 29 31 33 34
+  series "Renewables" 8 11 14 18 23 29
+  layout stacked
+}
+`;
+
+export const WATERFALL_TEMPLATE = `waterfall "Operating profit, Q3" {
+  y "kUSD"
+  "Revenue" 140 start
+  "Cost of goods" -30
+  "Gross margin" total
+  "Administration" -20
+  "Other income" 8
+  "Operating profit" total
+}
+`;
+
+export const FUNNEL_TEMPLATE = `funnel "Website conversion" {
+  Visits 12000
+  "Product views" 5400
+  "Added to cart" 1900
+  Checkout 820
+  Purchase 610
+}
+`;
+
+export const RADAR_TEMPLATE = `radar "Model comparison" {
+  categories Accuracy Speed Robustness Interpretability Efficiency
+  series "Model A" 8 6 7 5 6
+  series "Model B" 6 9 5 7 8
+  range 0 10
+}
+`;
+
+export const TIMELINE_TEMPLATE = `timeline "The space race" {
+  event 1957 "Sputnik 1" "first artificial satellite"
+  event 1961 "Vostok 1" "first person in orbit"
+  event 1965 "Voskhod 2" "first spacewalk"
+  event 1969 "Apollo 11" "first Moon landing"
+  event 1971 "Salyut 1" "first space station"
+}
+`;
+
+export const SANKEY_TEMPLATE = `sankey "Household energy (PJ)" {
+  unit "PJ"
+  "Natural gas" -> "Electricity" 120
+  "Coal" -> "Electricity" 80
+  "Natural gas" -> "Heat" 40
+  "Electricity" -> "Homes" 70
+  "Electricity" -> "Industry" 60
+  "Electricity" -> "Losses" 70
+  "Heat" -> "Homes" 30
+  "Heat" -> "Losses" 10
+}
+`;
+
+export const BLOCK_TEMPLATE = `block "Closed-loop control" {
+  input R "R(s)"
+  sum E
+  block C "Controller Gc(s)"
+  block P "Plant Gp(s)"
+  point T
+  output Y "Y(s)"
+  block H "Sensor H(s)"
+
+  R -> E plus
+  E -> C "E(s)"
+  C -> P "U(s)"
+  P -> T
+  T -> Y
+  T -> H
+  H -> E minus "B(s)"
+}
+`;
+
 export const TEMPLATES: Record<DiagramCategory, string> = {
   flow: FLOWCHART_TEMPLATE,
   bpmn: BPMN_TEMPLATE,
@@ -855,6 +935,13 @@ export const TEMPLATES: Record<DiagramCategory, string> = {
   histogram: HISTOGRAM_TEMPLATE,
   quadrant: QUADRANT_TEMPLATE,
   gantt: GANTT_TEMPLATE,
+  area: AREA_TEMPLATE,
+  waterfall: WATERFALL_TEMPLATE,
+  funnel: FUNNEL_TEMPLATE,
+  radar: RADAR_TEMPLATE,
+  timeline: TIMELINE_TEMPLATE,
+  sankey: SANKEY_TEMPLATE,
+  block: BLOCK_TEMPLATE,
 };
 
 export const TEMPLATE_LABELS: Record<DiagramCategory, string> = {
@@ -882,4 +969,11 @@ export const TEMPLATE_LABELS: Record<DiagramCategory, string> = {
   histogram: "Histogram",
   quadrant: "Quadrant",
   gantt: "Gantt chart",
+  area: "Area chart",
+  waterfall: "Waterfall chart",
+  funnel: "Funnel chart",
+  radar: "Radar chart",
+  timeline: "Timeline",
+  sankey: "Sankey diagram",
+  block: "Block diagram",
 };

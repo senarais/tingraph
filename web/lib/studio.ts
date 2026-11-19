@@ -53,6 +53,7 @@ const PREFIXES: ReadonlyArray<readonly [string, DiagramCategory]> = [
   ["dfd-", "dfd"],
   ["state-", "state"],
   ["tree-", "tree"],
+  ["blk-", "block"],
 ];
 
 /** The notation a node unit was drawn in, from its name alone. */

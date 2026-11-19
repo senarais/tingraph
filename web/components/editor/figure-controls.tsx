@@ -12,6 +12,8 @@ import SequenceHandles from "@/components/editor/sequence-handles";
 import PrismaHandles from "@/components/editor/prisma-handles";
 import QuadrantHandles from "@/components/editor/quadrant-handles";
 import GanttHandles from "@/components/editor/gantt-handles";
+import TimelineHandles from "@/components/editor/timeline-handles";
+import SankeyHandles from "@/components/editor/sankey-handles";
 import type { CanvasView } from "@/components/editor/pool-controls";
 
 /**
@@ -49,6 +51,10 @@ export default function FigureControls({
     case "line":
     case "pie":
     case "scatter":
+    case "area":
+    case "waterfall":
+    case "funnel":
+    case "radar":
       return (
         <ChartControls api={api} spec={spec} box={box} view={view} onChange={onChange} />
       );
@@ -133,6 +139,22 @@ export default function FigureControls({
           onPick={onPick}
           onChange={onChange}
         />
+      );
+    case "timeline":
+      return (
+        <TimelineHandles
+          api={api}
+          spec={spec}
+          box={box}
+          view={view}
+          picked={picked}
+          onPick={onPick}
+          onChange={onChange}
+        />
+      );
+    case "sankey":
+      return (
+        <SankeyHandles spec={spec} box={box} view={view} picked={picked} onPick={onPick} onChange={onChange} />
       );
     default:
       return (

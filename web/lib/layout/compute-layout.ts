@@ -30,6 +30,7 @@ import { computeErdLayout, erdShapeSize } from "@/lib/layout/layout-erd";
 import { computeArchitectureLayout } from "@/lib/layout/layout-architecture";
 import { classShapeSize, computeClassLayout } from "@/lib/layout/layout-class";
 import { computeDfdLayout, dfdShapeSize } from "@/lib/layout/layout-dfd";
+import { blockShapeSize, computeBlockLayout } from "@/lib/layout/layout-block";
 import { computeStateLayout, stateShapeSize } from "@/lib/layout/layout-state";
 import { computeTreeLayout, treeShapeSize } from "@/lib/layout/layout-tree";
 
@@ -129,6 +130,9 @@ export function shapeFamily(
   if (category === "tree") {
     return type === "leaf" ? "task" : "box";
   }
+  if (category === "block") {
+    return type === "sum" || type === "point" || type === "node" ? "ellipse" : "box";
+  }
   if (category === "architecture") {
     return type === "zone" ? "box" : "task";
   }
@@ -190,6 +194,8 @@ export function nodeSize(
       return stateShapeSize(node);
     case "tree":
       return treeShapeSize(node);
+    case "block":
+      return blockShapeSize(node);
     default:
       return bpmnShapeSize(node.type as NodeType, node.label);
   }
@@ -1271,6 +1277,9 @@ export function computeLayout(
       return computeStateLayout(ast, direction);
     case "tree":
       return computeTreeLayout(ast, direction);
+    case "block":
+      // signals run left to right, whatever way the sheet is set to grow
+      return computeBlockLayout(ast);
     default:
       return computeFlowLayout(ast, direction);
   }

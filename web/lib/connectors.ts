@@ -345,6 +345,22 @@ const ERD: ConnectorKind[] = [
  * offer the instrument at all. A mind map's branches are not connectors —
  * they are part of the map, and the map draws them itself.
  */
+/**
+ * A block diagram has one line: a signal, from one element to the next, with
+ * a filled head. A junction's + and − are written at the end of the signal,
+ * not drawn as a kind of line.
+ */
+const BLOCK: ConnectorKind[] = [
+  {
+    id: "signal",
+    label: "Signal",
+    hint: "from one element to the next",
+    strokeStyle: "solid",
+    startArrowhead: null,
+    endArrowhead: "triangle",
+  },
+];
+
 export const CONNECTORS: Record<DiagramCategory, ConnectorKind[]> = {
   bpmn: BPMN,
   flow: FLOW,
@@ -357,9 +373,16 @@ export const CONNECTORS: Record<DiagramCategory, ConnectorKind[]> = {
   dfd: DFD,
   state: STATE,
   tree: TREE,
+  block: BLOCK,
   sequence: [],
   bar: [],
   histogram: [],
+  area: [],
+  waterfall: [],
+  funnel: [],
+  radar: [],
+  timeline: [],
+  sankey: [],
   line: [],
   pie: [],
   scatter: [],
@@ -384,6 +407,7 @@ const ALL = [
   ...DFD,
   ...STATE,
   ...TREE,
+  ...BLOCK,
 ];
 
 /** The line a notation draws unless the reader picks another, if it draws any. */

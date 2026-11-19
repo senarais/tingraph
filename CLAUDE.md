@@ -7,17 +7,19 @@ paths in this file are relative to `web/`.
 
 A diagram editor. The reader writes a small DSL, Tingraph parses it, lays it
 out, and draws it onto an Excalidraw canvas; from that moment the sheet is
-theirs to edit by hand. Twenty-four notations ship today, in two families:
+theirs to edit by hand. Thirty-one notations ship today, in two families:
 
 - **graphs** — `flow` (flowchart), `bpmn` (BPMN 2.0 with pools and lanes),
   `org` (org chart), `usecase` (UML use case), `activity` (UML activity with
   partitions), `erd` (entity relationship), `architecture` (placed systems
   and components), `class` (UML class), `dfd` (data flow, Gane–Sarson),
-  `state` (UML state machine) and `tree` (decision tree, WBS, hierarchy):
-  elements joined by connectors, edited one at a time.
-- **figures** — `bar`, `histogram`, `line`, `pie`, `scatter`, `mind` (mind map), `matrix`
-  (matrix table), `venn`, `fishbone`, `sequence` (UML sequence), `prisma`
-  (PRISMA 2020 flow), `quadrant` (2×2) and `gantt`: one object, drawn.
+  `state` (UML state machine), `tree` (decision tree, WBS, hierarchy) and
+  `block` (block diagram, control loop, signal-flow graph): elements joined
+  by connectors, edited one at a time.
+- **figures** — `bar`, `histogram`, `line`, `pie`, `scatter`, `area`,
+  `waterfall`, `funnel`, `radar`, `mind` (mind map), `matrix` (matrix table),
+  `venn`, `fishbone`, `sequence` (UML sequence), `prisma` (PRISMA 2020 flow),
+  `quadrant` (2×2), `gantt`, `timeline` and `sankey`: one object, drawn.
 
 **Which family a notation belongs in is the first decision, and the only one
 that is hard to undo.** A notation whose elements can be anywhere on the sheet
@@ -271,7 +273,7 @@ Two rules follow from this and are easy to break by accident:
 - The unit name each notation stamps a node with comes from `nodeUnit` in
   `lib/canvas/units.ts`: `bpmn-<id>`, `org-<id>`, `uc-<id>`, `act-<id>`,
   `erd-<id>`, `arch-<id>`, `class-<id>`, `dfd-<id>`, `state-<id>`, `tree-<id>`,
-  `flow-node-<id>`. Connectors from the source use `flow-<index>`;
+  `blk-<id>`, `flow-node-<id>`. Connectors from the source use `flow-<index>`;
   ones drawn by hand use `line-<random>`.
 - A `UnitKind` of `frame` is chrome a notation draws round its elements but
   does not edit on the sheet: a use case boundary, an activity's partitions.
@@ -476,6 +478,20 @@ side by side, the axis that separates them wins instead.
   then length), within `SEARCH_BUDGET` tries. An outer column is how a box
   whose flows reach several bands keeps them clear of the boxes nearer the
   spine. Routed by `routeAll`.
+- **block** reads left to right, like BPMN, but is not ranked as a whole:
+  a feedback block is fed from the right of its loop and feeds the left, so
+  a ranking stands it past the output. `computeBlockLayout` splits the
+  diagram. The **forward path** — everything reached from an input without a
+  back edge — is laid across the page by dagre. A **feedback element** (one
+  whose signals only go back) stands under the path, between where its loop
+  leaves and where it returns; the narrowest loop stands nearest the path and
+  a wider one round it. A loop leaves the bottom of its takeoff point, comes
+  back right to left and goes up into the bottom of its junction. Those sides
+  are the layout's choice, not the axis's, so the edge carries them as
+  `fromSide` / `toSide` and the connector stamps them as pinned sides, which
+  is what keeps a re-cut on the sheet the same shape. A junction's `+` or
+  `−` is the edge's `toEnd`, drawn by `endCaptionSkeletons` like a class
+  multiplicity. Routed by `routeAll`.
 
 **Some lines never share a stretch.** A DFD data flow, a state transition and
 every class relation except generalisation and realisation are named, so two
@@ -516,7 +532,10 @@ the notation, with the rule in words: a DFD flow with no process at either
 end, a process that only takes in (black hole) or only sends out (miracle); a
 transition into the initial state or out of the final one, an initial state
 with more than one way out, a fork with two in or a join with two out; a tree
-box with two parents, a cycle, or a branch hanging from a leaf. The guide's
+box with two parents, a cycle, or a branch hanging from a leaf; a signal into
+a summing junction with no sign (or a sign on any other), a junction with
+fewer than two in or other than one out, a takeoff point with other than one
+in, anything into an input or out of an output. The guide's
 `RULES` say the same things to the reader and to Tingraph AI.
 
 ### When a route is cut again
@@ -731,7 +750,7 @@ One folder per notation, and they share nothing but the mechanism:
 
 | Folder | Notation |
 |---|---|
-| `lib/chart/` | `bar`, `histogram`, `line`, `pie`, `scatter` (`hasBars`: a histogram is a bar chart on touching bins, one series, always upright, always outlined) |
+| `lib/chart/` | `bar`, `histogram`, `line`, `pie`, `scatter`, `area`, `waterfall`, `funnel`, `radar` (`hasBars`: a histogram is a bar chart on touching bins, one series, always upright, always outlined; `isSingleSeries`: histogram, waterfall and funnel take one series; `isAxisless`: pie, funnel and radar draw no axes. A waterfall's `steps` say which readings are a `start`, a `total` or a change, and `waterfallRuns` turns them into bars from the running total) |
 | `lib/mind/` | `mind` |
 | `lib/matrix/` | `matrix` |
 | `lib/venn/` | `venn` |
@@ -740,6 +759,8 @@ One folder per notation, and they share nothing but the mechanism:
 | `lib/prisma/` | `prisma` |
 | `lib/gantt/` | `gantt` (tasks in sections over numbered units; a task starts in a unit or `after` others, a milestone lasts 0; `ganttStarts` resolves the dependencies, `withRows` grows the height a row at a time) |
 | `lib/quadrant/` | `quadrant` (2×2: two named axes with low/high ends, four captioned quarters, items at a share 0–100 of each axis) |
+| `lib/timeline/` | `timeline` (events at a time; drawn to scale only when every time is a number, `scaleOf`, otherwise in sequence; captions alternate sides and step out a level where they would overlap; `withFit` grows the figure to its captions, never shrinks it) |
+| `lib/sankey/` | `sankey` (flows between nodes named in the source; columns by longest path, sinks in the last; one scale for the whole diagram; a node as tall as the larger of what comes in and goes out; loops refused by `sankeyLoop`, nothing made up to balance a node) |
 
 Inside each, the split is the same and is worth keeping: `spec.ts` is what the
 thing *is* (no geometry), a layout step is where every mark goes in sheet units
@@ -799,7 +820,7 @@ stay different:
 
 | Notation | What the sheet is for |
 |---|---|
-| charts | drag a bar's end, a line's dot, a scatter point, a pie's boundary |
+| charts | drag a bar's end, a line's dot, a scatter point, a pie's boundary, the top of an area band (that band alone, when stacked), a waterfall step (a total is worked out, so it has no grip), a funnel stage's end, a radar dot along its spoke |
 | `mind` | **this is where a mind map is built** — press a branch for its four actions, drag to pin it (its whole subtree follows), press the outward ring to grow a new one, double-click to rename, and swap the shape for a picture |
 | `matrix` | edit any heading or cell in place; add or remove whole rows and columns |
 | `venn` | drag a ring to set the overlap |
@@ -808,6 +829,8 @@ stay different:
 | `prisma` | press any caption to rename it; add or remove a line of the flow, and the box beside a row |
 | `gantt` | drag a bar to move it, its right end to change its length, both snapped to whole units; a task placed `after` another has no body to drag; rename tasks and sections in place; `+` adds a task after the last |
 | `quadrant` | drag an item's dot to place it (read back as shares of each axis); rename any caption in place; `+` under the field plots a new item |
+| `timeline` | drag an event's dot along a rule drawn to scale (read back as its time, whole when every time was; the events are written in time order again on release); rename the title and events in place; `+` past the rule adds an event one step after the last |
+| `sankey` | rename the title and nodes in place (a name another node has is refused, since one name is one node); take a node out with its flows; `+` adds a node fed from the first. Bands are derived, so nothing is dragged; flows are set in the panel |
 
 Three things every figure has on the sheet, built from
 `components/editor/figure-handles.tsx` so they behave alike:

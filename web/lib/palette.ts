@@ -196,6 +196,25 @@ const TREE_GROUPS: PaletteGroup[] = [
   },
 ];
 
+const BLOCK_GROUPS: PaletteGroup[] = [
+  {
+    title: "Forward path",
+    items: [
+      { type: "block", label: "Block", hint: "a transfer function, G(s)", droppable: true },
+      { type: "sum", label: "Summing junction", hint: "adds signals, each + or −", droppable: true },
+      { type: "point", label: "Takeoff point", hint: "copies one signal onto two", droppable: true },
+    ],
+  },
+  {
+    title: "Signals",
+    items: [
+      { type: "input", label: "Input", hint: "where a signal starts, R(s)", droppable: true },
+      { type: "output", label: "Output", hint: "where a signal ends, Y(s)", droppable: true },
+      { type: "node", label: "Node", hint: "a signal-flow graph's variable", droppable: true },
+    ],
+  },
+];
+
 /**
  * A chart has no shapes to drop: what a reader adds to one is a reading, and
  * that is the Chart panel's job rather than the shape drawer's. The rail hides
@@ -213,6 +232,7 @@ export const PALETTE_GROUPS: Record<DiagramCategory, PaletteGroup[]> = {
   dfd: DFD_GROUPS,
   state: STATE_GROUPS,
   tree: TREE_GROUPS,
+  block: BLOCK_GROUPS,
   sequence: [],
   bar: [],
   histogram: [],
@@ -226,6 +246,12 @@ export const PALETTE_GROUPS: Record<DiagramCategory, PaletteGroup[]> = {
   prisma: [],
   quadrant: [],
   gantt: [],
+  area: [],
+  waterfall: [],
+  funnel: [],
+  radar: [],
+  timeline: [],
+  sankey: [],
 };
 
 function idPrefix(type: string): string {
@@ -354,6 +380,12 @@ export function sampleNode(
   if (category === "tree") {
     return { id, type: type as NodeType, label: type === "leaf" ? `Leaf ${counter}` : `Branch ${counter}` };
   }
+  if (category === "block") {
+    // a junction and a point carry no caption: their label is their id
+    const label =
+      type === "block" ? `G${counter}(s)` : type === "input" ? `R${counter}` : type === "output" ? `Y${counter}` : type === "node" ? `x${counter}` : id;
+    return { id, type: type as NodeType, label };
+  }
   const item = PALETTE_GROUPS[category]
     .flatMap((group) => group.items)
     .find((entry) => entry.type === type);
@@ -398,7 +430,9 @@ export function snippetFor(item: PaletteItem, counter: number): string {
     item.type === "decision" ||
     item.type === "merge" ||
     item.type === "fork" ||
-    item.type === "join"
+    item.type === "join" ||
+    item.type === "sum" ||
+    item.type === "point"
   ) {
     return `\n  ${item.type} ${idPrefix(item.type)}${counter}`;
   }

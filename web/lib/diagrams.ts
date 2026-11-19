@@ -1,5 +1,15 @@
 import { DiagramCategory } from "@/lib/types";
-import { ARCHITECTURE_TEMPLATES, STARTERS } from "@/lib/templates";
+import {
+  ARCHITECTURE_TEMPLATES,
+  AREA_TEMPLATE,
+  BLOCK_TEMPLATE,
+  FUNNEL_TEMPLATE,
+  RADAR_TEMPLATE,
+  SANKEY_TEMPLATE,
+  STARTERS,
+  TIMELINE_TEMPLATE,
+  WATERFALL_TEMPLATE,
+} from "@/lib/templates";
 
 /**
  * The notations the site offers, and the ones it has promised. The landing page
@@ -654,6 +664,79 @@ export const READY_DIAGRAMS: DiagramKind[] = [
     parts: ["Four phases", "Records and exclusions", "Counts", "PRISMA 2020 flow"],
     accent: "navy",
     sample: PRISMA_SAMPLE,
+  },
+  {
+    id: "block",
+    name: "Block diagram",
+    family: "Structure",
+    keyword: "block",
+    summary:
+      "Control loops and signal paths: blocks with their transfer functions, summing junctions with their signs, takeoff points and feedback run back under the forward path.",
+    parts: ["Blocks", "Summing junctions", "Takeoff points", "Feedback loops"],
+    accent: "slate",
+    sample: BLOCK_TEMPLATE,
+  },
+  {
+    id: "timeline",
+    name: "Timeline",
+    family: "Thinking",
+    keyword: "timeline",
+    summary:
+      "Events placed along one rule, to scale when their times are numbers or in sequence when they are words, with captions kept clear of each other.",
+    parts: ["To scale or in sequence", "Events and notes", "Across or down", "Drag in time"],
+    accent: "navy",
+    sample: TIMELINE_TEMPLATE,
+  },
+  {
+    id: "sankey",
+    name: "Sankey diagram",
+    family: "Data",
+    keyword: "sankey",
+    summary:
+      "How a quantity divides and combines as it moves: bands as wide as their flows, between nodes as tall as what passes through them.",
+    parts: ["Flows to scale", "Nodes and totals", "Grey or coloured bands", "Units"],
+    accent: "forest",
+    sample: SANKEY_TEMPLATE,
+  },
+  {
+    id: "area",
+    name: "Area chart",
+    family: "Data",
+    keyword: "area",
+    summary: "Quantities over time as filled bands, stacked into a whole or overlapping to compare.",
+    parts: ["Stacked or overlapping", "Curves", "Axis titles", "Drag a reading"],
+    accent: "navy",
+    sample: AREA_TEMPLATE,
+  },
+  {
+    id: "waterfall",
+    name: "Waterfall chart",
+    family: "Data",
+    keyword: "waterfall",
+    summary: "How a starting value becomes an ending one: each gain and loss stepped on from the last, with totals along the way.",
+    parts: ["Increases and decreases", "Totals", "Connector rules", "Signed values"],
+    accent: "oxblood",
+    sample: WATERFALL_TEMPLATE,
+  },
+  {
+    id: "funnel",
+    name: "Funnel chart",
+    family: "Data",
+    keyword: "funnel",
+    summary: "How many are left at each stage of a process, as centred bars with each stage's share of the first.",
+    parts: ["Stages", "Counts", "Share of the first", "Centred bars"],
+    accent: "forest",
+    sample: FUNNEL_TEMPLATE,
+  },
+  {
+    id: "radar",
+    name: "Radar chart",
+    family: "Data",
+    keyword: "radar",
+    summary: "A few things compared across the same criteria, each a polygon on spokes that share one scale.",
+    parts: ["Spokes", "Series polygons", "Filled or outlined", "One scale"],
+    accent: "slate",
+    sample: RADAR_TEMPLATE,
   },
 ];
 

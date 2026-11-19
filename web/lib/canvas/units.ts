@@ -122,6 +122,8 @@ export function nodeUnit(category: DiagramCategory, id: string): string {
       return `state-${id}`;
     case "tree":
       return `tree-${id}`;
+    case "block":
+      return `blk-${id}`;
     default:
       return `flow-node-${id}`;
   }

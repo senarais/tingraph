@@ -7,6 +7,8 @@ import type { SequenceSpec } from "@/lib/sequence/spec";
 import type { PrismaSpec } from "@/lib/prisma/spec";
 import type { QuadrantSpec } from "@/lib/quadrant/spec";
 import type { GanttSpec } from "@/lib/gantt/spec";
+import type { TimelineSpec } from "@/lib/timeline/spec";
+import type { SankeySpec } from "@/lib/sankey/spec";
 
 /**
  * A figure is a notation whose whole state is one object.
@@ -33,7 +35,9 @@ export type FigureSpec =
   | SequenceSpec
   | PrismaSpec
   | QuadrantSpec
-  | GanttSpec;
+  | GanttSpec
+  | TimelineSpec
+  | SankeySpec;
 
 /** Every figure says how big it is drawn, because every figure can be resized. */
 export interface FigureSize {

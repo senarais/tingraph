@@ -1342,6 +1342,163 @@ export function TreeArt({ accent = "slate", className }: ArtProps) {
   );
 }
 
+/* ------------------------------------------------------ the later seven */
+
+export function AreaArt({ accent = "navy", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const xs = [44, 106, 168, 230, 292];
+  const tops = [
+    [128, 120, 112, 100, 92],
+    [96, 84, 80, 64, 52],
+    [70, 56, 44, 34, 22],
+  ];
+  const band = (low: number[] | null, high: number[]) =>
+    `M${xs.map((x, i) => `${x} ${high[i]}`).join("L")}L${
+      low ? [...xs].reverse().map((x, i) => `${x} ${low[xs.length - 1 - i]}`).join("L") : "292 160L44 160"
+    }Z`;
+  return (
+    <Plot ink={ink} className={className}>
+      {tops.map((high, index) => (
+        <path key={index} d={band(index === 0 ? null : tops[index - 1], high)} fill={HUES[index]} fillOpacity={0.72} stroke="none" />
+      ))}
+    </Plot>
+  );
+}
+
+export function WaterfallArt({ accent = "oxblood", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  // [from, to] in chart height, left to right
+  const runs: Array<[number, number, string]> = [
+    [0, 110, "#6b7280"],
+    [110, 86, "#eb6834"],
+    [86, 120, "#2a78d6"],
+    [120, 100, "#eb6834"],
+    [0, 100, "#6b7280"],
+  ];
+  return (
+    <Plot ink={ink} className={className}>
+      {runs.map(([from, to, fill], index) => (
+        <g key={index}>
+          <rect x={58 + index * 48} y={160 - Math.max(from, to)} width={32} height={Math.abs(to - from)} fill={fill} stroke="none" />
+          {index < runs.length - 1 && (
+            <path d={`M${90 + index * 48} ${160 - to}h16`} stroke="#9ca3af" strokeWidth={1} strokeDasharray="3 2" />
+          )}
+        </g>
+      ))}
+    </Plot>
+  );
+}
+
+export function FunnelArt({ accent = "forest", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const widths = [220, 168, 116, 76, 52];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      {widths.map((width, index) => {
+        const y = 18 + index * 30;
+        const next = widths[index + 1];
+        return (
+          <g key={index}>
+            {next && (
+              <path
+                d={`M${160 - width / 2} ${y + 22}L${160 + width / 2} ${y + 22}L${160 + next / 2} ${y + 30}L${160 - next / 2} ${y + 30}Z`}
+                fill={ACCENTS[accent].wash}
+              />
+            )}
+            <rect x={160 - width / 2} y={y} width={width} height={22} fill={ink} />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+export function RadarArt({ accent = "slate", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const spokes = 5;
+  const at = (index: number, reach: number) => {
+    const angle = -Math.PI / 2 + (index * 2 * Math.PI) / spokes;
+    return `${160 + Math.cos(angle) * reach} ${92 + Math.sin(angle) * reach}`;
+  };
+  const ring = (reach: number) => `M${Array.from({ length: spokes }, (_, i) => at(i, reach)).join("L")}Z`;
+  const shape = (values: number[]) => `M${values.map((value, i) => at(i, value * 76)).join("L")}Z`;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      {[0.33, 0.66, 1].map((share) => (
+        <path key={share} d={ring(76 * share)} stroke={SHADE} strokeWidth={1} />
+      ))}
+      {Array.from({ length: spokes }, (_, i) => (
+        <path key={i} d={`M160 92L${at(i, 76)}`} stroke={SHADE} strokeWidth={1} />
+      ))}
+      <path d={shape([0.8, 0.6, 0.7, 0.5, 0.6])} stroke={HUES[0]} strokeWidth={2} fill={HUES[0]} fillOpacity={0.15} />
+      <path d={shape([0.6, 0.9, 0.5, 0.7, 0.8])} stroke={HUES[1]} strokeWidth={2} fill={HUES[1]} fillOpacity={0.15} />
+      <circle cx={160} cy={92} r={2} fill={ink} />
+    </svg>
+  );
+}
+
+export function TimelineArt({ accent = "navy", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const events = [52, 108, 150, 222, 270];
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <Line d="M24 92H292" ink={ink} />
+      <Head x={298} y={92} dir="right" ink={ink} />
+      {events.map((x, index) => {
+        const up = index % 2 === 0;
+        return (
+          <g key={x}>
+            <path d={`M${x} 92V${up ? 60 : 124}`} stroke="#9ca3af" strokeWidth={1} />
+            <rect x={x - 26} y={up ? 30 : 126} width={52} height={8} fill={ink} />
+            <rect x={x - 20} y={up ? 44 : 140} width={40} height={6} fill={SHADE} />
+            <circle cx={x} cy={92} r={5} fill={ink} />
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+export function SankeyArt({ accent = "forest", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  const band = (x1: number, a: number, b: number, x2: number, c: number, d: number) =>
+    `M${x1} ${a}C${(x1 + x2) / 2} ${a} ${(x1 + x2) / 2} ${c} ${x2} ${c}L${x2} ${d}C${(x1 + x2) / 2} ${d} ${(x1 + x2) / 2} ${b} ${x1} ${b}Z`;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <path d={band(48, 20, 80, 152, 20, 80)} fill="#9ca3af" fillOpacity={0.55} />
+      <path d={band(48, 80, 100, 152, 120, 140)} fill="#9ca3af" fillOpacity={0.55} />
+      <path d={band(48, 116, 156, 152, 80, 120)} fill="#9ca3af" fillOpacity={0.55} />
+      <path d={band(164, 20, 70, 268, 14, 64)} fill="#9ca3af" fillOpacity={0.55} />
+      <path d={band(164, 70, 110, 268, 84, 124)} fill="#9ca3af" fillOpacity={0.55} />
+      <path d={band(164, 110, 140, 268, 144, 174)} fill="#9ca3af" fillOpacity={0.55} />
+      {[
+        [36, 20, 60], [36, 116, 40], [152, 20, 120], [268, 14, 50], [268, 84, 40], [268, 144, 30],
+      ].map(([x, y, h]) => (
+        <rect key={`${x}-${y}`} x={x} y={y} width={12} height={h} fill={ink} />
+      ))}
+    </svg>
+  );
+}
+
+export function BlockArt({ accent = "slate", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <Line d="M14 66H58M94 66H122M190 66H292M237 66V136H196M128 136H79V87" ink={ink} />
+      <Head x={64} y={66} dir="right" ink={ink} />
+      <Head x={128} y={66} dir="right" ink={ink} />
+      <Head x={298} y={66} dir="right" ink={ink} />
+      <Head x={190} y={136} dir="left" ink={ink} />
+      <Head x={79} y={81} dir="up" ink={ink} />
+      <circle cx={79} cy={66} r={15} stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+      <path d="M68.4 55.4L89.6 76.6M89.6 55.4L68.4 76.6" stroke={ink} strokeWidth={1} />
+      <rect x={128} y={48} width={62} height={36} stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+      <rect x={128} y={118} width={62} height={36} stroke={ink} strokeWidth={CONNECTOR} fill="#ffffff" />
+      <circle cx={237} cy={66} r={4} fill={ink} />
+    </svg>
+  );
+}
+
 export function DiagramArt({
   id,
   accent,
@@ -1375,6 +1532,13 @@ export function DiagramArt({
   if (id === "dfd") return <DfdArt accent={accent} className={className} />;
   if (id === "state") return <StateArt accent={accent} className={className} />;
   if (id === "tree") return <TreeArt accent={accent} className={className} />;
+  if (id === "area") return <AreaArt accent={accent} className={className} />;
+  if (id === "waterfall") return <WaterfallArt accent={accent} className={className} />;
+  if (id === "funnel") return <FunnelArt accent={accent} className={className} />;
+  if (id === "radar") return <RadarArt accent={accent} className={className} />;
+  if (id === "timeline") return <TimelineArt accent={accent} className={className} />;
+  if (id === "sankey") return <SankeyArt accent={accent} className={className} />;
+  if (id === "block") return <BlockArt accent={accent} className={className} />;
   if (id === "studio") return <StudioArt accent={accent} className={className} />;
   if (id === "system-context") return <ContextArt accent={accent} className={className} />;
   if (id === "container") return <ContainerArt accent={accent} className={className} />;

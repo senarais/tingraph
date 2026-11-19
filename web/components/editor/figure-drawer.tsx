@@ -14,6 +14,8 @@ import FishboneDrawer from "@/components/editor/fishbone-drawer";
 import SequenceDrawer from "@/components/editor/sequence-drawer";
 import PrismaDrawer from "@/components/editor/prisma-drawer";
 import QuadrantDrawer from "@/components/editor/quadrant-drawer";
+import TimelineDrawer from "@/components/editor/timeline-drawer";
+import SankeyDrawer from "@/components/editor/sankey-drawer";
 import GanttDrawer from "@/components/editor/gantt-drawer";
 import { SlabButton } from "@/components/editor/ui";
 
@@ -69,6 +71,10 @@ export default function FigureDrawer({
       case "line":
       case "pie":
       case "scatter":
+      case "area":
+      case "waterfall":
+      case "funnel":
+      case "radar":
         return <ChartDrawer spec={spec} onChange={onChange} />;
       case "mind":
         return (
@@ -86,6 +92,10 @@ export default function FigureDrawer({
         return <QuadrantDrawer spec={spec} onChange={onChange} />;
       case "gantt":
         return <GanttDrawer spec={spec} onChange={onChange} />;
+      case "timeline":
+        return <TimelineDrawer spec={spec} onChange={onChange} />;
+      case "sankey":
+        return <SankeyDrawer spec={spec} onChange={onChange} />;
       default:
         return <FishboneDrawer spec={spec} onChange={onChange} />;
     }

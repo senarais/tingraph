@@ -15,6 +15,13 @@ import {
   PRISMA_TEMPLATE,
   QUADRANT_TEMPLATE,
   GANTT_TEMPLATE,
+  AREA_TEMPLATE,
+  WATERFALL_TEMPLATE,
+  FUNNEL_TEMPLATE,
+  RADAR_TEMPLATE,
+  TIMELINE_TEMPLATE,
+  SANKEY_TEMPLATE,
+  BLOCK_TEMPLATE,
   USECASE_TEMPLATE,
   ACTIVITY_TEMPLATE,
   ERD_TEMPLATE,
@@ -813,6 +820,181 @@ const ARCHITECTURE_SECTIONS: GuideSection[] = [
   ] },
 ];
 
+const AREA_SECTIONS: GuideSection[] = [
+  {
+    title: "Chart",
+    rows: [row('area "Title" {', "open an area chart")],
+  },
+  {
+    title: "Readings",
+    rows: [
+      row("categories 2018 2019 2020", "name the readings along the axis"),
+      row('series "Coal" 40 38 35', "one band across those categories"),
+      row('series "Gas" "#eb6834" 25 27', "a band in a colour of its own"),
+      row("2018 40", "one reading, for a single band"),
+    ],
+  },
+  {
+    title: "Bands",
+    rows: [
+      row("layout stacked", "stacked (each band on the one below) or overlap"),
+      row("curve on", "join the readings with a curve"),
+      row("markers on", "a dot at every reading"),
+    ],
+  },
+  { title: "Axes", rows: AXIS_ROWS },
+  { title: "Look", rows: LOOK_ROWS },
+];
+
+const WATERFALL_SECTIONS: GuideSection[] = [
+  {
+    title: "Chart",
+    rows: [row('waterfall "Title" {', "open a waterfall chart")],
+  },
+  {
+    title: "Steps",
+    rows: [
+      row('"Revenue" 140 start', "a bar from zero; the running total starts here"),
+      row('"Cost of goods" -30', "a change: up when positive, down when negative"),
+      row('"Gross margin" total', "a bar from zero to the running total so far"),
+    ],
+  },
+  {
+    title: "Bars",
+    rows: [row("bars horizontal", "vertical or horizontal")],
+  },
+  { title: "Axes", rows: AXIS_ROWS },
+  { title: "Look", rows: LOOK_ROWS },
+];
+
+const FUNNEL_SECTIONS: GuideSection[] = [
+  {
+    title: "Chart",
+    rows: [row('funnel "Title" {', "open a funnel chart")],
+  },
+  {
+    title: "Stages",
+    rows: [
+      row("Visits 12000", "one stage, named and counted, widest first"),
+      row('"Added to cart" 1900', "a name with a space goes in quotes"),
+    ],
+  },
+  {
+    title: "Funnel",
+    rows: [row("percent on", "write each stage's share of the first")],
+  },
+  { title: "Look", rows: LOOK_ROWS },
+];
+
+const RADAR_SECTIONS: GuideSection[] = [
+  {
+    title: "Chart",
+    rows: [row('radar "Title" {', "open a radar chart")],
+  },
+  {
+    title: "Readings",
+    rows: [
+      row("categories Speed Cost Safety", "name the spokes, three or more"),
+      row('series "Model A" 8 6 7', "one polygon across those spokes"),
+      row('series "B" "#eb6834" 6 9 5', "a polygon in a colour of its own"),
+    ],
+  },
+  {
+    title: "Wheel",
+    rows: [
+      row("area on", "fill each polygon"),
+      row("markers on", "a dot at every reading"),
+      row("range 0 10", "pin where the spokes start and end"),
+    ],
+  },
+  { title: "Look", rows: LOOK_ROWS },
+];
+
+const TIMELINE_SECTIONS: GuideSection[] = [
+  {
+    title: "Figure",
+    rows: [row('timeline "Title" {', "open a timeline")],
+  },
+  {
+    title: "Events",
+    rows: [
+      row('event 1969 "Apollo 11"', "an event at a time written as a number"),
+      row('event 1969 "Apollo 11" "first landing"', "an event with a note under it"),
+      row('event "Mar 2024" "Kick-off"', "a time written as words; drawn in sequence"),
+    ],
+  },
+  {
+    title: "Axis",
+    rows: [
+      row("scale time", "time (gaps to scale) or even (order only)"),
+      row("orientation vertical", "horizontal or vertical"),
+    ],
+  },
+  {
+    title: "Look",
+    rows: [
+      row('color "#2a78d6"', "the colour of the dots and stems"),
+      row("text 13", "caption size, 9 to 22"),
+      row("size 820 300", "width and height on the sheet"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
+const SANKEY_SECTIONS: GuideSection[] = [
+  {
+    title: "Figure",
+    rows: [row('sankey "Title" {', "open a Sankey diagram")],
+  },
+  {
+    title: "Flows",
+    rows: [
+      row('"Gas" -> "Power" 120', "a flow of 120 from one node to another"),
+      row("Coal -> Power 80", "a one-word name needs no quotes"),
+      row('node "Coal" "#555555"', "pin a node's colour"),
+    ],
+  },
+  {
+    title: "Look",
+    rows: [
+      row('unit "PJ"', "written after every value"),
+      row("values off", "leave the totals off the nodes"),
+      row("colors colorful", "ink (grey bands) or colorful (a hue per source)"),
+      row("text 13", "caption size, 9 to 22"),
+      row("size 760 420", "width and height on the sheet"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
+const BLOCK_SECTIONS: GuideSection[] = [
+  {
+    title: "Diagram",
+    rows: [row('block "Title" {', "open a block diagram, control loop or signal-flow graph")],
+  },
+  {
+    title: "Elements",
+    rows: [
+      row('input R "R(s)"', "where a signal starts, drawn as its name"),
+      row('block G "G(s)"', "a block: a transfer function or a stage"),
+      row("sum S", "summing junction (a crossed circle)"),
+      row("point T", "takeoff point: one signal copied onto several lines"),
+      row('output Y "Y(s)"', "where a signal ends, drawn as its name"),
+      row('node X1 "x1"', "a signal-flow graph's variable, a small circle"),
+    ],
+  },
+  {
+    title: "Signals",
+    rows: [
+      row("A -> B", "a signal from A to B"),
+      row('A -> B "U(s)"', "a signal with its name, or a branch gain"),
+      row("A -> S plus", "into a summing junction, added"),
+      row('H -> S minus "B(s)"', "into a summing junction, subtracted, with a name"),
+      row("# comment", "line comment (also //)"),
+    ],
+  },
+];
+
 export const GUIDE_SECTIONS: Record<DiagramCategory, GuideSection[]> = {
   flow: FLOW_SECTIONS,
   bpmn: BPMN_SECTIONS,
@@ -838,6 +1020,13 @@ export const GUIDE_SECTIONS: Record<DiagramCategory, GuideSection[]> = {
   prisma: PRISMA_SECTIONS,
   quadrant: QUADRANT_SECTIONS,
   gantt: GANTT_SECTIONS,
+  area: AREA_SECTIONS,
+  waterfall: WATERFALL_SECTIONS,
+  funnel: FUNNEL_SECTIONS,
+  radar: RADAR_SECTIONS,
+  timeline: TIMELINE_SECTIONS,
+  sankey: SANKEY_SECTIONS,
+  block: BLOCK_SECTIONS,
 };
 
 /** One line of orientation, shown at the top of the guide. */
@@ -866,6 +1055,13 @@ export const GUIDE_INTRO: Record<DiagramCategory, string> = {
   gantt: "Name the unit, open a section, then list its tasks: each starts in a unit or after other tasks, and lasts a whole number of units.",
   quadrant: "Name the two axes and both ends of each, then caption the four quarters and plot any items at a share of each axis.",
   prisma: "Write the counts in the order the review moved through them. Each row is a step in the flow, a side box says what was dropped there, and the four phase bands are read off the rows themselves.",
+  area: "Name the readings along the axis, then one series per band. Stacked bands pile up into the whole; overlapping ones each stand on zero.",
+  waterfall: "Write the steps in order. A number is a change on the running total; `total` draws the total so far as a bar of its own.",
+  funnel: "Write the stages from the widest to the narrowest, one per line. Each bar is as wide as its count.",
+  radar: "Name three or more spokes, then one series per polygon. Every spoke shares one scale, so give the readings the same range.",
+  timeline: "Write one event per line: its time, its caption, and a note if it needs one. Years drawn to scale need numbers; anything else is drawn in order.",
+  sankey: "Write every flow as a source, an arrow, a target and how much. The nodes are made from the names, and each band is as wide as its flow.",
+  block: "Declare the input, the junctions, the blocks, the takeoff points and the output, then wire the signals. Every signal into a junction carries plus or minus.",
 };
 
 /** The rules every chart shares, with the one word that differs filled in. */
@@ -1010,6 +1206,48 @@ export const RULES: Record<DiagramCategory, string[]> = {
     "Flows are declared after the pool block, at the top level, and may cross lanes.",
     "A data object is joined with a dotted association `A -.-> D1`, never with a sequence flow.",
   ],
+  area: CHART_RULES("area", "a band through the readings"),
+  waterfall: [
+    'The file is one `waterfall "Title" { ... }` block. Nothing may sit outside it.',
+    "A step is `Name 40` (a change, negative for a fall), one per line, in the order the total moves through them.",
+    "`Name total` draws the running total so far; it takes no number. `Name 140 start` sets the running total to that value and draws it from zero.",
+    "A waterfall is one run of steps: it takes no `series` or `categories` lines.",
+    "Settings are written as `name value`, in any order, before or after the steps.",
+    "Do not invent settings. Every one the language has is listed above.",
+  ],
+  funnel: [
+    'The file is one `funnel "Title" { ... }` block. Nothing may sit outside it.',
+    "A stage is `Name 1200`, one per line, from the first stage to the last.",
+    "A funnel is one run of stages: it takes no `series`, `categories`, `bars`, `layout` or `grid` lines.",
+    "Settings are written as `name value`, in any order.",
+    "Do not invent settings. Every one the language has is listed above.",
+  ],
+  radar: [
+    'The file is one `radar "Title" { ... }` block. Nothing may sit outside it.',
+    "Name the spokes with `categories`, three or more, then write each thing compared as `series \"Name\" 8 6 7`, one value per spoke.",
+    "Every spoke runs on one scale, so the readings should share a unit; `range 0 10` pins it.",
+    "Settings are written as `name value`, in any order.",
+    "Do not invent settings. Every one the language has is listed above.",
+  ],
+  timeline: FIGURE_RULES("timeline", [
+    "An event is `event` then its time, then its caption in quotes, then optionally a note in quotes on the same line.",
+    "A time written as a plain number (a year, a day) can be drawn to scale. A time in quotes (\"Mar 2024\", \"Phase 2\") is drawn in sequence, and so is the whole timeline if any event has one.",
+    "Events are drawn in the order they are written; write them in time order.",
+  ]),
+  sankey: FIGURE_RULES("sankey", [
+    "A flow is `\"Source\" -> \"Target\" 120`: two names and a value above 0. A name with no space needs no quotes.",
+    "Nodes are made from the names in the order they are first written; `node \"Name\" \"#rrggbb\"` pins one's colour.",
+    "Flows run one way: no flow may lead back round to where it started, and a node never flows into itself.",
+    "Write a loss as a flow of its own (`\"Power\" -> \"Losses\" 70`); nothing is added to balance a node.",
+  ]),
+  block: [
+    'The file is one `block "Title" { ... }` block.',
+    "Declare every element before the signals: `input`, `output`, `block`, `sum`, `point` or `node`, then an ID, then a caption in quotes (a `sum` and a `point` need none).",
+    "A signal is `A -> B`; a caption in quotes after it names the signal or gives a branch's gain.",
+    "Every signal into a `sum` ends with `plus` or `minus`, and only those signals do. A summing junction takes two or more signals in and sends one out.",
+    "A `point` takes one signal in and sends it out on two or more lines. Nothing flows into an `input` or out of an `output`.",
+    "The forward path is drawn left to right; a feedback loop runs back under it to the junction it returns to.",
+  ],
   bar: CHART_RULES("bar", "a bar per reading"),
   histogram: [
     'The file is one `histogram "Title" { ... }` block. Nothing may sit outside it.',
@@ -1056,6 +1294,13 @@ export const KEYWORD: Record<DiagramCategory, string> = {
   prisma: "prisma",
   quadrant: "quadrant",
   gantt: "gantt",
+  area: "area",
+  waterfall: "waterfall",
+  funnel: "funnel",
+  radar: "radar",
+  timeline: "timeline",
+  sankey: "sankey",
+  block: "block",
 };
 
 export const EXAMPLE: Record<DiagramCategory, string> = {
@@ -1083,6 +1328,13 @@ export const EXAMPLE: Record<DiagramCategory, string> = {
   prisma: PRISMA_TEMPLATE,
   quadrant: QUADRANT_TEMPLATE,
   gantt: GANTT_TEMPLATE,
+  area: AREA_TEMPLATE,
+  waterfall: WATERFALL_TEMPLATE,
+  funnel: FUNNEL_TEMPLATE,
+  radar: RADAR_TEMPLATE,
+  timeline: TIMELINE_TEMPLATE,
+  sankey: SANKEY_TEMPLATE,
+  block: BLOCK_TEMPLATE,
 };
 
 export const NOTATION_NAME: Record<DiagramCategory, string> = {
@@ -1110,6 +1362,13 @@ export const NOTATION_NAME: Record<DiagramCategory, string> = {
   prisma: "PRISMA 2020 flow diagram",
   quadrant: "2×2 quadrant",
   gantt: "Gantt chart",
+  area: "area chart",
+  waterfall: "waterfall chart",
+  funnel: "funnel chart",
+  radar: "radar chart",
+  timeline: "timeline",
+  sankey: "Sankey diagram",
+  block: "block diagram (control system or signal flow)",
 };
 
 /**

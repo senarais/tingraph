@@ -13,11 +13,15 @@ import { textWidth } from "@/lib/layout/compute-layout";
 import {
   hasBars,
   allValues,
+  areaBands,
   chartStyle,
   effectivePalette,
   legendFor,
   markColor,
   readableOn,
+  toPaper,
+  waterfallRuns,
+  WATERFALL_COLOURS,
   type ChartSpec,
   type LegendPlace,
 } from "@/lib/chart/spec";
@@ -79,6 +83,33 @@ export interface RunMark {
   series: number;
   /** the same run closed down to the baseline, when a wash is asked for */
   area: Pt[] | null;
+  /** how strongly that area is filled, 0–100; a wash when unset */
+  fill?: number;
+}
+
+/** A plain rule a chart draws for itself: a connector, a ring, a spoke. */
+export interface RuleMark {
+  points: Pt[];
+  color: string;
+  width: number;
+  dashed?: boolean;
+}
+
+/** A filled shape a chart draws for itself, closed on its first point. */
+export interface ShapeMark {
+  points: Pt[];
+  fill: string;
+  /** 0–100 */
+  opacity: number;
+  stroke: string;
+  width: number;
+}
+
+/** A place on the sheet a reading can be taken hold of and dragged. */
+export interface GripMark {
+  at: Pt;
+  series: number;
+  category: number;
 }
 
 export interface DotMark {
@@ -123,6 +154,13 @@ export interface ChartDrawing {
   dots: DotMark[];
   slices: SliceMark[];
   trend: [Pt, Pt] | null;
+  /** rules and fills a chart draws for itself, behind the bars and runs */
+  rules: RuleMark[];
+  shapes: ShapeMark[];
+  /** where the readings are dragged, when the marks are not where they sit */
+  grips: GripMark[];
+  /** radar only: the end of each spoke, in category order */
+  spokes: Pt[];
   legend: LegendEntry[];
   captions: Caption[];
   /** true when the category axis runs across the page */
@@ -235,11 +273,51 @@ function longestCategory(spec: ChartSpec): number {
   );
 }
 
+/** What the key names, and in which colour: the series, a pie's slices, a waterfall's kinds of step. */
+function keyLabels(
+  spec: ChartSpec,
+  palette: ReturnType<typeof effectivePalette>,
+  ink = "#1e1e1e",
+): Array<{ label: string; color: string }> {
+  if (spec.kind === "waterfall") {
+    const colours = waterfallColours(spec, ink);
+    return [
+      { label: "Increase", color: colours.increase },
+      { label: "Decrease", color: colours.decrease },
+      { label: "Total", color: colours.total },
+    ];
+  }
+  if (spec.kind === "pie" || spec.kind === "funnel") {
+    return spec.categories.map((label, index) => ({
+      label,
+      color: markColor(palette, spec.options, index, spec.series[0]?.color),
+    }));
+  }
+  return spec.series.map((series, index) => ({
+    label: series.label,
+    color: markColor(palette, spec.options, index, series.color),
+  }));
+}
+
+/**
+ * A waterfall's three colours. A pinned colour, or a single colour the reader
+ * chose, is the increase; a decrease keeps its own hue so the two never read
+ * alike, and a total is drawn in the ink, as IBCS draws it.
+ */
+export function waterfallColours(spec: ChartSpec, ink = "#1e1e1e") {
+  const pinned = spec.series[0]?.color ?? (spec.options.palette === "single" ? spec.options.color : undefined);
+  return {
+    increase: pinned ?? WATERFALL_COLOURS.increase,
+    decrease: WATERFALL_COLOURS.decrease,
+    total: spec.options.palette === "ink" ? "#555555" : ink,
+  };
+}
+
 function legendSize(spec: ChartSpec, place: LegendPlace): { width: number; height: number } {
   if (place === "none") {
     return { width: 0, height: 0 };
   }
-  const labels = spec.kind === "pie" ? spec.categories : spec.series.map((s) => s.label);
+  const labels = keyLabels(spec, effectivePalette(spec)).map((entry) => entry.label);
   const widest = labels.reduce(
     (most, label) => Math.max(most, textWidth(label, AXIS_SIZE)),
     0,
@@ -388,6 +466,10 @@ function pieDrawing(spec: ChartSpec, box: Rect, place: LegendPlace): ChartDrawin
     dots: [],
     slices,
     trend: null,
+    rules: [],
+    shapes: [],
+    grips: [],
+    spokes: [],
     legend: keyEntries(spec, box, place, plot, palette),
     captions,
     across: true,
@@ -420,16 +502,7 @@ function keyEntries(
   if (place === "none") {
     return [];
   }
-  const labels =
-    spec.kind === "pie"
-      ? spec.categories.map((label, index) => ({
-          label,
-          color: markColor(palette, spec.options, index, spec.series[0]?.color),
-        }))
-      : spec.series.map((series, index) => ({
-          label: series.label,
-          color: markColor(palette, spec.options, index, series.color),
-        }));
+  const labels = keyLabels(spec, palette);
   const entries: LegendEntry[] = [];
   if (place === "right") {
     const left = plot.x + plot.width + 16;
@@ -467,7 +540,8 @@ function keyEntries(
 function axisDrawing(spec: ChartSpec, box: Rect, place: LegendPlace): ChartDrawing {
   const palette = effectivePalette(spec);
   const style = chartStyle(spec.options.style);
-  const horizontal = spec.kind === "bar" && spec.options.orientation === "horizontal";
+  const horizontal =
+    (spec.kind === "bar" || spec.kind === "waterfall") && spec.options.orientation === "horizontal";
   const scatter = spec.kind === "scatter";
   const captions: Caption[] = [];
 
@@ -607,6 +681,10 @@ function axisDrawing(spec: ChartSpec, box: Rect, place: LegendPlace): ChartDrawi
     dots: [],
     slices: [],
     trend: null,
+    rules: [],
+    shapes: [],
+    grips: [],
+    spokes: [],
     legend: keyEntries(spec, box, place, plot, palette),
     captions,
     across: !horizontal,
@@ -620,6 +698,10 @@ function axisDrawing(spec: ChartSpec, box: Rect, place: LegendPlace): ChartDrawi
   // --- the marks themselves
   if (hasBars(spec.kind)) {
     fillBars(spec, drawing, valueAt, horizontal, palette);
+  } else if (spec.kind === "waterfall") {
+    fillWaterfall(spec, drawing, valueAt, horizontal);
+  } else if (spec.kind === "area") {
+    fillAreas(spec, drawing, valueAt, palette);
   } else if (spec.kind === "line") {
     fillRuns(spec, drawing, valueAt, palette);
   } else {
@@ -660,13 +742,25 @@ function axisDrawing(spec: ChartSpec, box: Rect, place: LegendPlace): ChartDrawi
         middle: true,
       });
     } else {
-      captions.push({
-        text: slot.label,
-        at: { x: slot.at, y: plot.y + plot.height + (turned ? 8 : 6) },
-        align: turned ? "right" : "center",
-        size: LABEL_SIZE,
-        ...(turned ? { turned: true } : {}),
-      });
+      // Excalidraw turns a caption about its own middle, so a turned one is
+      // anchored there: half its length below the axis, on its slot
+      captions.push(
+        turned
+          ? {
+              text: slot.label,
+              at: { x: slot.at, y: plot.y + plot.height + 8 + textWidth(slot.label, LABEL_SIZE) / 2 },
+              align: "center",
+              size: LABEL_SIZE,
+              middle: true,
+              turned: true,
+            }
+          : {
+              text: slot.label,
+              at: { x: slot.at, y: plot.y + plot.height + 6 },
+              align: "center",
+              size: LABEL_SIZE,
+            },
+      );
     }
   });
 
@@ -691,7 +785,8 @@ function axisDrawing(spec: ChartSpec, box: Rect, place: LegendPlace): ChartDrawi
   });
 
   // --- the value written on every mark, when the reader asks for it
-  if (spec.options.values && spec.kind !== "scatter") {
+  // a waterfall writes its own numbers: a change signed, a total plain
+  if (spec.options.values && spec.kind !== "scatter" && spec.kind !== "waterfall") {
     const piled =
       hasBars(spec.kind) && spec.options.layout === "stacked" && spec.series.length > 1;
     for (const bar of drawing.bars) {
@@ -829,6 +924,320 @@ function fillRuns(
   });
 }
 
+/**
+ * An area chart: every series a band, filled. Stacked, each band stands on the
+ * one below and its top is the running total; overlapping, every band stands
+ * on zero and is filled lightly enough to read the others through. The line
+ * along the top of each band is drawn as a run, so a band always has an edge.
+ */
+function fillAreas(
+  spec: ChartSpec,
+  drawing: ChartDrawing,
+  valueAt: (value: number) => number,
+  palette: ReturnType<typeof effectivePalette>,
+): void {
+  const stacked = spec.options.layout === "stacked";
+  const bands = areaBands(spec);
+  bands.forEach((band, index) => {
+    const series = spec.series[index];
+    const color = markColor(palette, spec.options, index, series.color);
+    const top: Pt[] = drawing.slots.map((slot, at) => ({ x: slot.at, y: valueAt(band.high[at]) }));
+    const bottom: Pt[] = drawing.slots.map((slot, at) => ({ x: slot.at, y: valueAt(band.low[at]) }));
+    if (top.length === 0) {
+      return;
+    }
+    const edge = spec.options.curve ? smooth(top) : top;
+    const floor = spec.options.curve ? smooth(bottom) : bottom;
+    drawing.runs.push({
+      points: edge,
+      color,
+      series: index,
+      // closed on itself, because that is the only shape Excalidraw fills
+      area: [...edge, ...floor.slice().reverse(), edge[0]],
+      fill: stacked ? 72 : 30,
+    });
+    top.forEach((at, category) => {
+      drawing.grips.push({ at, series: index, category });
+      if (spec.options.markers) {
+        drawing.dots.push({ at, color, radius: 3.5, series: index, index: category });
+      }
+    });
+  });
+}
+
+/**
+ * A waterfall: every step a bar from where the running total was to where it
+ * goes, a total standing on zero, and a thin rule from the end of one step to
+ * the start of the next so the eye can carry the level across.
+ */
+function fillWaterfall(
+  spec: ChartSpec,
+  drawing: ChartDrawing,
+  valueAt: (value: number) => number,
+  horizontal: boolean,
+): void {
+  const colours = waterfallColours(spec);
+  const runs = waterfallRuns(spec);
+  const values = spec.series[0]?.values ?? [];
+  let previous: { level: number; end: number } | null = null;
+  drawing.slots.forEach((slot, category) => {
+    const run = runs[category];
+    const band = Math.min(MAX_BAND * 1.4, slot.size * 0.66);
+    const from = valueAt(run.from);
+    const to = valueAt(run.to);
+    const color =
+      run.step === "change"
+        ? run.to >= run.from
+          ? colours.increase
+          : colours.decrease
+        : colours.total;
+    const rect: Rect = horizontal
+      ? { x: round(Math.min(from, to)), y: round(slot.at - band / 2), width: round(Math.max(1, Math.abs(to - from))), height: round(band) }
+      : { x: round(slot.at - band / 2), y: round(Math.min(from, to)), width: round(band), height: round(Math.max(1, Math.abs(to - from))) };
+    drawing.bars.push({
+      rect,
+      color,
+      value: run.step === "change" ? values[category] ?? 0 : run.to,
+      series: 0,
+      category,
+      grip: horizontal ? { x: round(to), y: round(slot.at) } : { x: round(slot.at), y: round(to) },
+    });
+    // a total works itself out, so only a change or a start can be dragged
+    if (run.step !== "total") {
+      drawing.grips.push({ at: horizontal ? { x: round(to), y: round(slot.at) } : { x: round(slot.at), y: round(to) }, series: 0, category });
+    }
+    const level = valueAt(run.to);
+    const start = horizontal ? rect.y : rect.x;
+    if (previous) {
+      drawing.rules.push({
+        points: horizontal
+          ? [{ x: previous.level, y: previous.end }, { x: previous.level, y: start }]
+          : [{ x: previous.end, y: previous.level }, { x: start, y: previous.level }],
+        color: "#8a8a8a",
+        width: 1,
+      });
+    }
+    previous = { level, end: horizontal ? rect.y + rect.height : rect.x + rect.width };
+    if (spec.options.values) {
+      const delta = values[category] ?? 0;
+      const text =
+        run.step === "change" ? `${delta > 0 ? "+" : delta < 0 ? "−" : ""}${round(Math.abs(delta))}` : String(round(run.to));
+      // written past the end the bar grows towards, outside it
+      const up = run.to >= run.from;
+      drawing.captions.push(
+        horizontal
+          ? { text, at: { x: up ? rect.x + rect.width + 5 : rect.x - 5, y: slot.at }, align: up ? "left" : "right", size: AXIS_SIZE, middle: true }
+          : { text, at: { x: slot.at, y: up ? rect.y - 5 - AXIS_SIZE : rect.y + rect.height + 4 }, align: "center", size: AXIS_SIZE },
+      );
+    }
+  });
+}
+
+/**
+ * A funnel: one stage under another, each a bar centred on the same line and as
+ * wide as its reading against the largest, so the narrowing is measured rather
+ * than drawn. A light trapezoid joins each stage to the next, and the drop
+ * between them is what the reader is looking at. Stage names stand to the
+ * left; the reading, and its share of the first stage, to the right.
+ */
+function funnelDrawing(spec: ChartSpec, box: Rect, place: LegendPlace): ChartDrawing {
+  const palette = effectivePalette(spec);
+  const captions: Caption[] = [];
+  const values = (spec.series[0]?.values ?? []).map((value) => Math.max(0, value));
+  const largest = Math.max(...values, 0) || 1;
+  const first = values[0] || 1;
+  let top = box.y + PAD;
+  if (spec.title) {
+    captions.push({ text: spec.title, at: { x: box.x + box.width / 2, y: top }, align: "center", size: TITLE_SIZE });
+    top += TITLE_SIZE + TITLE_GAP;
+  }
+  const key = legendSize(spec, place);
+  const nameWidth = longestCategory(spec) + 14;
+  const figures = spec.categories.map((_, index) => {
+    const value = values[index] ?? 0;
+    return spec.options.values
+      ? `${round(value)}${spec.options.percent && index > 0 ? `  (${shareText({ ...spec, options: { ...spec.options, percent: true } }, value, value / first)})` : ""}`
+      : "";
+  });
+  const valueWidth = figures.reduce((most, text) => Math.max(most, textWidth(text, AXIS_SIZE)), 0) + (figures.some(Boolean) ? 14 : 0);
+  const plot: Rect = {
+    x: box.x + PAD + nameWidth,
+    y: top,
+    width: Math.max(60, box.width - 2 * PAD - nameWidth - valueWidth - key.width),
+    height: Math.max(40, box.y + box.height - PAD - top - (place === "bottom" ? key.height : 0)),
+  };
+  const centre = { x: round(plot.x + plot.width / 2), y: round(plot.y + plot.height / 2) };
+  const count = Math.max(1, spec.categories.length);
+  const slot = plot.height / count;
+  const thick = Math.min(slot * 0.62, 52);
+  const drawing: ChartDrawing = {
+    box,
+    plot,
+    ticks: [],
+    slots: spec.categories.map((label, index) => ({ label, at: round(plot.y + slot * (index + 0.5)), size: slot })),
+    base: plot.y,
+    bars: [],
+    runs: [],
+    dots: [],
+    slices: [],
+    trend: null,
+    rules: [],
+    shapes: [],
+    grips: [],
+    spokes: [],
+    legend: keyEntries(spec, box, place, plot, palette),
+    captions,
+    across: false,
+    hole: 0,
+    scale: { min: 0, max: largest, step: largest },
+    acrossScale: { min: 0, max: largest, step: largest },
+    centre,
+    radius: 0,
+  };
+  let above: Rect | null = null;
+  drawing.slots.forEach((entry, index) => {
+    const value = values[index] ?? 0;
+    const width = Math.max(1, (value / largest) * plot.width);
+    const rect: Rect = { x: round(centre.x - width / 2), y: round(entry.at - thick / 2), width: round(width), height: round(thick) };
+    const color = markColor(palette === "colorful" ? "single" : palette, spec.options, index, spec.series[0]?.color);
+    if (above) {
+      drawing.shapes.push({
+        points: [
+          { x: above.x, y: above.y + above.height },
+          { x: above.x + above.width, y: above.y + above.height },
+          { x: rect.x + rect.width, y: rect.y },
+          { x: rect.x, y: rect.y },
+          { x: above.x, y: above.y + above.height },
+        ],
+        fill: toPaper(color, 0.82),
+        opacity: 100,
+        stroke: "transparent",
+        width: 1,
+      });
+    }
+    drawing.bars.push({ rect, color, value, series: 0, category: index, grip: { x: rect.x + rect.width, y: entry.at } });
+    drawing.grips.push({ at: { x: rect.x + rect.width, y: entry.at }, series: 0, category: index });
+    captions.push({ text: entry.label, at: { x: plot.x - 10, y: entry.at }, align: "right", size: LABEL_SIZE, middle: true });
+    if (figures[index]) {
+      captions.push({ text: figures[index], at: { x: plot.x + plot.width + 10, y: entry.at }, align: "left", size: AXIS_SIZE, middle: true });
+    }
+    above = rect;
+  });
+  return drawing;
+}
+
+/**
+ * A radar: one spoke per category round a common centre, every spoke on the
+ * same scale from zero at the centre, rings at the scale's steps, and each
+ * series a closed polygon through its readings. The first spoke points
+ * straight up and the rest go round clockwise, in the order they are written.
+ */
+function radarDrawing(spec: ChartSpec, box: Rect, place: LegendPlace): ChartDrawing {
+  const palette = effectivePalette(spec);
+  const style = chartStyle(spec.options.style);
+  const captions: Caption[] = [];
+  let top = box.y + PAD + (place === "top" ? legendSize(spec, place).height : 0);
+  if (spec.title) {
+    captions.push({ text: spec.title, at: { x: box.x + box.width / 2, y: top }, align: "center", size: TITLE_SIZE });
+    top += TITLE_SIZE + TITLE_GAP;
+  }
+  const key = legendSize(spec, place);
+  const widest = longestCategory(spec);
+  const room: Rect = {
+    x: box.x + PAD + widest + 8,
+    y: top + LABEL_SIZE + 8,
+    width: Math.max(40, box.width - 2 * PAD - 2 * (widest + 8) - key.width),
+    height: Math.max(40, box.y + box.height - PAD - top - 2 * (LABEL_SIZE + 8) - (place === "bottom" ? key.height : 0)),
+  };
+  const radius = Math.max(10, Math.min(room.width, room.height) / 2);
+  const centre = { x: round(room.x + room.width / 2), y: round(room.y + room.height / 2) };
+  const readings = spec.series.flatMap((series) => series.values);
+  const scale = niceScale(spec.options.min ?? 0, spec.options.max ?? Math.max(...readings, 0), true);
+  if (spec.options.min !== null) scale.min = spec.options.min;
+  if (spec.options.max !== null) scale.max = spec.options.max;
+  const count = Math.max(3, spec.categories.length);
+  const angle = (index: number) => -Math.PI / 2 + (TAU * index) / count;
+  const at = (index: number, value: number): Pt => {
+    const share = Math.max(0, Math.min(1, (value - scale.min) / ((scale.max - scale.min) || 1)));
+    return { x: round(centre.x + Math.cos(angle(index)) * radius * share), y: round(centre.y + Math.sin(angle(index)) * radius * share) };
+  };
+  const drawing: ChartDrawing = {
+    box,
+    plot: { x: centre.x - radius, y: centre.y - radius, width: radius * 2, height: radius * 2 },
+    ticks: [],
+    slots: spec.categories.map((label, index) => ({ label, at: index, size: 0 })),
+    base: centre.y,
+    bars: [],
+    runs: [],
+    dots: [],
+    slices: [],
+    trend: null,
+    rules: [],
+    shapes: [],
+    grips: [],
+    spokes: spec.categories.map((_, index) => at(index, scale.max)),
+    legend: [],
+    captions,
+    across: true,
+    hole: 0,
+    scale,
+    acrossScale: scale,
+    centre,
+    radius,
+  };
+  drawing.legend = keyEntries(spec, box, place, drawing.plot, palette);
+  // the rings, at every step of the scale, as polygons through the spokes
+  const showRings = spec.options.grid !== "none" && spec.options.grid !== "category";
+  for (let value = scale.min + scale.step; value <= scale.max + scale.step / 2; value += scale.step) {
+    const ring = spec.categories.map((_, index) => at(index, value));
+    if (ring.length < 3) break;
+    const outer = Math.abs(value - scale.max) < scale.step / 2;
+    if (showRings || outer) {
+      drawing.rules.push({ points: [...ring, ring[0]], color: outer ? "#8a8a8a" : "#d4d4d4", width: outer ? style.axisWidth : 1 });
+    }
+    // the scale is read off the first spoke, beside it
+    const mark = at(0, value);
+    captions.push({ text: tickLabel(round(value), scale.step), at: { x: mark.x + 5, y: mark.y }, align: "left", size: AXIS_SIZE - 1, middle: true, color: "#8a8a8a" });
+  }
+  // the spokes, and each category's name just past the end of its own
+  spec.categories.forEach((label, index) => {
+    const end = drawing.spokes[index];
+    drawing.rules.push({ points: [centre, end], color: "#bdbdbd", width: 1 });
+    const cos = Math.cos(angle(index));
+    const sin = Math.sin(angle(index));
+    captions.push({
+      text: label,
+      at: { x: round(end.x + cos * 8), y: round(end.y + sin * 8 - (Math.abs(sin) > 0.3 ? (sin < 0 ? LABEL_SIZE : 0) : LABEL_SIZE / 2)) },
+      align: Math.abs(cos) < 0.25 ? "center" : cos > 0 ? "left" : "right",
+      size: LABEL_SIZE,
+    });
+  });
+  // the series, each a closed polygon, outlined; filled when asked for
+  spec.series.forEach((series, index) => {
+    const color = markColor(palette, spec.options, index, series.color);
+    const points = spec.categories.map((_, category) => at(category, series.values[category] ?? 0));
+    if (points.length < 2) return;
+    drawing.shapes.push({
+      points: [...points, points[0]],
+      fill: spec.options.area ? color : "transparent",
+      opacity: spec.options.area ? 22 : 100,
+      stroke: "transparent",
+      width: 1,
+    });
+    drawing.runs.push({ points: [...points, points[0]], color, series: index, area: null });
+    points.forEach((point, category) => {
+      drawing.grips.push({ at: point, series: index, category });
+      if (spec.options.markers) {
+        drawing.dots.push({ at: point, color, radius: 3.5, series: index, index: category });
+      }
+      if (spec.options.values) {
+        captions.push({ text: String(round(series.values[category] ?? 0)), at: { x: point.x, y: point.y - 6 - AXIS_SIZE }, align: "center", size: AXIS_SIZE - 1 });
+      }
+    });
+  });
+  return drawing;
+}
+
 /** A Catmull-Rom run, cut into straight pieces the sheet can hold. */
 function smooth(points: Pt[]): Pt[] {
   if (points.length < 3) {
@@ -925,9 +1334,10 @@ function fillCloud(
 /** Every mark of one chart, drawn into `box`. */
 export function layoutChart(spec: ChartSpec, box: Rect): ChartDrawing {
   const place = legendFor(spec);
-  return spec.kind === "pie"
-    ? pieDrawing(spec, box, place)
-    : axisDrawing(spec, box, place);
+  if (spec.kind === "pie") return pieDrawing(spec, box, place);
+  if (spec.kind === "funnel") return funnelDrawing(spec, box, place);
+  if (spec.kind === "radar") return radarDrawing(spec, box, place);
+  return axisDrawing(spec, box, place);
 }
 
 /**

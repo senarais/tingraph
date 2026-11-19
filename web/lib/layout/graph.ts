@@ -1,4 +1,4 @@
-import { routeBetween, runsAlong, selfLoop } from "@/lib/canvas/connect";
+import { routeBetween, runsAlong, selfLoop, type RouteOptions } from "@/lib/canvas/connect";
 import { edgeHeads, edgeLine, keepsApart, mayShare } from "@/lib/connectors";
 import type {
   DiagramCategory,
@@ -574,7 +574,7 @@ export function routeAll<E extends DSLEdge>(
   nodes: readonly PositionedNode[],
   category: DiagramCategory,
   direction: LayoutDirection,
-  ports?: (edge: E) => { fromAt?: number; toAt?: number },
+  ports?: (edge: E) => Pick<RouteOptions, "fromAt" | "toAt" | "fromSide" | "toSide">,
   /** chrome every route keeps clear of: words to go round, rules not to follow */
   chrome: { avoid: Box[]; lines: Point[][] } = { avoid: [], lines: [] },
 ): Array<E & { points: Point[] }> {

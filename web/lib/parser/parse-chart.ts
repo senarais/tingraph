@@ -4,6 +4,8 @@ import {
   CHART_STYLES,
   PALETTES,
   defaultOptions,
+  isSingleSeries,
+  type WaterfallStep,
   type ChartKind,
   type ChartOptions,
   type ChartPoint,
@@ -56,6 +58,8 @@ class ChartParser {
   private readonly plain: number[] = [];
   private plainPoints: ChartPoint[] = [];
   private sawPlain = false;
+  /** waterfall: what each plain reading is, in step with the categories */
+  private readonly steps: WaterfallStep[] = [];
 
   constructor(
     private readonly tokens: Token[],
@@ -117,12 +121,22 @@ class ChartParser {
       }
     }
 
+    if (this.kind === "radar" && this.categories.length < 3) {
+      throw new DSLError(
+        "A radar needs at least three axes, e.g. categories Speed Accuracy Cost",
+        keyword.line,
+      );
+    }
+
     return {
       kind: this.kind,
       title: title.value,
       categories: this.categories,
       series: this.series,
       options: this.options,
+      ...(this.kind === "waterfall"
+        ? { steps: this.categories.map((_, index) => this.steps[index] ?? "change") }
+        : {}),
     };
   }
 
@@ -156,12 +170,29 @@ class ChartParser {
       );
     }
     const label = this.advance();
+    // a waterfall's subtotal is worked out, never written: `"Gross margin" total`
+    if (this.kind === "waterfall" && this.peekWord("total")) {
+      this.advance();
+      this.categories.push(label.value);
+      this.plain.push(0);
+      this.steps[this.categories.length - 1] = "total";
+      this.sawPlain = true;
+      return;
+    }
     const value = this.eat(
       "number",
-      `Expected a number after "${label.value}", e.g. ${label.value} 40`,
+      this.kind === "waterfall"
+        ? `Expected a number or "total" after "${label.value}", e.g. ${label.value} 40`
+        : `Expected a number after "${label.value}", e.g. ${label.value} 40`,
     );
     this.categories.push(label.value);
     this.plain.push(Number(value.value));
+    // `"Opening balance" 140 start` stands on zero and the running total starts from it
+    if (this.kind === "waterfall") {
+      const start = this.peekWord("start") && this.tokens[this.pos].line === value.line;
+      if (start) this.advance();
+      this.steps[this.categories.length - 1] = start ? "start" : "change";
+    }
     this.sawPlain = true;
   }
 
@@ -173,6 +204,20 @@ class ChartParser {
         'A histogram draws one distribution: write one bin per line, e.g. "10-20" 14',
         tok.line,
       );
+    }
+    if (isSingleSeries(this.kind) && this.kind !== "histogram" && (name === "series" || name === "categories")) {
+      throw new DSLError(
+        this.kind === "waterfall"
+          ? 'A waterfall is one run of steps: write one per line, e.g. Revenue 140, or "Gross margin" total'
+          : 'A funnel is one run of stages: write one per line, e.g. Visits 1200',
+        tok.line,
+      );
+    }
+    if ((this.kind === "funnel" || this.kind === "radar" || this.kind === "area") && name === "bars") {
+      throw new DSLError(`"bars" belongs to a bar chart or a waterfall`, tok.line);
+    }
+    if (this.kind === "funnel" && (name === "layout" || name === "grid")) {
+      throw new DSLError(`A funnel has no ${name === "layout" ? "layout" : "rules"} to set; its stages are always centred`, tok.line);
     }
     if (this.kind === "histogram" && (name === "bars" || name === "layout")) {
       throw new DSLError(`A histogram's bars always stand upright side by side; "${name}" belongs to a bar chart`, tok.line);
@@ -191,10 +236,13 @@ class ChartParser {
         ]) as ChartOptions["orientation"];
         return;
       case "layout":
-        this.options.layout = this.oneOf(tok, name, [
-          "grouped",
-          "stacked",
-        ]) as ChartOptions["layout"];
+        // an area chart's bands either pile up or overlap, which is grouped
+        this.options.layout =
+          this.kind === "area"
+            ? this.oneOf(tok, name, ["stacked", "overlap"]) === "stacked"
+              ? "stacked"
+              : "grouped"
+            : (this.oneOf(tok, name, ["grouped", "stacked"]) as ChartOptions["layout"]);
         return;
       case "colors":
       case "colours":
@@ -359,6 +407,11 @@ class ChartParser {
   }
 
   // ------------------------------------------------------------- small parts
+
+  private peekWord(word: string): boolean {
+    const tok = this.tokens[this.pos];
+    return tok !== undefined && tok.kind === "id" && tok.value === word;
+  }
 
   private labelAhead(): boolean {
     const tok = this.tokens[this.pos];

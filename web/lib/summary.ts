@@ -46,6 +46,12 @@ export function summarise(ast: AST): string {
     const named = Object.values(figure.quarters).filter(Boolean).length;
     return `${named} quarters · ${figure.items.length} items`;
   }
+  if (figure.kind === "timeline") {
+    return `${figure.events.length} events`;
+  }
+  if (figure.kind === "sankey") {
+    return `${figure.nodes.length} nodes · ${figure.flows.length} flows`;
+  }
   const chart = figure;
   if (chart.kind === "scatter") {
     const points = chart.series.reduce(
@@ -57,6 +63,9 @@ export function summarise(ast: AST): string {
   if (chart.kind === "histogram") {
     return `${chart.categories.length} bins`;
   }
-  const marks = chart.kind === "pie" ? "slices" : "readings";
+  if (chart.kind === "waterfall" || chart.kind === "funnel") {
+    return `${chart.categories.length} ${chart.kind === "funnel" ? "stages" : "steps"}`;
+  }
+  const marks = chart.kind === "pie" ? "slices" : chart.kind === "radar" ? "spokes" : "readings";
   return `${chart.categories.length} ${marks} · ${chart.series.length} series`;
 }

@@ -39,6 +39,13 @@ const CATEGORIES: DiagramCategory[] = [
   "prisma",
   "quadrant",
   "gantt",
+  "area",
+  "waterfall",
+  "funnel",
+  "radar",
+  "timeline",
+  "sankey",
+  "block",
 ];
 
 function requested(value: string | string[] | undefined): DiagramCategory | undefined {

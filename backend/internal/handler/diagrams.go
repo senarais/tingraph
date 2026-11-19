@@ -23,7 +23,8 @@ var diagramCategories = map[string]bool{
 	"scatter": true, "mind": true, "matrix": true, "venn": true, "fishbone": true,
 	"architecture": true, "prisma": true, "class": true, "dfd": true, "state": true,
 	"tree": true, "histogram": true, "quadrant": true,
-	"gantt": true,
+	"gantt": true, "area": true, "waterfall": true, "funnel": true, "radar": true,
+	"timeline": true, "sankey": true, "block": true,
 	// a Studio sheet holds drawings in several notations; it has no source
 	"studio": true,
 }

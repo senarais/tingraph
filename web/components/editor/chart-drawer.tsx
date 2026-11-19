@@ -5,9 +5,13 @@ import {
   CHART_STYLES,
   PALETTES,
   effectivePalette,
+  isSingleSeries,
   markColor,
+  stepsOf,
+  waterfallRuns,
   type ChartSeries,
   type ChartSpec,
+  type WaterfallStep,
 } from "@/lib/chart/spec";
 import { Field, Segmented, SlabButton, Tick } from "@/components/editor/ui";
 import {
@@ -42,11 +46,17 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
   const { options } = spec;
   const palette = effectivePalette(spec);
   const bar = spec.kind === "bar";
-  // a histogram is one distribution: it has no second series to add
-  const histogram = spec.kind === "histogram";
   const line = spec.kind === "line";
   const pie = spec.kind === "pie";
   const scatter = spec.kind === "scatter";
+  const area = spec.kind === "area";
+  const waterfall = spec.kind === "waterfall";
+  const funnel = spec.kind === "funnel";
+  const radar = spec.kind === "radar";
+  // a histogram, a waterfall and a funnel read one run: no second series to add
+  const single = isSingleSeries(spec.kind);
+  const steps = waterfall ? stepsOf(spec) : [];
+  const runs = waterfall ? waterfallRuns(spec) : [];
 
   const write = (patch: Partial<ChartSpec>) => onChange({ ...spec, ...patch });
   const set = <K extends keyof ChartSpec["options"]>(
@@ -65,16 +75,23 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
     write({
       categories: [...spec.categories, name],
       series: spec.series.map((entry) => ({ ...entry, values: [...entry.values, 0] })),
+      ...(waterfall ? { steps: [...steps, "change" as const] } : {}),
     });
   };
-  const dropCategory = (index: number) =>
+  const dropCategory = (index: number) => {
+    // a radar is a wheel of at least three spokes
+    if (radar && spec.categories.length <= 3) return;
     write({
       categories: spec.categories.filter((_, at) => at !== index),
       series: spec.series.map((entry) => ({
         ...entry,
         values: entry.values.filter((_, at) => at !== index),
       })),
+      ...(waterfall ? { steps: steps.filter((_, at) => at !== index) } : {}),
     });
+  };
+  const setStep = (index: number, step: WaterfallStep) =>
+    write({ steps: steps.map((entry, at) => (at === index ? step : entry)) });
   const addSeries = () =>
     write({
       series: [
@@ -103,7 +120,7 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
       {/* ------------------------------------------------------- the readings */}
       {!scatter && (
         <Field
-          label={pie ? "Slices" : "Readings"}
+          label={pie ? "Slices" : funnel ? "Stages" : radar ? "Axes and readings" : waterfall ? "Steps" : "Readings"}
           className="border-b-2 border-edge p-3"
         >
           <div className="overflow-x-auto">
@@ -111,8 +128,13 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
               <thead>
                 <tr>
                   <th className="pb-1 text-left">
-                    <Tick>{pie ? "Slice" : "Name"}</Tick>
+                    <Tick>{pie ? "Slice" : funnel ? "Stage" : radar ? "Axis" : "Name"}</Tick>
                   </th>
+                  {waterfall && (
+                    <th className="pb-1 pl-1.5 text-left">
+                      <Tick>Kind</Tick>
+                    </th>
+                  )}
                   {spec.series.map((entry, index) => (
                     <th key={index} className="pb-1 pl-1.5 text-left">
                       <Tick>{entry.label || `Series ${index + 1}`}</Tick>
@@ -137,8 +159,31 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
                         }
                       />
                     </td>
+                    {waterfall && (
+                      <td className="py-0.5 pl-1.5">
+                        <select
+                          value={steps[index]}
+                          onChange={(event) => setStep(index, event.target.value as WaterfallStep)}
+                          aria-label={`What ${name} is`}
+                          title="A change floats from the running total; a total stands on zero and works itself out; a start stands on zero with its own reading"
+                          className="border-2 border-edge bg-white px-1 py-0.5 font-mono text-[11px] text-ink"
+                        >
+                          <option value="change">Change</option>
+                          <option value="total">Total</option>
+                          <option value="start">Start</option>
+                        </select>
+                      </td>
+                    )}
                     {spec.series.map((entry, seriesIndex) => (
                       <td key={seriesIndex} className="py-0.5 pl-1.5">
+                        {waterfall && steps[index] === "total" ? (
+                          <span
+                            className="block w-[68px] px-1 font-mono text-[11.5px] text-ink-faint"
+                            title="A total is the running total; it is worked out, not written"
+                          >
+                            = {round(runs[index]?.to ?? 0)}
+                          </span>
+                        ) : (
                         <NumberField
                           value={entry.values[index] ?? 0}
                           title={`${entry.label}, ${name}`}
@@ -151,6 +196,7 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
                             })
                           }
                         />
+                        )}
                       </td>
                     ))}
                     <td className="py-0.5 pl-1.5">
@@ -169,7 +215,7 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
           </div>
           <SlabButton onClick={addCategory} className="mt-2">
             <Plus size={12} />
-            {pie ? "Add a slice" : "Add a reading"}
+            {pie ? "Add a slice" : funnel ? "Add a stage" : radar ? "Add an axis" : waterfall ? "Add a step" : "Add a reading"}
           </SlabButton>
         </Field>
       )}
@@ -209,7 +255,7 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
             </div>
           ))}
         </div>
-        {!histogram && (
+        {!single && (
           <SlabButton onClick={addSeries} className="mt-2">
             <Plus size={12} />
             Add a series
@@ -339,6 +385,95 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
               />
             </div>
           )}
+        </Field>
+      )}
+
+      {waterfall && (
+        <Field label="Steps" className="border-b-2 border-edge p-3">
+          <Segmented
+            size="sm"
+            value={options.orientation}
+            onChange={(value) => set("orientation", value)}
+            options={[
+              { value: "vertical", label: "Upright" },
+              { value: "horizontal", label: "On its side" },
+            ]}
+          />
+        </Field>
+      )}
+
+      {area && (
+        <Field label="Bands" className="border-b-2 border-edge p-3">
+          <div className="space-y-2">
+            {spec.series.length > 1 && (
+              <Segmented
+                size="sm"
+                value={options.layout}
+                onChange={(value) => set("layout", value)}
+                options={[
+                  { value: "stacked", label: "Stacked" },
+                  { value: "grouped", label: "Overlapping" },
+                ]}
+              />
+            )}
+            <Segmented
+              size="sm"
+              value={options.curve ? "curve" : "straight"}
+              onChange={(value) => set("curve", value === "curve")}
+              options={[
+                { value: "straight", label: "Straight" },
+                { value: "curve", label: "Curved" },
+              ]}
+            />
+            <Segmented
+              size="sm"
+              value={options.markers ? "on" : "off"}
+              onChange={(value) => set("markers", value === "on")}
+              options={[
+                { value: "off", label: "Dots off" },
+                { value: "on", label: "Dots on" },
+              ]}
+            />
+          </div>
+        </Field>
+      )}
+
+      {funnel && (
+        <Field label="Funnel" className="border-b-2 border-edge p-3">
+          <Segmented
+            size="sm"
+            value={options.percent ? "on" : "off"}
+            onChange={(value) => set("percent", value === "on")}
+            options={[
+              { value: "on", label: "Share of first" },
+              { value: "off", label: "Readings only" },
+            ]}
+          />
+        </Field>
+      )}
+
+      {radar && (
+        <Field label="Wheel" className="border-b-2 border-edge p-3">
+          <div className="space-y-2">
+            <Segmented
+              size="sm"
+              value={options.area ? "on" : "off"}
+              onChange={(value) => set("area", value === "on")}
+              options={[
+                { value: "off", label: "Outlined" },
+                { value: "on", label: "Filled" },
+              ]}
+            />
+            <Segmented
+              size="sm"
+              value={options.markers ? "on" : "off"}
+              onChange={(value) => set("markers", value === "on")}
+              options={[
+                { value: "on", label: "Dots on" },
+                { value: "off", label: "Dots off" },
+              ]}
+            />
+          </div>
         </Field>
       )}
 
@@ -500,9 +635,9 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
             { value: "on", label: "On" },
           ]}
         />
-        {!pie && (
+        {!pie && !funnel && (
           <>
-            <Tick className="mb-1.5 mt-3 block">Rules behind the marks</Tick>
+            <Tick className="mb-1.5 mt-3 block">{radar ? "Rings" : "Rules behind the marks"}</Tick>
             <Segmented
               size="sm"
               value={options.grid}
@@ -518,8 +653,9 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
         )}
       </Field>
 
-      {!pie && (
-        <Field label="Axes" className="border-b-2 border-edge p-3">
+      {!pie && !funnel && (
+        <Field label={radar ? "Scale" : "Axes"} className="border-b-2 border-edge p-3">
+          {!radar && (
           <div className="space-y-1.5">
             <TextField
               value={options.xTitle}
@@ -534,7 +670,8 @@ export default function ChartDrawer({ spec, onChange }: ChartDrawerProps) {
               onCommit={(value) => set("yTitle", value)}
             />
           </div>
-          <Tick className="mb-1.5 mt-3 block">Where the value axis runs</Tick>
+          )}
+          <Tick className={`mb-1.5 block ${radar ? "" : "mt-3"}`}>{radar ? "Where every spoke runs" : "Where the value axis runs"}</Tick>
           {options.min === null || options.max === null ? (
             <SlabButton
               onClick={() => {

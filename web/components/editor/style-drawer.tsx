@@ -40,6 +40,7 @@ const FIXED: Record<DiagramCategory, string> = {
   dfd: "The Gane–Sarson outlines — the numbered process, the square entity and the open store — come from the notation.",
   state: "The filled initial dot, the bullseye, the choice diamond, the bars and the rounded state come from UML.",
   tree: "Square rails from each parent come from the notation; a leaf is rounded so a path's end reads at a glance.",
+  block: "The crossed summing junction, the filled takeoff point and every signal's head come from the notation.",
   sequence: FIGURE_FIXED,
   bar: CHART_FIXED,
   histogram: CHART_FIXED,
@@ -53,6 +54,12 @@ const FIXED: Record<DiagramCategory, string> = {
   prisma: PRISMA_FIXED,
   quadrant: FIGURE_FIXED,
   gantt: FIGURE_FIXED,
+  area: CHART_FIXED,
+  waterfall: CHART_FIXED,
+  funnel: CHART_FIXED,
+  radar: CHART_FIXED,
+  timeline: FIGURE_FIXED,
+  sankey: FIGURE_FIXED,
 };
 
 /** A shape and a connector, drawn the way the style would draw them. */

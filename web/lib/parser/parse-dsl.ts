@@ -13,8 +13,13 @@ import {
   NodeType,
   isChart,
   isFigure,
+  FIGURE_KINDS,
+  GRAPH_CATEGORIES,
 } from "@/lib/types";
 import { parseChart } from "@/lib/parser/parse-chart";
+import { parseTimeline } from "@/lib/parser/parse-timeline";
+import { parseSankey } from "@/lib/parser/parse-sankey";
+import { CHART_KINDS } from "@/lib/chart/spec";
 import { parseMind } from "@/lib/parser/parse-mind";
 import {
   parseFishbone,
@@ -120,6 +125,21 @@ const TREE_NODE_TYPES = new Map<string, NodeType>([
   ["leaf", "leaf"],
 ]);
 
+const BLOCK_NODE_TYPES = new Map<string, NodeType>([
+  ["block", "block"],
+  ["sum", "sum"],
+  ["point", "point"],
+  ["input", "input"],
+  ["output", "output"],
+  ["node", "node"],
+]);
+
+/** The sign a signal carries into a summing junction, as written and as drawn. */
+const SIGNS = new Map<string, string>([
+  ["plus", "+"],
+  ["minus", "−"],
+]);
+
 /** The class relations written with a keyword, and the line each one draws. */
 const CLASS_RELATIONS = new Map<string, string>([
   ["inherit", "class-inherit"],
@@ -142,7 +162,7 @@ const CLASS_MEMBERS = new Map<string, string>([
 const STATE_ACTIVITIES = ["entry", "do", "exit"];
 
 /** The notations whose single flows may carry a caption written after them. */
-const TRAILING_CAPTION = new Set<DiagramCategory>(["class", "dfd", "state", "tree"]);
+const TRAILING_CAPTION = new Set<DiagramCategory>(["class", "dfd", "state", "tree", "block"]);
 
 /** The three use case relations that are not a plain association. */
 const USECASE_RELATIONS = new Map<string, { line: string; label: string }>([
@@ -815,6 +835,18 @@ class Parser {
       }
       last.label = caption.value;
     }
+    // block: `Y -> S minus` — the sign the last signal carries into its junction
+    if (this.category === "block") {
+      const last = this.edges[this.edges.length - 1];
+      const tok = this.tokens[this.pos];
+      if (tok?.kind === "id" && SIGNS.has(tok.value)) {
+        this.advance();
+        last.toEnd = SIGNS.get(tok.value);
+        if (this.peekIs("string") && !last.label) {
+          last.label = this.advance().value;
+        }
+      }
+    }
   }
 
   private peekIsArrow(): boolean {
@@ -892,6 +924,49 @@ function checkNotation(category: DiagramCategory, nodes: DSLNode[], edges: DSLEd
   };
   const into = (id: string) => edges.filter((edge) => edge.to === id && edge.kind !== "association");
   const out = (id: string) => edges.filter((edge) => edge.from === id && edge.kind !== "association");
+
+  if (category === "block") {
+    for (const edge of edges) {
+      if (edge.kind === "association") {
+        throw new DSLError("A signal is one solid line, written A -> B", 0);
+      }
+      if (edge.from === edge.to) {
+        throw new DSLError(`${labelOf(edge.from)} feeds itself; a signal joins two elements`, 0);
+      }
+      const target = typeOf.get(edge.to);
+      if (target === "sum" && !edge.toEnd) {
+        throw new DSLError(
+          `Every signal into a summing junction carries its sign: write ${edge.from} -> ${edge.to} plus, or minus`,
+          0,
+        );
+      }
+      if (target !== "sum" && edge.toEnd) {
+        throw new DSLError(`Only a signal into a summing junction carries a sign, not one into ${labelOf(edge.to)}`, 0);
+      }
+    }
+    for (const node of nodes) {
+      const ins = into(node.id).length;
+      const outs = out(node.id).length;
+      if (node.type === "input" && ins > 0) {
+        throw new DSLError(`The input ${labelOf(node.id)} is where a signal starts; nothing flows into it`, 0);
+      }
+      if (node.type === "output" && outs > 0) {
+        throw new DSLError(`The output ${labelOf(node.id)} is where a signal ends; take a signal off it with a point`, 0);
+      }
+      if (node.type === "sum" && (ins < 2 || outs !== 1)) {
+        throw new DSLError(
+          `A summing junction adds two or more signals into one: ${labelOf(node.id)} has ${ins} in and ${outs} out`,
+          0,
+        );
+      }
+      if (node.type === "point" && (ins !== 1 || outs < 1)) {
+        throw new DSLError(
+          `A takeoff point copies one signal onto several lines: ${labelOf(node.id)} has ${ins} in and ${outs} out`,
+          0,
+        );
+      }
+    }
+  }
 
   if (category === "dfd") {
     for (const edge of edges) {
@@ -992,14 +1067,16 @@ function checkNotation(category: DiagramCategory, nodes: DSLNode[], edges: DSLEd
   }
 }
 
+/** Every keyword a drawing may open with, in the order the error lists them. */
+const KEYWORDS: readonly DiagramCategory[] = [...GRAPH_CATEGORIES, ...CHART_KINDS, ...FIGURE_KINDS];
+const HEAD = new RegExp(`^(${KEYWORDS.join("|")})\\b`);
+
 export function detectCategory(code: string): DiagramCategory | null {
   const stripped = code
     .replace(/(?:#|\/\/)[^\n]*/g, "")
     .replace(/"(?:[^"\\\n]|\\.)*"/g, '""')
     .trimStart();
-  const head = stripped.match(
-    /^(flow|bpmn|org|usecase|activity|erd|architecture|class|dfd|state|tree|bar|histogram|line|pie|scatter|mind|matrix|venn|fishbone|sequence|prisma|quadrant|gantt)\b/,
-  );
+  const head = stripped.match(HEAD);
   return head ? (head[1] as DiagramCategory) : null;
 }
 
@@ -1007,7 +1084,7 @@ export function parseDSL(code: string): AST {
   const category = detectCategory(code);
   if (!category) {
     throw new DSLError(
-      'A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are flow, bpmn, org, usecase, activity, erd, architecture, class, dfd, state, tree, sequence, bar, histogram, line, pie, scatter, mind, matrix, venn, fishbone, prisma, quadrant and gantt',
+      `A drawing must open with its notation and a title, e.g. flow "My Chart" { — the notations are ${KEYWORDS.slice(0, -1).join(", ")} and ${KEYWORDS[KEYWORDS.length - 1]}`,
       1,
     );
   }
@@ -1028,7 +1105,11 @@ export function parseDSL(code: string): AST {
                   ? parseQuadrant(code)
                   : category === "gantt"
                     ? parseGantt(code)
-                    : parseFishbone(code);
+                    : category === "timeline"
+                      ? parseTimeline(code)
+                      : category === "sankey"
+                        ? parseSankey(code)
+                        : parseFishbone(code);
     return { category, title: figure.title, nodes: [], edges: [], figure };
   }
   const nodeTypes =
@@ -1052,6 +1133,8 @@ export function parseDSL(code: string): AST {
           ? STATE_NODE_TYPES
         : category === "tree"
           ? TREE_NODE_TYPES
+        : category === "block"
+          ? BLOCK_NODE_TYPES
         : BPMN_NODE_TYPES;
   return new Parser(tokenize(code), category, nodeTypes).parse();
 }

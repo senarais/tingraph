@@ -11,7 +11,7 @@ import {
   type ChartDrawing,
   type Pt,
 } from "@/lib/chart/layout-chart";
-import type { ChartSpec } from "@/lib/chart/spec";
+import { areaBands, waterfallRuns, type ChartSpec } from "@/lib/chart/spec";
 import type { CanvasView } from "@/components/editor/pool-controls";
 
 /**
@@ -64,6 +64,13 @@ function handlesOf(spec: ChartSpec, drawing: ChartDrawing): Handle[] {
       grip: { kind: "point", series: dot.series, index: dot.index },
     }));
   }
+  // the charts that say for themselves where their readings are held
+  if (drawing.grips.length > 0) {
+    return drawing.grips.map((grip) => ({
+      at: grip.at,
+      grip: { kind: "value", series: grip.series, category: grip.category },
+    }));
+  }
   if (spec.kind === "bar" || spec.kind === "histogram") {
     return drawing.bars.map((bar) => ({
       at: bar.grip,
@@ -74,6 +81,44 @@ function handlesOf(spec: ChartSpec, drawing: ChartDrawing): Handle[] {
     at: dot.at,
     grip: { kind: "value", series: dot.series, category: dot.index },
   }));
+}
+
+/**
+ * The number a value grip landed on. Most charts read it straight off the
+ * value axis; a stacked area, a waterfall, a funnel and a radar each measure
+ * it from somewhere else, and this is the one place that knows where.
+ */
+function readingAt(
+  spec: ChartSpec,
+  grip: { series: number; category: number },
+  at: Pt,
+  drawing: ChartDrawing,
+): number {
+  if (spec.kind === "area" && spec.options.layout === "stacked") {
+    const below = areaBands(spec)[grip.series]?.low[grip.category] ?? 0;
+    return readValue(drawing, at) - below;
+  }
+  if (spec.kind === "waterfall") {
+    const run = waterfallRuns(spec)[grip.category];
+    return run.step === "start" ? readValue(drawing, at) : readValue(drawing, at) - run.from;
+  }
+  if (spec.kind === "funnel") {
+    // a stage is centred, so its reading is twice its reach from the middle
+    const reach = Math.max(0, at.x - drawing.centre.x);
+    return ((2 * reach) / Math.max(1, drawing.plot.width)) * drawing.scale.max;
+  }
+  if (spec.kind === "radar") {
+    const end = drawing.spokes[grip.category];
+    if (!end) return 0;
+    const dx = end.x - drawing.centre.x;
+    const dy = end.y - drawing.centre.y;
+    const length = Math.hypot(dx, dy) || 1;
+    // how far along its own spoke the hand is, whatever way it strays
+    const along = ((at.x - drawing.centre.x) * dx + (at.y - drawing.centre.y) * dy) / length;
+    const share = Math.max(0, Math.min(1, along / length));
+    return drawing.scale.min + share * (drawing.scale.max - drawing.scale.min);
+  }
+  return readValue(drawing, at);
 }
 
 /** The chart the reading landed on, as a whole new spec. */
@@ -117,7 +162,7 @@ function withReading(spec: ChartSpec, grip: Grip, at: Pt, drawing: ChartDrawing)
       ),
     };
   }
-  const value = round(readValue(drawing, at));
+  const value = round(readingAt(spec, grip, at, drawing));
   return {
     ...spec,
     series: spec.series.map((entry, index) =>
@@ -193,7 +238,8 @@ export default function ChartControls({
       );
       return;
     }
-    if (spec.categories.length <= 1) {
+    // a radar is a wheel of at least three spokes
+    if (spec.categories.length <= (spec.kind === "radar" ? 3 : 1)) {
       return;
     }
     onChange(
@@ -204,6 +250,7 @@ export default function ChartControls({
           ...entry,
           values: entry.values.slice(0, -1),
         })),
+        ...(spec.steps ? { steps: spec.steps.slice(0, -1) } : {}),
       },
       true,
     );
@@ -237,8 +284,18 @@ export default function ChartControls({
         categories: [...spec.categories, `Item ${spec.categories.length + 1}`],
         series: spec.series.map((entry) => ({
           ...entry,
-          values: [...entry.values, round(entry.values[entry.values.length - 1] ?? 1)],
+          // a funnel's next stage is narrower than the last; a waterfall's
+          // next step is a small change, not a copy of a total
+          values: [
+            ...entry.values,
+            spec.kind === "funnel"
+              ? round((entry.values[entry.values.length - 1] ?? 2) / 2)
+              : spec.kind === "waterfall"
+                ? 1
+                : round(entry.values[entry.values.length - 1] ?? 1),
+          ],
         })),
+        ...(spec.kind === "waterfall" ? { steps: [...(spec.steps ?? spec.categories.map(() => "change" as const)), "change" as const] } : {}),
       },
       true,
     );
@@ -256,8 +313,8 @@ export default function ChartControls({
   // the pair sits just past the last slot, where the next reading will go
   const last = drawing.slots[drawing.slots.length - 1];
   const addAt: Pt | null =
-    spec.kind === "pie"
-      ? { x: drawing.centre.x, y: drawing.centre.y + drawing.radius + 28 }
+    spec.kind === "pie" || spec.kind === "radar"
+      ? { x: drawing.centre.x, y: drawing.centre.y + drawing.radius + 28 + (spec.kind === "radar" ? 14 : 0) }
       : spec.kind === "scatter"
         ? {
             x: drawing.plot.x + drawing.plot.width,

@@ -32,6 +32,7 @@ import {
   stateBoxLayout,
 } from "@/lib/layout/layout-state";
 import { TREE_FONT_SIZE, wrapTreeLabel } from "@/lib/layout/layout-tree";
+import { BLOCK_FONT_SIZE, BLOCK_LINE_HEIGHT, wrapBlockLabel } from "@/lib/layout/layout-block";
 
 /**
  * The four graphs that came after the first seven: the UML class diagram, the
@@ -373,4 +374,99 @@ export function treeNodeSkeletons(
       },
     }),
   ];
+}
+
+// -------------------------------------------------------------------- block
+
+/**
+ * One element of a block diagram. A block is a plain box with its transfer
+ * function in it; a summing junction is a circle crossed through, the way the
+ * control texts draw it, with the signs written at the ends of the signals
+ * coming in; a takeoff point is a filled dot; an input or an output is only
+ * the signal's name, standing where the signal starts or ends; and a
+ * signal-flow graph's node is a small circle with its name over it.
+ */
+export function blockNodeSkeletons(
+  node: PositionedNode,
+  theme: Theme,
+): ExcalidrawElementSkeleton[] {
+  const unit = nodeUnit("block", node.id);
+  const piece = maker(unit, theme);
+  const outline = {
+    id: node.id,
+    x: node.x,
+    y: node.y,
+    width: node.width,
+    height: node.height,
+    ...marked({ unit, kind: "node", core: true }),
+  };
+  switch (node.type) {
+    case "sum": {
+      // a cross at 45°, reaching the circle: (r − r/√2) in from each side
+      const inset = node.width / 2 - node.width / 2 / Math.SQRT2;
+      const near = (along: number) => along + inset;
+      const far = (along: number, size: number) => along + size - inset;
+      const shapes = [
+        shape(piece, { type: "ellipse", ...outline, strokeWidth: CHROME_STROKE_WIDTH }),
+        stroke(piece, [
+          [near(node.x), near(node.y)],
+          [far(node.x, node.width), far(node.y, node.height)],
+        ], { width: 1 }),
+        stroke(piece, [
+          [far(node.x, node.width), near(node.y)],
+          [near(node.x), far(node.y, node.height)],
+        ], { width: 1 }),
+      ];
+      // a junction given a name of its own has it written above
+      if (node.label && node.label !== node.id) {
+        shapes.push(caption(piece, [node.label], { x: node.x + node.width / 2, y: node.y - BLOCK_LINE_HEIGHT - 4 }, BLOCK_FONT_SIZE - 1, "center", "name"));
+      }
+      return shapes;
+    }
+    case "point":
+      return [
+        shape(piece, {
+          type: "ellipse",
+          ...outline,
+          backgroundColor: theme.strokeColor,
+          strokeWidth: 1,
+        }),
+      ];
+    case "node":
+      return [
+        shape(piece, { type: "ellipse", ...outline, strokeWidth: CHROME_STROKE_WIDTH }),
+        caption(piece, [node.label], { x: node.x + node.width / 2, y: node.y - BLOCK_LINE_HEIGHT - 3 }, BLOCK_FONT_SIZE, "center", "name"),
+      ];
+    case "input":
+    case "output":
+      return [
+        shape(piece, {
+          type: "rectangle",
+          ...outline,
+          strokeColor: "transparent",
+          backgroundColor: "transparent",
+          strokeWidth: 1,
+          // a bound caption takes its container's stroke, which is clear here
+          label: {
+            text: node.label,
+            fontSize: BLOCK_FONT_SIZE,
+            fontFamily: theme.fontFamily,
+            strokeColor: theme.strokeColor,
+          },
+        }),
+      ];
+    default:
+      return [
+        shape(piece, {
+          type: "rectangle",
+          ...outline,
+          strokeWidth: CHROME_STROKE_WIDTH,
+          label: {
+            text: wrapBlockLabel(node.label).join("\n"),
+            fontSize: BLOCK_FONT_SIZE,
+            fontFamily: theme.fontFamily,
+          },
+        }),
+      ];
+  }
 }

@@ -2,7 +2,7 @@ import type { ExcalidrawElementSkeleton } from "@excalidraw/excalidraw/data/tran
 import { marked } from "@/lib/canvas/units";
 import { MONOCHROME, type Ink } from "@/lib/ink";
 import { FORMAL, type SheetStyle } from "@/lib/sheet";
-import { chartStyle, isEmptyChart, type ChartSpec } from "@/lib/chart/spec";
+import { chartStyle, isAxisless, isEmptyChart, type ChartSpec } from "@/lib/chart/spec";
 import {
   AXIS_SIZE,
   layoutChart,
@@ -211,8 +211,8 @@ export function buildChartSkeletons(
   let n = 0;
   const id = (part: string) => `${unit}-${part}-${n++}`;
 
-  // --- the rules behind the marks
-  if (spec.kind !== "pie") {
+  // --- the rules behind the marks; a chart with no axes draws its own
+  if (!isAxisless(spec.kind)) {
     const showValue = spec.options.grid === "value" || spec.options.grid === "both";
     const showCategory =
       spec.options.grid === "category" || spec.options.grid === "both";
@@ -285,6 +285,31 @@ export function buildChartSkeletons(
     }
   }
 
+  // --- what the chart draws for itself, behind its marks: a waterfall's
+  // connectors, a funnel's narrowing, a radar's rings, spokes and fills
+  for (const shape of drawing.shapes) {
+    out.push(
+      polyline(
+        id("shape"),
+        shape.points,
+        { stroke: shape.stroke, width: shape.width, fill: shape.fill, opacity: shape.opacity },
+        paper,
+        unit,
+      ),
+    );
+  }
+  for (const line of drawing.rules) {
+    out.push(
+      polyline(
+        id("rule"),
+        line.points,
+        { stroke: line.color, width: line.width, dashed: line.dashed },
+        paper,
+        unit,
+      ),
+    );
+  }
+
   // --- the marks
   for (const bar of drawing.bars) {
     out.push(
@@ -309,7 +334,7 @@ export function buildChartSkeletons(
         polyline(
           id("area"),
           run.area,
-          { stroke: "transparent", width: 1, fill: run.color, opacity: AREA_OPACITY },
+          { stroke: "transparent", width: 1, fill: run.color, opacity: run.fill ?? AREA_OPACITY },
           paper,
           unit,
         ),
