@@ -14,7 +14,7 @@ import {
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement, FileId } from "@excalidraw/excalidraw/element/types";
 import type { BinaryFileData, BinaryFiles, ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import { X } from "lucide-react";
+import { TriangleAlert, X } from "lucide-react";
 import AccessDialog from "@/components/account/access-dialog";
 import { useTingraphStore, type Drawer } from "@/lib/store";
 import { TEMPLATES } from "@/lib/templates";
@@ -257,6 +257,12 @@ export default function EditorRoot({
    * still the source, and goes once the reader has changed it.
    */
   const [failedSource, setFailedSource] = useState<string | null>(null);
+  /**
+   * A failed Generate the open panel would not show: the source drawer only
+   * reports a failure about the source it holds, and the other panels that
+   * generate report none, so it is said over the sheet instead.
+   */
+  const [notice, setNotice] = useState<{ message: string; premium: boolean } | null>(null);
   /** a large diagram waiting on the reader's say-so before it is drawn */
   const [pendingLarge, setPendingLarge] = useState<{
     source: string;
@@ -573,9 +579,11 @@ export default function EditorRoot({
     if (generatingRef.current) {
       return;
     }
-    const fail = (message: string) => {
+    const fail = (message: string, premium = false) => {
       setFailedSource(source);
       setGenerationMessage(message);
+      const shown = useTingraphStore.getState().drawer === "source" && source === code;
+      setNotice(shown ? null : { message, premium });
     };
     let ast;
     try {
@@ -606,6 +614,7 @@ export default function EditorRoot({
     setGenerating(true);
     setFailedSource(null);
     setGenerationMessage("");
+    setNotice(null);
     try {
       const account = await requireAccount(
         "Sign up to generate diagrams",
@@ -624,9 +633,16 @@ export default function EditorRoot({
         allowed: boolean;
         used: number;
         usage_limit: number | null;
+        reset_at?: string | null;
       };
       if (!data.allowed) {
-        fail(`Daily generation limit reached (${data.used}/${data.usage_limit ?? 10}).`);
+        const reset = data.reset_at
+          ? ` It resets ${new Date(data.reset_at).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.`
+          : "";
+        fail(
+          `Generation limit reached: ${data.used} of ${data.usage_limit ?? 10} used in this 24-hour window.${reset} Nothing was drawn; your sheet is unchanged. Premium generation is unlimited.`,
+          true,
+        );
         return;
       }
 
@@ -1108,7 +1124,8 @@ export default function EditorRoot({
             {drawer === "ai" && (
               <AiDrawer
                 category={editorCategory}
-                generationMessage={generationMessage}
+                // a failure is said over the sheet, so only success is said here
+                generationMessage={failedSource === null ? generationMessage : ""}
                 onGenerate={(source) => void generate(source, true)}
               />
             )}
@@ -1155,6 +1172,33 @@ export default function EditorRoot({
         </main>
       </div>
 
+      {notice && (
+        <div
+          role="alert"
+          className="fixed inset-x-0 top-3 z-[60] mx-auto flex w-fit max-w-[min(560px,calc(100vw-32px))] items-start gap-2 border-2 border-edge bg-alert-tint px-3 py-2.5 text-[12px] leading-relaxed text-alert shadow-[4px_4px_0_#000]"
+        >
+          <TriangleAlert size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+          <p className="min-w-0 flex-1">
+            {notice.message}
+            {notice.premium && (
+              <>
+                {" "}
+                <Link href="/checkout" prefetch={false} target="_blank" className="font-semibold underline">
+                  Go Premium
+                </Link>
+              </>
+            )}
+          </p>
+          <button
+            type="button"
+            onClick={() => setNotice(null)}
+            aria-label="Dismiss"
+            className="shrink-0 text-alert hover:text-ink"
+          >
+            <X size={14} aria-hidden="true" />
+          </button>
+        </div>
+      )}
       {exportOpen && (
         <ExportDialog
           api={api}

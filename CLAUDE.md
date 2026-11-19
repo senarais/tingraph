@@ -93,7 +93,13 @@ including external and bound captions. An unresolved node collision stops
 generation with an explanation naming the two elements by their captions,
 preserving the sheet. A failed Generate is shown whole, as an alert under the
 source, for as long as the source it was about is unchanged; the one-line
-status under it only ever reports success. Architecture zones are intentional
+status under it only ever reports success. A failure the open panel would not
+show — a template, a starter or an AI reply generated, or the generation
+allowance used up from any panel — is said instead in a dismissible alert over
+the sheet. An exhausted allowance says when it resets (`reset_at`, from
+`POST /api/v1/usage/generations`) and links to checkout in a new tab. Premium
+generation has no limit at all: `consume_generation` returns a null limit for
+it, and the only allowance Premium counts is Tingraph AI's. Architecture zones are intentional
 backdrops and excluded from that node check.
 
 All graph connector captions, including flowchart captions, are separate text

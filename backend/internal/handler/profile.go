@@ -359,5 +359,16 @@ func (server *Handler) ConsumeGeneration(w http.ResponseWriter, r *http.Request)
 		httpx.Problem(w, http.StatusInternalServerError, "generation allowance could not be checked")
 		return
 	}
-	httpx.JSON(w, http.StatusOK, map[string]any{"allowed": allowed, "used": used, "usage_limit": limit})
+	// a refusal says when the window opens again; the row exists by then, so a
+	// second statement sees it
+	var reset *time.Time
+	if !allowed {
+		if err := server.db.QueryRow(r.Context(),
+			`select started_at + interval '24 hours' from app.usage_windows
+			 where user_id = $1 and kind = 'generation'`, userID,
+		).Scan(&reset); err != nil {
+			server.log.Error("generation reset lookup failed", "error", err)
+		}
+	}
+	httpx.JSON(w, http.StatusOK, map[string]any{"allowed": allowed, "used": used, "usage_limit": limit, "reset_at": reset})
 }
