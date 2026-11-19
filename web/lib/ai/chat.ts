@@ -22,6 +22,20 @@ export interface AiReply {
   source: string;
 }
 
+/**
+ * How much the panel sends, mirrored by the constants in
+ * backend/internal/ai/ai.go; change both together. The panel stops anything
+ * past them before it is sent, so the server's cut is only a backstop.
+ */
+export const AI_LIMITS = {
+  /** characters in one message the reader types */
+  prompt: 12_000,
+  /** characters of source on the sheet, or in one turn */
+  source: 24_000,
+  /** turns of the conversation replayed, the new one included */
+  turns: 8,
+} as const;
+
 /** One line of the conversation, as the panel keeps it. */
 export interface AiTurn {
   role: "you" | "ai";

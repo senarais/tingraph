@@ -86,8 +86,7 @@ Generate asks before drawing a source over `GENERATION_LIMITS` in
 connectors. The Source panel already says so under the editor while the source
 is that large, and Generate opens `ConfirmDialog` (the editor's own dialog,
 never the browser's `confirm`), whose cancel button holds the focus.
-Cancelling draws nothing and consumes no allowance. The AI panel still confirms
-prompts over 4,000 characters before sending them. Before replacing the sheet
+Cancelling draws nothing and consumes no allowance. Before replacing the sheet
 or taking an allowance, Generate checks the **rendered** graph-node bounds,
 including external and bound captions. An unresolved node collision stops
 generation with an explanation naming the two elements by their captions,
@@ -169,6 +168,17 @@ has to guess where one ends and the other begins.
 - Output tokens are reserved and settled in PostgreSQL around every Gemini
   call. A failed call releases the unused reservation; the free tier cannot
   race concurrent requests past its daily limit.
+- **What a request may carry is limited by text, in the panel, and by tokens,
+  at the server.** `AI_LIMITS` in `lib/ai/chat.ts` and the constants in
+  `backend/internal/ai/ai.go` are one rule written twice: a message of up to
+  12,000 characters (the box stops there and counts down past 90%), a sheet
+  source of up to 24,000, the last 8 turns of the conversation. The panel
+  refuses a longer source with a sentence rather than sending half a diagram;
+  the server cuts a long message on a character, never inside one, and drops
+  a turn's source rather than keep part of it. The whole request, briefing and
+  attachments included, may be 16,000 input tokens, and a reply up to 8,192
+  output tokens — enough to write back the longest source the panel sends.
+  Only output tokens count against a plan's allowance.
 
 ## The canvas is a renderer, not an interface
 

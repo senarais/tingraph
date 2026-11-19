@@ -15,10 +15,21 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// The text limits are mirrored by AI_LIMITS in web/lib/ai/chat.ts, which
+// stops a request in the panel before it is sent; change both together.
 const (
-	maxOutputTokens = 1000
+	// output is what a plan's allowance counts, so this only has to be long
+	// enough to write back the longest source the panel will send
+	maxOutputTokens = 8192
 	minOutputTokens = 256
-	maxInputTokens  = 3000
+	// everything sent: briefing, sheet, conversation and attachments
+	maxInputTokens = 16000
+	// MaxPromptChars caps one message the reader types.
+	MaxPromptChars = 12000
+	// MaxSourceChars caps the source on the sheet and any source in a turn.
+	MaxSourceChars = 24000
+	// MaxTurns is how much of the conversation is replayed.
+	MaxTurns = 8
 )
 
 //go:embed briefings.json
@@ -73,7 +84,7 @@ func (QuotaError) Error() string { return "daily Tingraph AI token limit reached
 
 type InputLimitError struct{}
 
-func (InputLimitError) Error() string { return "request is longer than 3,000 input tokens" }
+func (InputLimitError) Error() string { return "request is longer than 16,000 input tokens" }
 
 func New(db *pgxpool.Pool, apiKey, model string) (*Service, error) {
 	briefings := map[string]Briefing{}

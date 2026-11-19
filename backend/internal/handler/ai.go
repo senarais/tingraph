@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"tingraph/backend/internal/ai"
 	"tingraph/backend/internal/httpx"
@@ -18,7 +19,9 @@ const (
 	maxAttachments      = 2
 	maxAttachmentBytes  = 5 << 20
 	maxAttachmentsBytes = 10 << 20
-	maxAIRequestBytes   = maxAttachmentsBytes + (128 << 10)
+	// the ask is JSON, and escaping can double what was typed
+	maxAskBytes       = 1 << 20
+	maxAIRequestBytes = maxAttachmentsBytes + maxAskBytes + (64 << 10)
 )
 
 var attachmentTypes = map[string]bool{
@@ -70,9 +73,9 @@ func (server *Handler) AI(w http.ResponseWriter, r *http.Request) {
 		var input ai.InputLimitError
 		switch {
 		case errors.As(err, &quota):
-			httpx.Problem(w, http.StatusTooManyRequests, "Your daily Tingraph AI token limit is reached. It resets at 00:00 UTC.")
+			httpx.Problem(w, http.StatusTooManyRequests, "Your Tingraph AI allowance for this 24-hour window is used up. Your profile shows when it resets.")
 		case errors.As(err, &input):
-			httpx.Problem(w, http.StatusRequestEntityTooLarge, "This request is too long. Keep the input under 3,000 tokens and try again.")
+			httpx.Problem(w, http.StatusRequestEntityTooLarge, "This request is too long for Tingraph AI. Shorten the message, attach fewer pages, or press Clear to start the conversation again.")
 		default:
 			server.log.Error("AI request failed", "error", err)
 			httpx.Problem(w, http.StatusBadGateway, "Tingraph AI could not answer right now. Try again.")
@@ -96,9 +99,12 @@ func readAIRequest(reader *multipart.Reader) (ai.Ask, []ai.Attachment, error) {
 			return ai.Ask{}, nil, errors.New("invalid AI request")
 		}
 		if part.FormName() == "ask" && part.FileName() == "" && !sawAsk {
-			contents, err := io.ReadAll(io.LimitReader(part, 64<<10))
+			contents, err := io.ReadAll(io.LimitReader(part, maxAskBytes+1))
 			part.Close()
-			if err != nil || len(contents) == 64<<10 || json.Unmarshal(contents, &ask) != nil {
+			if len(contents) > maxAskBytes {
+				return ai.Ask{}, nil, errors.New("this conversation is too long to send; press Clear and ask again")
+			}
+			if err != nil || json.Unmarshal(contents, &ask) != nil {
 				return ai.Ask{}, nil, errors.New("invalid AI request")
 			}
 			sawAsk = true
@@ -131,21 +137,32 @@ func readAIRequest(reader *multipart.Reader) (ai.Ask, []ai.Attachment, error) {
 			Data:     base64.StdEncoding.EncodeToString(contents),
 		})
 	}
-	if !sawAsk || !validAsk(&ask) {
+	if !sawAsk {
+		return ai.Ask{}, nil, errors.New("invalid AI request")
+	}
+	if utf8.RuneCountInString(ask.Code) > ai.MaxSourceChars {
+		return ai.Ask{}, nil, errors.New("the source on the sheet is longer than 24,000 characters, too long for Tingraph AI")
+	}
+	if !validAsk(&ask) {
 		return ai.Ask{}, nil, errors.New("invalid AI request")
 	}
 	return ask, attachments, nil
 }
 
-func validAsk(ask *ai.Ask) bool {
-	if len(ask.Code) > 4000 {
-		ask.Code = ask.Code[:4000]
+// cut keeps at most n characters of text, never splitting one.
+func cut(text string, n int) string {
+	if utf8.RuneCountInString(text) <= n {
+		return text
 	}
+	return string([]rune(text)[:n])
+}
+
+func validAsk(ask *ai.Ask) bool {
 	if ask.Direction != "right" {
 		ask.Direction = "down"
 	}
-	if len(ask.Turns) > 8 {
-		ask.Turns = ask.Turns[len(ask.Turns)-8:]
+	if len(ask.Turns) > ai.MaxTurns {
+		ask.Turns = ask.Turns[len(ask.Turns)-ai.MaxTurns:]
 	}
 	clean := ask.Turns[:0]
 	for _, turn := range ask.Turns {
@@ -155,17 +172,16 @@ func validAsk(ask *ai.Ask) bool {
 		if turn.Text == "" {
 			continue
 		}
-		if len(turn.Text) > 4000 {
-			turn.Text = turn.Text[:4000]
-		}
-		if len(turn.Source) > 4000 {
-			turn.Source = turn.Source[:4000]
+		turn.Text = cut(turn.Text, ai.MaxPromptChars)
+		// half a diagram reads as a diagram with things taken out of it
+		if utf8.RuneCountInString(turn.Source) > ai.MaxSourceChars {
+			turn.Source = ""
 		}
 		clean = append(clean, turn)
 	}
 	ask.Turns = clean
 	if ask.Retry != nil {
-		if ask.Retry.Source == "" || ask.Retry.Complaint == "" || len(ask.Retry.Source) > 4000 || len(ask.Retry.Complaint) > 1000 {
+		if ask.Retry.Source == "" || ask.Retry.Complaint == "" || utf8.RuneCountInString(ask.Retry.Source) > ai.MaxSourceChars || utf8.RuneCountInString(ask.Retry.Complaint) > 1000 {
 			return false
 		}
 	}

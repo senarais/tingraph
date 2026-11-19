@@ -8,7 +8,7 @@ import {
   attachmentsProblem,
   MAX_ATTACHMENTS,
 } from "@/lib/ai/attachments";
-import { refuses } from "@/lib/ai/chat";
+import { AI_LIMITS, refuses } from "@/lib/ai/chat";
 import { APIError, apiFetch } from "@/lib/api/client";
 import { useTingraphStore, type ChatTurn } from "@/lib/store";
 import { TEMPLATE_LABELS } from "@/lib/templates";
@@ -154,13 +154,20 @@ export default function AiDrawer({
     if ((!prompt && files.length === 0) || thinking) {
       return;
     }
-    if (prompt.length > 4000 && !window.confirm(
-      "This prompt is long and may produce a dense diagram or use more AI tokens. Consider splitting it into smaller diagrams. Continue sending?",
-    )) return;
+    const store = useTingraphStore.getState();
+    if (store.code.length > AI_LIMITS.source) {
+      setAttachmentError(
+        `The source on the sheet is ${store.code.length.toLocaleString("en-US")} characters, more than the ${AI_LIMITS.source.toLocaleString("en-US")} Tingraph AI can read. Split the diagram, then ask again.`,
+      );
+      return;
+    }
     const text = prompt || "Create a diagram from the attached files.";
     const message = files.length > 0 ? `${text}\n\nAttached: ${files.map((file) => file.name).join(", ")}` : text;
-    const store = useTingraphStore.getState();
-    const turns = [...store.chat, { role: "you" as const, text: message }];
+    // the server replays no more than this, so nothing older is worth sending
+    const turns = [
+      ...store.chat.slice(-(AI_LIMITS.turns - 1)),
+      { role: "you" as const, text: message },
+    ];
     const request = (retry?: { source: string; complaint: string }) => {
       const form = new FormData();
       form.set("ask", JSON.stringify({
@@ -282,6 +289,7 @@ export default function AiDrawer({
             }
           }}
           rows={3}
+          maxLength={AI_LIMITS.prompt}
           placeholder="What should the diagram show? Drop a PDF or image for context."
           aria-label="Ask Tingraph AI"
           className="w-full resize-none border-2 border-edge bg-white px-2.5 py-2 font-mono text-[12px] leading-relaxed text-ink placeholder:text-ink-faint"
@@ -316,6 +324,11 @@ export default function AiDrawer({
               </li>
             ))}
           </ul>
+        )}
+        {draft.length > AI_LIMITS.prompt * 0.9 && (
+          <p className="mt-1 text-right text-[11px] text-ink-faint">
+            {draft.length.toLocaleString("en-US")} / {AI_LIMITS.prompt.toLocaleString("en-US")} characters
+          </p>
         )}
         {attachmentError && (
           <p role="alert" className="mt-2 text-[11px] text-alert">

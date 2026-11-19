@@ -15,6 +15,7 @@ import {
   type DiagramKind,
 } from "@/lib/diagrams";
 import { getSession } from "@/lib/api/client";
+import { PLAN_LIMITS } from "@/lib/plans";
 
 /**
  * The full list of notations, filtered in the browser: the ready ones and the
@@ -301,7 +302,7 @@ export default function Catalog() {
       <AccessDialog
         open={guestChoice !== null}
         title="Sign up to use generation and AI"
-        message="A free account unlocks 10 generations and 3,000 Tingraph AI tokens per day, plus space for 2 saved diagrams. You can continue without an account to edit manually and export."
+        message={`A free account unlocks ${PLAN_LIMITS.free.generations} generations and ${PLAN_LIMITS.free.aiTokens.toLocaleString("en-US")} Tingraph AI tokens per 24 hours, plus space for ${PLAN_LIMITS.free.diagrams} saved diagrams. You can continue without an account to edit manually and export.`}
         next={guestChoice ? editorHref(guestChoice) : "/editor"}
         onClose={() => setGuestChoice(null)}
         onContinue={
