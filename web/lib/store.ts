@@ -40,7 +40,13 @@ export type CanvasTool =
   | "text"
   | "image"
   | "freedraw"
-  | "eraser";
+  | "eraser"
+  // Studio's plain shapes, drawn as Excalidraw draws them
+  | "rectangle"
+  | "diamond"
+  | "ellipse"
+  | "arrow"
+  | "line";
 
 interface TingraphState {
   code: string;

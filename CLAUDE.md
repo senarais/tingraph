@@ -950,6 +950,16 @@ Generate and Tingraph AI), element, figure and style panels, `Inspector`,
   own art and opens at `/studio?diagram=…`; the editor sends a Studio row
   there, and Studio sends a notation row to the editor. The sheet's name is
   edited in the bar and saved as the row's title.
+- **Studio also draws plain shapes, Excalidraw's own.** Its rail carries a
+  Shapes list (`BASICS` in `rail.tsx`, `only: "studio"`): rectangle, diamond,
+  ellipse, arrow and line, beside Draw, Text and Image. They are the one place
+  Excalidraw's own arrow and line tools are used: what they draw belongs to no
+  notation, carries no `LinkMark`, is never re-cut by `syncConnectors`, and
+  keeps Excalidraw's own point handles and binding. The editor's rail does not
+  offer them, so an editor sheet stays the notation's alone. `STUDIO_TOOLS` in
+  `canvas.tsx` lets the canvas keep them in hand only on a Studio sheet (one
+  given `rulesFor`); on an editor sheet they are put back to the pointer like
+  any other tool the rail does not carry. Their letter keys stay swallowed; they are pressed.
 - **Save is shared.** `useSheetSave` (`components/editor/use-sheet-save.ts`)
   is the editor's Save, auto-save switch and clean-state signature, written
   once for both; `SheetActions` and `HomeMark` in `top-bar.tsx` are the bar's
@@ -969,7 +979,10 @@ anything unlisted is General), starting point, and availability only while
 something is planned. Options in one section widen the list, sections narrow
 it, and an empty section filters nothing; every option counts what it would
 show with the search and the other sections as they are, and one that would
-show none is disabled. Active filters are chips over the cards. A new card
+show none is disabled. Each section is a `details` element opened and shut by
+the same CSS as the landing page's FAQ; its open state is the browser's after
+the first paint, because a React re-render setting `open` again cut the
+opening animation short. Active filters are chips over the cards. A new card
 needs a `STANDARD` entry unless it is General. A valid `?type=…` or `?diagram=…` opens the canvas directly;
 existing notation and saved-diagram links keep their meaning. The old picker
 and `/build` page are gone. `/build` permanently redirects to `/editor` while

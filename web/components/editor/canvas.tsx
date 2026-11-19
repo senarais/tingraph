@@ -134,6 +134,9 @@ const RAIL_TOOLS = new Set<string>([
   "eraser",
 ]);
 
+/** Studio's plain shapes: its rail offers them, and only a Studio sheet keeps them in hand. */
+const STUDIO_TOOLS = new Set<string>(["rectangle", "diamond", "ellipse", "arrow", "line"]);
+
 export default function Canvas({
   initialElements,
   initialFiles,
@@ -432,7 +435,7 @@ export default function Canvas({
 
       // --- the canvas can put a tool back itself, so the rail follows it
       const active = state.activeTool.type;
-      if (!RAIL_TOOLS.has(active)) {
+      if (!RAIL_TOOLS.has(active) && !(mixed && STUDIO_TOOLS.has(active))) {
         // a keyboard shortcut for a tool the rail does not carry: Tingraph
         // draws its shapes from the notation, so the pointer comes back
         queueMicrotask(() => apiRef.current?.setActiveTool({ type: "selection" }));

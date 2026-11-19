@@ -267,14 +267,15 @@ function Card({ kind, onOpen }: { kind: DiagramKind; onOpen: () => void }) {
   );
 }
 
+/** The sections open on the first paint: the two most readers filter by. */
+const OPEN_FIRST = new Set(["family", "form"]);
+
 export default function Catalog() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "mine" ? "mine" : "browse";
   const [query, setQuery] = useState("");
   const [picked, setPicked] = useState<Picked>({});
-  // the first two sections are what most readers filter by; the rest wait
-  const [open, setOpen] = useState<Record<string, boolean>>({ family: true, form: true });
   const [guestChoice, setGuestChoice] = useState<DiagramKind | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -383,51 +384,57 @@ export default function Catalog() {
                   </button>
                 </div>
                 {FACETS.map((facet) => {
-                  const shown = open[facet.id] ?? false;
+                  const shown = OPEN_FIRST.has(facet.id);
                   const chosen = picked[facet.id]?.length ?? 0;
                   return (
-                    <section key={facet.id} className="border-b border-edge/20 last:border-b-0">
-                      <h3>
-                        <button
-                          type="button"
-                          aria-expanded={shown}
-                          aria-controls={`facet-${facet.id}`}
-                          onClick={() => setOpen((current) => ({ ...current, [facet.id]: !shown }))}
-                          className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-[12.5px] transition-colors hover:bg-bone ${
-                            shown ? "bg-bone/60 font-semibold text-ink" : "text-ink"
-                          }`}
+                    // a details element, opened and shut the way the FAQ's are
+                    // left to the browser after the first paint: a re-render on every
+                    // toggle would set `open` again and cut the opening animation short
+                    <details
+                      key={facet.id}
+                      ref={(node) => {
+                        if (node && !node.dataset.ready) {
+                          node.dataset.ready = "1";
+                          node.open = shown;
+                        }
+                      }}
+                      className="group border-b border-edge/20 last:border-b-0"
+                    >
+                      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-[12.5px] text-ink marker:content-none hover:bg-bone group-open:bg-bone/60 group-open:font-semibold">
+                        <span className="min-w-0 flex-1">{facet.title}</span>
+                        {chosen > 0 && (
+                          <span className="bg-edge px-1.5 font-mono text-[10.5px] leading-[17px] text-bone">{chosen}</span>
+                        )}
+                        <span
+                          aria-hidden="true"
+                          className="grid h-5 w-5 shrink-0 place-items-center border-2 border-edge font-mono text-[13px] leading-none group-open:bg-edge group-open:text-bone"
                         >
-                          <span className="min-w-0 flex-1">{facet.title}</span>
-                          {chosen > 0 && (
-                            <span className="bg-edge px-1.5 font-mono text-[10.5px] leading-[17px] text-bone">{chosen}</span>
-                          )}
-                          {shown ? <Minus size={14} aria-hidden="true" /> : <Plus size={14} aria-hidden="true" />}
-                        </button>
-                      </h3>
-                      {shown && (
-                        <div id={`facet-${facet.id}`} className="bg-bone/60 px-4 pb-3 pt-0.5">
-                          {facet.options.map((option) => (
-                            <Option
-                              key={option.value}
-                              label={option.label}
-                              hint={option.hint}
-                              count={countFor(facet, option.value)}
-                              checked={picked[facet.id]?.includes(option.value) ?? false}
-                              onChange={() => toggle(facet.id, option.value)}
-                            />
-                          ))}
-                          {chosen > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => clear(facet.id)}
-                              className="mt-1 font-mono text-[11px] text-ink-soft underline-offset-4 hover:text-ink hover:underline"
-                            >
-                              Clear {facet.title.toLowerCase()}
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </section>
+                          <span className="group-open:hidden">+</span>
+                          <span className="hidden group-open:inline">−</span>
+                        </span>
+                      </summary>
+                      <div className="bg-bone/60 px-4 pb-3 pt-0.5">
+                        {facet.options.map((option) => (
+                          <Option
+                            key={option.value}
+                            label={option.label}
+                            hint={option.hint}
+                            count={countFor(facet, option.value)}
+                            checked={picked[facet.id]?.includes(option.value) ?? false}
+                            onChange={() => toggle(facet.id, option.value)}
+                          />
+                        ))}
+                        {chosen > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => clear(facet.id)}
+                            className="mt-1 font-mono text-[11px] text-ink-soft underline-offset-4 hover:text-ink hover:underline"
+                          >
+                            Clear {facet.title.toLowerCase()}
+                          </button>
+                        )}
+                      </div>
+                    </details>
                   );
                 })}
               </div>

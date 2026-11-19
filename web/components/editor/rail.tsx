@@ -2,7 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  ArrowUpRight,
   Blend,
+  Circle,
+  Diamond,
+  Minus,
+  Square,
   ChartColumn,
   Eraser,
   Fish,
@@ -53,8 +58,10 @@ interface Entry {
   drawer?: Drawer;
   /** the connector instrument, which opens its own list */
   lines?: true;
+  /** Studio's plain shapes, which open their own list */
+  basics?: true;
   /** left out of the column when the notation has no use for it */
-  only?: "graph" | "figure" | "settable";
+  only?: "graph" | "figure" | "settable" | "studio";
 }
 
 const INSTRUMENTS: Entry[] = [
@@ -87,6 +94,13 @@ const INSTRUMENTS: Entry[] = [
     drawer: "elements",
     only: "settable",
   },
+  {
+    icon: Square,
+    label: "Shapes",
+    hint: "Rectangle, diamond, ellipse, arrow, line",
+    basics: true,
+    only: "studio",
+  },
   { icon: Type, label: "Text", hint: "Write on the sheet", tool: "text" },
   { icon: ImageIcon, label: "Image", hint: "Place a picture", tool: "image" },
   {
@@ -98,6 +112,19 @@ const INSTRUMENTS: Entry[] = [
   },
   { icon: Pencil, label: "Draw", hint: "Freehand stroke", tool: "freedraw" },
   { icon: Eraser, label: "Erase", hint: "Rub something out", tool: "eraser" },
+];
+
+/**
+ * Studio's plain shapes: Excalidraw's own, for whatever no notation draws. An
+ * arrow drawn with them is an Excalidraw arrow, not a Tingraph connector; it
+ * belongs to no notation and is routed by nothing.
+ */
+const BASICS: Array<{ tool: CanvasTool; label: string; hint: string; icon: LucideIcon }> = [
+  { tool: "rectangle", label: "Rectangle", hint: "a box, drawn by dragging", icon: Square },
+  { tool: "diamond", label: "Diamond", hint: "a rhombus", icon: Diamond },
+  { tool: "ellipse", label: "Ellipse", hint: "a circle or an oval", icon: Circle },
+  { tool: "arrow", label: "Arrow", hint: "a free arrow, bent with its handles", icon: ArrowUpRight },
+  { tool: "line", label: "Line", hint: "a plain line or polyline", icon: Minus },
 ];
 
 const PANELS: Entry[] = [
@@ -144,6 +171,9 @@ function instrumentsFor(category: DiagramCategory, mode: RailMode = "editor"): E
     }
     if (!entry.only) {
       return true;
+    }
+    if (entry.only === "studio") {
+      return mode === "studio";
     }
     if (entry.only === "figure") {
       return figure;
@@ -372,23 +402,32 @@ export default function Rail({
   const panning = useTingraphStore((s) => s.panning);
   const setPanning = useTingraphStore((s) => s.setPanning);
   const [lines, setLines] = useState(false);
+  const [basics, setBasics] = useState(false);
+  const basic = BASICS.find((entry) => entry.tool === tool) ?? null;
 
-  // the list of lines is a panel over the sheet, so it shuts when the reader
-  // reaches past it
+  // the lists are panels over the sheet, so they shut when the reader
+  // reaches past them
   useEffect(() => {
-    if (!lines) {
+    if (!lines && !basics) {
       return;
     }
     const away = (event: PointerEvent) => {
       if (!(event.target as Element | null)?.closest?.("nav[aria-label='Editor tools']")) {
         setLines(false);
+        setBasics(false);
       }
     };
     document.addEventListener("pointerdown", away, true);
     return () => document.removeEventListener("pointerdown", away, true);
-  }, [lines]);
+  }, [lines, basics]);
 
   const press = (entry: Entry) => {
+    if (entry.basics) {
+      setLines(false);
+      setBasics(!basics);
+      return;
+    }
+    setBasics(false);
     if (entry.lines) {
       // nothing held: take the notation's own line and show the rest of them.
       // already held: the list opens, and pressing again puts the line back
@@ -481,6 +520,9 @@ export default function Rail({
     if (entry.lines) {
       return connector !== null;
     }
+    if (entry.basics) {
+      return basic !== null && connector === null;
+    }
     if (entry.tool === "hand") {
       return tool === "hand" || panning;
     }
@@ -498,10 +540,42 @@ export default function Rail({
       {instrumentsFor(category, mode).map((entry) => (
         <RailButton
           key={entry.label}
-          entry={entry}
+          entry={entry.basics && basic ? { ...entry, icon: basic.icon } : entry}
           held={isHeld(entry)}
           onPress={() => press(entry)}
         >
+          {entry.basics && basics && (
+            <div className="slab-tight fixed bottom-16 left-2 right-2 z-50 bg-white sm:absolute sm:bottom-auto sm:left-full sm:right-auto sm:top-0 sm:ml-2 sm:w-56">
+              <p className="border-b-2 border-edge px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
+                Shapes · plain, in no notation
+              </p>
+              {BASICS.map((item) => {
+                const Icon = item.icon;
+                const on = tool === item.tool && connector === null;
+                return (
+                  <button
+                    key={item.tool}
+                    type="button"
+                    onClick={() => {
+                      setTool(item.tool);
+                      setBasics(false);
+                    }}
+                    className={`flex w-full items-center gap-2.5 px-2.5 py-2 text-left transition-colors ${
+                      on ? "bg-edge text-bone" : "text-ink hover:bg-bone"
+                    }`}
+                  >
+                    <Icon size={15} aria-hidden="true" className="shrink-0" />
+                    <span className="min-w-0">
+                      <span className="block font-mono text-[11.5px] leading-tight">{item.label}</span>
+                      <span className={`block font-mono text-[10px] leading-tight ${on ? "text-bone/70" : "text-ink-faint"}`}>
+                        {item.hint}
+                      </span>
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
           {entry.lines && lines && connector !== null && (
               <div className="slab-tight fixed bottom-16 left-2 right-2 z-50 max-h-[65dvh] overflow-y-auto bg-white sm:absolute sm:bottom-auto sm:left-full sm:right-auto sm:top-0 sm:ml-2 sm:w-60">
               <p className="border-b-2 border-edge px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-ink-faint">
