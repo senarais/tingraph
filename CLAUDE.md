@@ -444,10 +444,23 @@ side by side, the axis that separates them wins instead.
   branch the width of its subtree, and stands centred over it; every box on a
   level starts on one line. Only solid branches place boxes; a dashed cross
   link joins two already placed.
-- **class**, **dfd** and **state** are ranked by dagre. Class ranks a
+- **class** and **state** are ranked by dagre. Class ranks a
   generalisation or realisation backwards, because it is written child first
   but a parent stands above its children. State is routed by the flowchart's
-  `routeFlowEdges`, class and DFD by `routeAll`.
+  `routeFlowEdges` and class by `routeAll`; a state sheet's ranks stand 100
+  apart so a transition and the one back fit side by side under open heads.
+- **dfd** is not ranked as a whole, because a flowchart's ranking puts a store
+  under the process that writes it and every flow back up then wraps the
+  sheet. `computeDfdLayout` lays the processes down a spine in the order data
+  passes through them (a flow through a store counts as one between the two
+  processes, cycles left out) and stands every entity and store level with a
+  process it trades with, entities to the left and stores to the right by
+  default, in an inner column or an outer one. Which band, side and column
+  each takes is searched: one box is moved at a time to whichever spot makes
+  the fully routed sheet cheaper by `routeCost` (crossings, then corners,
+  then length), within `SEARCH_BUDGET` tries. An outer column is how a box
+  whose flows reach several bands keeps them clear of the boxes nearer the
+  spine. Routed by `routeAll`.
 
 **Some lines never share a stretch.** A DFD data flow, a state transition and
 every class relation except generalisation and realisation are named, so two
