@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState } from "react";
-import { FolderOpen, LayoutGrid, Search, SlidersHorizontal } from "lucide-react";
+import { Check, FolderOpen, LayoutGrid, Minus, Plus, Search, SlidersHorizontal, X } from "lucide-react";
 import AccessDialog from "@/components/account/access-dialog";
 import { DiagramArt } from "@/components/site/diagram-art";
 import MyDiagrams from "@/components/site/my-diagrams";
@@ -11,9 +11,10 @@ import {
   ACCENTS,
   ALL_DIAGRAMS,
   FAMILIES,
-  type DiagramFamily,
+  PLANNED_DIAGRAMS,
   type DiagramKind,
 } from "@/lib/diagrams";
+import { isChart, isGraph } from "@/lib/types";
 import { getSession } from "@/lib/api/client";
 import { PLAN_LIMITS } from "@/lib/plans";
 
@@ -25,40 +26,172 @@ import { PLAN_LIMITS } from "@/lib/plans";
  */
 
 
-type Status = "Ready now" | "Planned";
-const STATUSES: Status[] = ["Ready now", "Planned"];
-
-function statusOf(kind: DiagramKind): Status {
-  return kind.keyword ? "Ready now" : "Planned";
+/**
+ * The filters, as the sections of one panel. Within a section the options
+ * widen the list (any of them); across sections they narrow it (all of them);
+ * a section with nothing ticked filters nothing. Each option says how many
+ * diagrams it would show with everything else as it is, and one that would
+ * show none cannot be ticked.
+ */
+interface Facet {
+  id: string;
+  title: string;
+  options: Array<{ value: string; label: string; hint?: string }>;
+  /** the values one diagram has in this section */
+  of: (kind: DiagramKind) => string[];
 }
 
-function Check({
+/** The method or standard each drawing follows, by catalogue id. */
+const STANDARD: Record<string, string> = {
+  usecase: "UML",
+  activity: "UML",
+  sequence: "UML",
+  class: "UML",
+  state: "UML",
+  bpmn: "BPMN 2.0",
+  "system-context": "C4 model",
+  container: "C4 model",
+  component: "C4 model",
+  architecture: "Software architecture",
+  deployment: "Software architecture",
+  erd: "Data modelling",
+  dfd: "Data modelling",
+  bar: "Statistics",
+  histogram: "Statistics",
+  line: "Statistics",
+  pie: "Statistics",
+  scatter: "Statistics",
+  heatmap: "Statistics",
+  swot: "Business analysis",
+  raci: "Business analysis",
+  "decision-matrix": "Business analysis",
+  quadrant: "Business analysis",
+  gantt: "Project management",
+  fishbone: "Quality management",
+  prisma: "Research reporting",
+  mind: "Ideas and knowledge",
+  venn: "Ideas and knowledge",
+};
+
+function formOf(kind: DiagramKind): string[] {
+  if (!kind.keyword) return [];
+  if (isGraph(kind.keyword)) return ["graph"];
+  return [isChart(kind.keyword) ? "chart" : "figure"];
+}
+
+const BY_COUNT = (kinds: readonly DiagramKind[], of: (kind: DiagramKind) => string[]) => {
+  const counts = new Map<string, number>();
+  for (const kind of kinds) for (const value of of(kind)) counts.set(value, (counts.get(value) ?? 0) + 1);
+  return [...counts.keys()].sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0) || a.localeCompare(b));
+};
+
+const standardOf = (kind: DiagramKind) => [STANDARD[kind.id] ?? "General"];
+
+const FACETS: Facet[] = [
+  {
+    id: "family",
+    title: "What it shows",
+    options: FAMILIES.map((family) => ({ value: family, label: family })),
+    of: (kind) => [kind.family],
+  },
+  {
+    id: "form",
+    title: "Kind of drawing",
+    options: [
+      { value: "graph", label: "Graph", hint: "elements joined by connectors" },
+      { value: "chart", label: "Chart", hint: "values plotted on axes or a circle" },
+      { value: "figure", label: "Figure", hint: "one object drawn from its settings" },
+    ],
+    of: formOf,
+  },
+  {
+    id: "standard",
+    title: "Method or standard",
+    options: BY_COUNT(ALL_DIAGRAMS, standardOf).map((value) => ({ value, label: value })),
+    of: standardOf,
+  },
+  {
+    id: "start",
+    title: "Starting point",
+    options: [
+      { value: "notation", label: "Notation", hint: "its own language and editor" },
+      { value: "starter", label: "Starter drawing", hint: "a notation, started a common way" },
+    ],
+    of: (kind) => [kind.starter ? "starter" : "notation"],
+  },
+  // only worth a section once something is announced and not drawable yet
+  ...(PLANNED_DIAGRAMS.length > 0
+    ? [
+        {
+          id: "status",
+          title: "Availability",
+          options: [
+            { value: "ready", label: "Ready now" },
+            { value: "planned", label: "Planned" },
+          ],
+          of: (kind: DiagramKind) => [kind.keyword ? "ready" : "planned"],
+        },
+      ]
+    : []),
+];
+
+type Picked = Record<string, string[]>;
+
+function matches(kind: DiagramKind, picked: Picked, skip?: string): boolean {
+  return FACETS.every((facet) => {
+    const wanted = picked[facet.id] ?? [];
+    return facet.id === skip || wanted.length === 0 || facet.of(kind).some((value) => wanted.includes(value));
+  });
+}
+
+function searched(kind: DiagramKind, needle: string): boolean {
+  return (
+    needle === "" ||
+    `${kind.name} ${kind.summary} ${kind.keyword ?? ""} ${kind.parts.join(" ")} ${STANDARD[kind.id] ?? ""}`
+      .toLowerCase()
+      .includes(needle)
+  );
+}
+
+/** One option: a box, its name, what it means, and how many it would show. */
+function Option({
   label,
+  hint,
   count,
   checked,
   onChange,
 }: {
   label: string;
+  hint?: string;
   count: number;
   checked: boolean;
   onChange: () => void;
 }) {
+  const dead = count === 0 && !checked;
   return (
-    <label className="flex cursor-pointer items-center gap-2.5 py-1.5 text-[13px] text-ink">
-      <input
-        type="checkbox"
-        checked={checked}
-        onChange={onChange}
-        className="peer sr-only"
-      />
+    <label
+      className={`group flex items-start gap-2.5 py-1.5 text-[12.5px] ${
+        dead ? "cursor-not-allowed text-ink-faint" : "cursor-pointer text-ink"
+      }`}
+    >
+      <input type="checkbox" checked={checked} disabled={dead} onChange={onChange} className="peer sr-only" />
       <span
         aria-hidden="true"
-        className="flex h-4 w-4 shrink-0 items-center justify-center border-2 border-edge bg-white peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-edge"
+        className={`mt-px flex h-4 w-4 shrink-0 items-center justify-center border-2 transition-colors peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-edge ${
+          checked
+            ? "border-edge bg-edge text-bone"
+            : dead
+              ? "border-ink-faint/50 bg-transparent"
+              : "border-edge bg-white group-hover:bg-bone"
+        }`}
       >
-        {checked ? <span className="h-2 w-2 bg-edge" /> : null}
+        {checked ? <Check size={11} strokeWidth={3} /> : null}
       </span>
-      {label}
-      <span className="ml-auto font-mono text-[11px] text-ink-faint">{count}</span>
+      <span className="min-w-0 flex-1 leading-snug">
+        {label}
+        {hint && <span className="block text-[11px] leading-snug text-ink-faint">{hint}</span>}
+      </span>
+      <span className="pt-px font-mono text-[11px] tabular-nums text-ink-faint">{count}</span>
     </label>
   );
 }
@@ -139,8 +272,9 @@ export default function Catalog() {
   const searchParams = useSearchParams();
   const view = searchParams.get("view") === "mine" ? "mine" : "browse";
   const [query, setQuery] = useState("");
-  const [families, setFamilies] = useState<DiagramFamily[]>([...FAMILIES]);
-  const [statuses, setStatuses] = useState<Status[]>([...STATUSES]);
+  const [picked, setPicked] = useState<Picked>({});
+  // the first two sections are what most readers filter by; the rest wait
+  const [open, setOpen] = useState<Record<string, boolean>>({ family: true, form: true });
   const [guestChoice, setGuestChoice] = useState<DiagramKind | null>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
 
@@ -161,25 +295,37 @@ export default function Catalog() {
     setGuestChoice(kind);
   };
 
-  const toggle = <T,>(list: T[], set: (next: T[]) => void, value: T) =>
-    set(list.includes(value) ? list.filter((v) => v !== value) : [...list, value]);
+  const needle = query.trim().toLowerCase();
+  const toggle = (facet: string, value: string) =>
+    setPicked((current) => {
+      const list = current[facet] ?? [];
+      const next = list.includes(value) ? list.filter((entry) => entry !== value) : [...list, value];
+      return { ...current, [facet]: next };
+    });
+  const clear = (facet?: string) => setPicked((current) => (facet ? { ...current, [facet]: [] } : {}));
+  const active = FACETS.flatMap((facet) =>
+    (picked[facet.id] ?? []).map((value) => ({
+      facet: facet.id,
+      value,
+      label: facet.options.find((option) => option.value === value)?.label ?? value,
+    })),
+  );
 
-  const results = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    return ALL_DIAGRAMS.filter(
-      (kind) =>
-        families.includes(kind.family) &&
-        statuses.includes(statusOf(kind)) &&
-        (needle === "" ||
-          `${kind.name} ${kind.summary} ${kind.keyword ?? ""} ${kind.parts.join(" ")}`
-            .toLowerCase()
-            .includes(needle)),
-    );
-  }, [query, families, statuses]);
+  const results = useMemo(
+    () => ALL_DIAGRAMS.filter((kind) => searched(kind, needle) && matches(kind, picked)),
+    [needle, picked],
+  );
+
+  /** How many one option would show, with the search and every other section as they are. */
+  const countFor = (facet: Facet, value: string) =>
+    ALL_DIAGRAMS.filter(
+      (kind) => searched(kind, needle) && matches(kind, picked, facet.id) && facet.of(kind).includes(value),
+    ).length;
 
   return (
     <div className="grid gap-6 lg:grid-cols-[236px_minmax(0,1fr)] lg:gap-8">
-      <aside className="lg:sticky lg:top-24 lg:self-start">
+      {/* sticky beside the cards, and scrolled on its own once open sections outgrow the window */}
+      <aside className="lg:sticky lg:top-24 lg:max-h-[calc(100dvh-7rem)] lg:self-start lg:overflow-y-auto lg:pb-2 lg:pr-2 lg:[scrollbar-width:thin]">
         <div className="slab bg-white">
           <h2 className="border-b-2 border-edge bg-bone px-4 py-2.5 font-mono text-[12.5px] font-semibold text-ink">
             Diagrams
@@ -213,36 +359,77 @@ export default function Catalog() {
 
           {view === "browse" ? (
             <div className="border-t-2 border-edge">
-              <button type="button" aria-expanded={filtersOpen} aria-controls="catalog-filters" onClick={() => setFiltersOpen(!filtersOpen)} className="flex min-h-11 w-full items-center gap-2 bg-bone px-4 text-left font-mono text-[12.5px] font-semibold text-ink lg:hidden"><SlidersHorizontal size={15} /> Filters <span className="ml-auto">{filtersOpen ? "−" : "+"}</span></button>
-              <h2 className="hidden bg-bone px-4 py-2.5 font-mono text-[12.5px] font-semibold text-ink lg:block">Filters</h2>
-              <div id="catalog-filters" className={`${filtersOpen ? "block" : "hidden"} border-t-2 border-edge p-4 lg:block lg:border-t-2`}>
-                <h3 className="text-[12px] font-semibold text-ink-soft">What it shows</h3>
-                <div className="mt-1">
-                  {FAMILIES.map((family) => (
-                    <Check
-                      key={family}
-                      label={family}
-                      count={ALL_DIAGRAMS.filter((k) => k.family === family).length}
-                      checked={families.includes(family)}
-                      onChange={() => toggle(families, setFamilies, family)}
-                    />
-                  ))}
+              <button
+                type="button"
+                aria-expanded={filtersOpen}
+                aria-controls="catalog-filters"
+                onClick={() => setFiltersOpen(!filtersOpen)}
+                className="flex min-h-11 w-full items-center gap-2 bg-bone px-4 text-left font-mono text-[12.5px] font-semibold text-ink lg:hidden"
+              >
+                <SlidersHorizontal size={15} /> Filters
+                {active.length > 0 && <span className="bg-edge px-1.5 font-mono text-[10.5px] text-bone">{active.length}</span>}
+                <span className="ml-auto">{filtersOpen ? <Minus size={14} /> : <Plus size={14} />}</span>
+              </button>
+              <div id="catalog-filters" className={`${filtersOpen ? "block" : "hidden"} border-t-2 border-edge lg:block lg:border-t-0`}>
+                <div className="flex items-center gap-2 border-b-2 border-edge bg-bone px-4 py-2.5">
+                  <h2 className="font-mono text-[12.5px] font-semibold text-ink">Filters</h2>
+                  <button
+                    type="button"
+                    onClick={() => clear()}
+                    disabled={active.length === 0}
+                    className="ml-auto font-mono text-[11.5px] text-ink underline-offset-4 hover:underline disabled:pointer-events-none disabled:text-ink-faint"
+                  >
+                    Clear
+                  </button>
                 </div>
-
-                <h3 className="mt-5 text-[12px] font-semibold text-ink-soft">
-                  Availability
-                </h3>
-                <div className="mt-1">
-                  {STATUSES.map((status) => (
-                    <Check
-                      key={status}
-                      label={status}
-                      count={ALL_DIAGRAMS.filter((k) => statusOf(k) === status).length}
-                      checked={statuses.includes(status)}
-                      onChange={() => toggle(statuses, setStatuses, status)}
-                    />
-                  ))}
-                </div>
+                {FACETS.map((facet) => {
+                  const shown = open[facet.id] ?? false;
+                  const chosen = picked[facet.id]?.length ?? 0;
+                  return (
+                    <section key={facet.id} className="border-b border-edge/20 last:border-b-0">
+                      <h3>
+                        <button
+                          type="button"
+                          aria-expanded={shown}
+                          aria-controls={`facet-${facet.id}`}
+                          onClick={() => setOpen((current) => ({ ...current, [facet.id]: !shown }))}
+                          className={`flex w-full items-center gap-2 px-4 py-2.5 text-left text-[12.5px] transition-colors hover:bg-bone ${
+                            shown ? "bg-bone/60 font-semibold text-ink" : "text-ink"
+                          }`}
+                        >
+                          <span className="min-w-0 flex-1">{facet.title}</span>
+                          {chosen > 0 && (
+                            <span className="bg-edge px-1.5 font-mono text-[10.5px] leading-[17px] text-bone">{chosen}</span>
+                          )}
+                          {shown ? <Minus size={14} aria-hidden="true" /> : <Plus size={14} aria-hidden="true" />}
+                        </button>
+                      </h3>
+                      {shown && (
+                        <div id={`facet-${facet.id}`} className="bg-bone/60 px-4 pb-3 pt-0.5">
+                          {facet.options.map((option) => (
+                            <Option
+                              key={option.value}
+                              label={option.label}
+                              hint={option.hint}
+                              count={countFor(facet, option.value)}
+                              checked={picked[facet.id]?.includes(option.value) ?? false}
+                              onChange={() => toggle(facet.id, option.value)}
+                            />
+                          ))}
+                          {chosen > 0 && (
+                            <button
+                              type="button"
+                              onClick={() => clear(facet.id)}
+                              className="mt-1 font-mono text-[11px] text-ink-soft underline-offset-4 hover:text-ink hover:underline"
+                            >
+                              Clear {facet.title.toLowerCase()}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </section>
+                  );
+                })}
               </div>
             </div>
           ) : (
@@ -287,12 +474,46 @@ export default function Catalog() {
           )}
         </div>
 
+        {view === "browse" && active.length > 0 && (
+          <div className="mt-4 flex flex-wrap items-center gap-2" aria-label="Active filters">
+            {active.map((chip) => (
+              <button
+                key={`${chip.facet}:${chip.value}`}
+                type="button"
+                onClick={() => toggle(chip.facet, chip.value)}
+                aria-label={`Remove filter ${chip.label}`}
+                className="flex items-center gap-1.5 border-2 border-edge bg-white px-2 py-1 font-mono text-[11.5px] text-ink transition-colors hover:bg-bone"
+              >
+                {chip.label}
+                <X size={12} aria-hidden="true" />
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => clear()}
+              className="px-1 font-mono text-[11.5px] text-ink-soft underline underline-offset-4 hover:text-ink"
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+
         {view === "mine" ? (
           <MyDiagrams query={query} />
         ) : results.length === 0 ? (
-          <p className="slab mt-6 bg-white p-6 text-[13.5px] text-ink-soft">
-            Nothing matches that. Clear the search, or switch a filter back on.
-          </p>
+          <div className="slab mt-6 bg-white p-6">
+            <p className="text-[13.5px] text-ink-soft">Nothing matches that search and these filters.</p>
+            <button
+              type="button"
+              onClick={() => {
+                clear();
+                setQuery("");
+              }}
+              className="mt-3 font-mono text-[12.5px] font-semibold text-ink underline underline-offset-4"
+            >
+              Clear search and filters
+            </button>
+          </div>
         ) : (
           <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
             {results.map((kind) => (

@@ -962,7 +962,15 @@ Generate and Tingraph AI), element, figure and style panels, `Inspector`,
 ## Public documentation and policies
 
 `/editor` is the sole diagram-library entry, with Browse diagrams and My
-diagrams tabs. A valid `?type=…` or `?diagram=…` opens the canvas directly;
+diagrams tabs. Browse filters with one panel of collapsible sections
+(`FACETS` in `components/site/catalog.tsx`): what it shows, kind of drawing
+(graph, chart, figure), method or standard (`STANDARD`, by catalogue id;
+anything unlisted is General), starting point, and availability only while
+something is planned. Options in one section widen the list, sections narrow
+it, and an empty section filters nothing; every option counts what it would
+show with the search and the other sections as they are, and one that would
+show none is disabled. Active filters are chips over the cards. A new card
+needs a `STANDARD` entry unless it is General. A valid `?type=…` or `?diagram=…` opens the canvas directly;
 existing notation and saved-diagram links keep their meaning. The old picker
 and `/build` page are gone. `/build` permanently redirects to `/editor` while
 preserving query parameters, so old bookmarks still reach the right tab.
