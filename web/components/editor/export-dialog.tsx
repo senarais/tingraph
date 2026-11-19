@@ -8,8 +8,12 @@ import {
   getCommonBounds,
 } from "@excalidraw/excalidraw";
 import type { ExcalidrawImperativeAPI } from "@excalidraw/excalidraw/types";
-import { Download, X } from "lucide-react";
+import Link from "next/link";
+import { Download, Sparkles, X } from "lucide-react";
+import { apiFetch, getSession } from "@/lib/api/client";
+import type { Entitlements } from "@/lib/api/types";
 import { jpegToPdf } from "@/lib/export/pdf";
+import { EXPORT_RULES, exportLock, type ExportFormat, type PlanTier } from "@/lib/plans";
 import { Field, Segmented, SlabButton, Tick } from "@/components/editor/ui";
 
 /**
@@ -17,7 +21,17 @@ import { Field, Segmented, SlabButton, Tick } from "@/components/editor/ui";
  * will look like, how many pixels it will be, and what it will be called.
  */
 
-type Format = "png" | "jpg" | "svg" | "pdf";
+type Format = ExportFormat;
+
+/** The plan this browser's account is on; a guest, or an unreadable account, exports as Free. */
+async function readTier(): Promise<PlanTier> {
+  const session = await getSession().catch(() => null);
+  if (!session?.user) return "free";
+  const response = await apiFetch("/api/v1/me").catch(() => null);
+  if (!response?.ok) return "free";
+  const body = (await response.json().catch(() => null)) as { entitlements?: Entitlements } | null;
+  return body?.entitlements?.tier === "premium" ? "premium" : "free";
+}
 
 const FORMATS: Array<{ value: Format; label: string; note: string }> = [
   { value: "png", label: "PNG", note: "Lossless raster. The safe default for a document." },
@@ -65,6 +79,37 @@ export default function ExportDialog({
   const [name, setName] = useState(() => slugify(title));
   const [preview, setPreview] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // null while the plan is being read; locked choices wait for it rather than
+  // turning a Premium reader away for the second it takes
+  const [tier, setTier] = useState<PlanTier | null>(null);
+  /** why the last choice was refused, shown with the way to unlock it */
+  const [locked, setLocked] = useState<string | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    void readTier().then((read) => {
+      if (alive) setTier(read);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const plan = tier ?? "free";
+  const rules = EXPORT_RULES[plan];
+  /**
+   * Takes a choice the plan allows and refuses one it does not, saying why.
+   * While the plan is still being read the choice is not made either way.
+   */
+  const choose = (choice: Parameters<typeof exportLock>[1], apply: () => void) => {
+    const reason = exportLock(plan, choice);
+    if (reason && tier === null) {
+      setLocked("Checking your plan. Try again in a moment.");
+      return;
+    }
+    setLocked(reason);
+    if (!reason) apply();
+  };
 
   // read once per open, so the measurements below have a stable input
   const elements = useMemo(() => api?.getSceneElements() ?? [], [api]);
@@ -126,19 +171,37 @@ export default function ExportDialog({
   const width = Math.round(base.width * scale);
   const height = Math.round(base.height * scale);
 
+  // a typed size past the plan's scale stops at it, and says so
+  const resize = (wanted: number) => {
+    const next = Math.min(12, Math.max(0.1, wanted));
+    const reason = exportLock(plan, { scale: next });
+    if (reason && tier === null) {
+      setLocked("Checking your plan. Try again in a moment.");
+      return;
+    }
+    setLocked(reason);
+    setScale(reason ? rules.maxScale : next);
+  };
   const setWidth = (next: number) => {
     if (base.width > 0 && next > 0) {
-      setScale(Math.min(12, Math.max(0.1, next / base.width)));
+      resize(next / base.width);
     }
   };
   const setHeight = (next: number) => {
     if (base.height > 0 && next > 0) {
-      setScale(Math.min(12, Math.max(0.1, next / base.height)));
+      resize(next / base.height);
     }
   };
 
+  // the export itself is held to the plan too, whatever the controls show
+  const refusal = tier === null ? "Checking your plan." : exportLock(tier, { format, scale, transparent });
+
   const run = useCallback(async () => {
     if (!api || busy || elements.length === 0) {
+      return;
+    }
+    if (refusal) {
+      setLocked(refusal);
       return;
     }
     setBusy(true);
@@ -207,7 +270,7 @@ export default function ExportDialog({
     } finally {
       setBusy(false);
     }
-  }, [api, appState, base, busy, elements.length, format, name, padding, scale]);
+  }, [api, appState, base, busy, elements.length, format, name, padding, refusal, scale]);
 
   // the sheet's shortcuts run on the document, so while this is open the
   // dialog keeps the keyboard: Delete must not reach the drawing behind it
@@ -285,12 +348,16 @@ export default function ExportDialog({
             <Field label="Format" className="p-4">
               <Segmented
                 size="sm"
-                options={FORMATS.map((entry) => ({
-                  value: entry.value,
-                  label: entry.label,
-                }))}
+                options={FORMATS.map((entry) => {
+                  const premium = !EXPORT_RULES.free.formats.includes(entry.value);
+                  return {
+                    value: entry.value,
+                    label: premium && plan === "free" ? `${entry.label} ✦` : entry.label,
+                    title: premium && plan === "free" ? `${entry.label} is a Premium export` : entry.label,
+                  };
+                })}
                 value={format}
-                onChange={setFormat}
+                onChange={(next) => choose({ format: next }, () => setFormat(next))}
               />
               <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">{note}</p>
             </Field>
@@ -298,9 +365,13 @@ export default function ExportDialog({
             <Field label="Size" className="p-4">
               <Segmented
                 size="sm"
-                options={SCALES.map((value) => ({ value, label: `${value}x` }))}
+                options={SCALES.map((value) => ({
+                  value,
+                  label: value > EXPORT_RULES.free.maxScale && plan === "free" ? `${value}x ✦` : `${value}x`,
+                  title: value > EXPORT_RULES.free.maxScale && plan === "free" ? `${value}x is a Premium export` : `${value}x`,
+                }))}
                 value={SCALES.includes(scale) ? scale : -1}
-                onChange={setScale}
+                onChange={(next) => choose({ scale: next }, () => setScale(next))}
               />
               <div className="mt-2.5 flex items-center gap-2">
                 <label className="min-w-0 flex-1">
@@ -355,15 +426,21 @@ export default function ExportDialog({
                   { value: "white" as const, label: "White" },
                   {
                     value: "none" as const,
-                    label: "Transparent",
+                    label: plan === "free" ? "Transparent ✦" : "Transparent",
                     title:
-                      format === "jpg" || format === "pdf"
-                        ? "JPG and PDF are always written on white"
-                        : "Leave the paper out of the file",
+                      plan === "free"
+                        ? "A transparent background is a Premium export"
+                        : format === "jpg" || format === "pdf"
+                          ? "JPG and PDF are always written on white"
+                          : "Leave the paper out of the file",
                   },
                 ]}
                 value={transparent ? "none" : "white"}
-                onChange={(choice) => setOpaque(choice === "white")}
+                onChange={(choice) =>
+                  choice === "white"
+                    ? (setLocked(null), setOpaque(true))
+                    : choose({ transparent: true }, () => setOpaque(false))
+                }
               />
               {(format === "jpg" || format === "pdf") && !opaque && (
                 <p className="mt-2 text-[11px] leading-relaxed text-ink-faint">
@@ -389,8 +466,25 @@ export default function ExportDialog({
           </div>
         </div>
 
+        {locked && (
+          <p
+            role="alert"
+            className="flex items-start gap-2 border-t-2 border-edge bg-blueprint-tint px-4 py-2.5 text-[11.5px] leading-relaxed text-blueprint"
+          >
+            <Sparkles size={13} className="mt-0.5 shrink-0" aria-hidden="true" />
+            <span className="min-w-0 flex-1">
+              {locked}{" "}
+              {tier === "free" && (
+                <Link href="/checkout" prefetch={false} target="_blank" className="font-semibold underline">
+                  Go Premium
+                </Link>
+              )}
+            </span>
+          </p>
+        )}
         <footer className="flex items-center gap-3 border-t-2 border-edge px-4 py-3">
           <Tick>
+            {tier === "free" ? `Free: PNG or JPG, up to ${EXPORT_RULES.free.maxScale}x · ` : ""}
             {elements.length === 0
               ? "Empty sheet"
               : format === "svg"

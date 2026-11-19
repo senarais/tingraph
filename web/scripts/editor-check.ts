@@ -16,7 +16,7 @@ import { promptFor, GUIDE_SECTIONS } from "../lib/guide";
 import { refuses, systemPrompt, unfence } from "../lib/ai/chat";
 import { avatarProblem, readProfile, safeNext } from "../lib/auth";
 import { customInk, inkFor, washFor } from "../lib/ink";
-import { isPlanTier, PLAN_LIMITS, planName } from "../lib/plans";
+import { exportLock, isPlanTier, PLAN_LIMITS, planName } from "../lib/plans";
 import { styleFor } from "../lib/sheet";
 import { diagramTitle, readSavedDiagram } from "../lib/saved-diagrams";
 import type { Json } from "../lib/json";
@@ -1107,6 +1107,18 @@ assert.deepEqual(
   { diagrams: 100, generations: null, aiTokens: 100_000 },
   "the Premium plan keeps its published limits",
 );
+// what each plan may export: Free the everyday rasters on white, Premium the rest
+assert.equal(exportLock("free", { format: "png", scale: 2, transparent: false }), null, "Free exports PNG at 2x");
+assert.equal(exportLock("free", { format: "jpg", scale: 1 }), null, "Free exports JPG");
+assert.ok(exportLock("free", { format: "svg" }), "SVG is Premium");
+assert.ok(exportLock("free", { format: "pdf" }), "PDF is Premium");
+assert.ok(exportLock("free", { scale: 3 }), "past 2x is Premium");
+assert.equal(exportLock("free", { scale: 1.5 }), null, "a typed size within 2x is Free");
+assert.ok(exportLock("free", { transparent: true }), "a transparent background is Premium");
+for (const format of ["png", "jpg", "svg", "pdf"] as const) {
+  assert.equal(exportLock("premium", { format, scale: 12, transparent: true }), null, `Premium exports ${format}`);
+}
+assert.ok(exportLock("premium", { scale: 13 }), "nothing exports past the dialog's own 12x");
 assert.equal(isPlanTier("premium"), true);
 assert.equal(isPlanTier("pro"), false, "only stored tier values are accepted");
 assert.equal(planName("premium"), "Premium");

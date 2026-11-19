@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
-import { PLAN_LIMITS } from "@/lib/plans";
+import { EXPORT_RULES, PLAN_LIMITS } from "@/lib/plans";
 
 const FEATURES = [
   {
@@ -21,8 +21,8 @@ const FEATURES = [
   },
   {
     label: "Export options",
-    free: "Limited options",
-    premium: "All export options",
+    free: `PNG and JPG, up to ${EXPORT_RULES.free.maxScale}x, on white`,
+    premium: `Adds SVG, PDF, up to ${EXPORT_RULES.premium.maxScale}x and transparent backgrounds`,
   },
 ];
 

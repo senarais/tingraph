@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useId, useRef } from "react";
 import { ArrowRight, Download, Layers, Sparkles, X, Zap } from "lucide-react";
-import { PLAN_LIMITS } from "@/lib/plans";
+import { EXPORT_RULES, PLAN_LIMITS } from "@/lib/plans";
 
 const BENEFITS = [
   {
@@ -27,8 +27,8 @@ const BENEFITS = [
   {
     icon: Download,
     title: "All export options",
-    body: "Export PNG, JPG, SVG or PDF. Preview the result and choose format, scale, padding and background to fit your document.",
-    comparison: "Free includes limited export options.",
+    body: `Export vector SVG and PDF as well as PNG and JPG, at up to ${EXPORT_RULES.premium.maxScale}x, on white or a transparent background. Preview the result and fit it to your document.`,
+    comparison: `Free exports PNG and JPG at up to ${EXPORT_RULES.free.maxScale}x, on white.`,
   },
 ];
 

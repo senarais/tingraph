@@ -1044,6 +1044,17 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
   lock the AI window; late settlements from previous windows cannot consume a
   new allowance. The profile shows exact reset instants in the reader's local
   time. Keep policy in migrations, not only in React.
+- **What a plan may export is `EXPORT_RULES` in `lib/plans.ts`.** Free, and a
+  guest, export PNG and JPG at up to 2x on white; Premium adds SVG, PDF,
+  scales up to 12x and a transparent background. The Export dialog reads the
+  tier from `/api/v1/me` once per open, marks every Premium choice with ✦,
+  and refuses one with `exportLock`'s sentence and a Go Premium link rather
+  than hiding it; a typed size stops at the plan's scale, and the export
+  itself is checked again. While the tier is still being read nothing locked
+  is taken or refused for good. Exporting happens in the browser, so this is
+  the editor's rule, not the API's. The pricing table, the Premium preview
+  and the export docs quote the same constants, so the claim and the rule
+  cannot drift apart.
 - **Each payment buys 30 days; only PayPal card subscriptions auto-renew.**
   The public navbar's Go Premium button opens a benefits preview in a native
   dialog; only its checkout CTAs lead to `/checkout`.
