@@ -1334,6 +1334,92 @@ assert.equal(elements.elementsOn(pictured)[0].spec.image?.fileId, "uploaded-logo
 assert.equal(elements.elementsOn(pictured)[0].box.x, 400, "the pictured component stays put");
 assert.throws(() => parseDSL('architecture "Bad" { service A "A" size 0 1 }'), /size/);
 
+// ----------------------------------------------------------------- studio
+
+{
+  const studio = require_("../lib/studio") as typeof import("../lib/studio");
+  const { notationOfUnit, notationOfMark, linkNotation, rulesForLink, adoptPieces, boundsOf, spotFor, readStudioDocument } = studio;
+
+  // a piece says which notation drew it, by its unit name, copies included
+  assert.equal(notationOfUnit("flow-node-S1"), "flow");
+  assert.equal(notationOfUnit("bpmn-T1~ab12cd"), "bpmn", "a copy keeps its notation");
+  assert.equal(notationOfUnit("org-DEAN"), "org");
+  assert.equal(notationOfUnit("pool-P1"), "bpmn");
+  assert.equal(notationOfUnit("line-x1"), null, "a hand-drawn line's unit says nothing");
+  assert.equal(notationOfMark({ unit: "line-k3j2", kind: "figure" }), "line", "a line chart is a line chart");
+  assert.equal(notationOfMark({ unit: "venn-1~zz", kind: "figure" }), "venn");
+  assert.equal(notationOfMark({ unit: "lane-L1", kind: "lane", parent: "pool-P1" }), "bpmn");
+  assert.equal(notationOfMark({ unit: "lane-A", kind: "lane", parent: "frame-x" }), "activity");
+  const partitioned = [{ customData: { tingraph: { unit: "lane-A", kind: "lane", parent: "frame-p" } } }];
+  assert.equal(notationOfMark({ unit: "frame-p", kind: "frame" }, partitioned), "activity", "a frame with partitions is an activity's");
+  assert.equal(notationOfMark({ unit: "frame-s", kind: "frame" }, partitioned), "usecase", "a bare frame is a use case boundary");
+
+  // a connector is routed by its own notation: the one it was made in, else
+  // the one that draws a line by its name, else the one its ends were drawn in
+  assert.equal(linkNotation({ line: "report", from: { unit: "org-A" }, to: { unit: "org-B" } }), "org");
+  assert.equal(linkNotation({ line: "association", from: { unit: "uc-A" }, to: { unit: "uc-U1" } }), "usecase", "BPMN and use cases share association; the ends decide");
+  assert.equal(linkNotation({ line: "association", from: { unit: "bpmn-T1" }, to: { unit: "bpmn-D1" } }), "bpmn");
+  assert.equal(linkNotation({ line: "data-flow", from: { unit: "x" }, to: { unit: "y" }, notation: "dfd" }), "dfd", "a stamped notation wins");
+  assert.deepEqual(
+    rulesForLink({ line: "report", from: { unit: "org-A" }, to: { unit: "org-B" } }, { category: "bpmn", direction: "down" }),
+    { category: "org", direction: "down" },
+    "an org line keeps org's rules on a sheet whose notation in hand is BPMN",
+  );
+
+  // an example is adopted as a drawing of its own: two copies of one example
+  // share no unit, their lines are tied to their own boxes, and each lands
+  // where it was put
+  const drawn = (computeLayout(parseDSL(FLOWCHART_TEMPLATE)));
+  const pieces = (buildSkeletons(drawn, inkFor("mono"), styleFor("formal")) as unknown as ExcalidrawElement[])
+    .map((piece, index) => ({ ...piece, id: `p${index}`, groupIds: piece.groupIds ?? [], width: piece.width ?? 0, height: piece.height ?? 0 }) as ExcalidrawElement);
+  let n = 0;
+  const fresh = () => `f${n++}`;
+  const first = adoptPieces(pieces, "flow", { x: 0, y: 0 }, fresh);
+  const second = adoptPieces(pieces, "flow", { x: 900, y: 40 }, fresh);
+  const units = (list: readonly ExcalidrawElement[]) => new Set(list.map((piece) => unitOf(piece)?.unit).filter(Boolean));
+  assert.ok(units(first).size > 0, "the example's pieces keep their marks");
+  for (const unit of units(first)) assert.ok(!units(second).has(unit), `two inserted examples share ${unit}`);
+  for (const piece of second) {
+    const link = unitOf(piece)?.link;
+    if (!link) continue;
+    assert.ok(units(second).has(link.from.unit) && units(second).has(link.to.unit), "a line is tied to its own example's boxes");
+    assert.equal(link.notation, "flow", "an inserted line is told its notation");
+  }
+  for (const piece of second) {
+    const points = (piece as unknown as { points?: [number, number][] }).points;
+    if (points) assert.deepEqual(points[0], [0, 0], "an inserted line starts at its own origin");
+  }
+  const offset = adoptPieces(
+    [{ id: "a1", type: "arrow", x: 10, y: 10, width: 20, height: 0, groupIds: [], points: [[0, 0.5], [20, 0.5]] } as unknown as ExcalidrawElement],
+    "flow",
+    { x: 0, y: 0 },
+    fresh,
+  )[0] as unknown as { x: number; y: number; points: [number, number][] };
+  assert.deepEqual([offset.x, offset.y, offset.points], [0, 0.5, [[0, 0], [20, 0]]], "a line half a unit off its origin is normalised in place");
+  const placed = boundsOf(second as never)!;
+  assert.deepEqual([Math.round(placed.x), Math.round(placed.y)], [900, 40], "an example lands where it was put");
+
+  // an arrow is measured by its points, which may lie either side of its x
+  assert.deepEqual(boundsOf([{ x: 100, y: 0, width: 50, height: 10, points: [[0, 0], [-50, 10]] }]), { x: 50, y: 0, width: 50, height: 10 });
+  // a new drawing goes in the middle of an empty sheet, and beside a full one
+  assert.deepEqual(spotFor([], { width: 100, height: 40 }, { x: 500, y: 300 }), { x: 450, y: 280 });
+  assert.deepEqual(
+    spotFor([{ x: 0, y: 10, width: 200, height: 100, isDeleted: false } as unknown as ExcalidrawElement], { width: 100, height: 40 }, { x: 500, y: 300 }),
+    { x: 400, y: 10 },
+    "nothing lands on the reader's work",
+  );
+
+  // a saved Studio sheet is read only when it is one
+  const sheet = {
+    version: 1, category: "studio", source: "", direction: "down", style: "formal",
+    ink: { id: "mono" }, scene: { elements: [], files: {} },
+  } as unknown as Json;
+  assert.ok(readStudioDocument(sheet), "a Studio sheet reads");
+  assert.equal(readStudioDocument({ ...(sheet as object), source: "flow \"x\" {}" } as unknown as Json), null, "a Studio sheet has no source");
+  assert.equal(readStudioDocument({ ...(sheet as object), category: "flow" } as unknown as Json), null);
+  assert.equal(readSavedDiagram(sheet), null, "the editor does not open a Studio sheet");
+}
+
 checkPdf().then(() => {
   console.log("editor self-check: all assertions passed");
 });

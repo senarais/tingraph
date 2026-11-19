@@ -899,6 +899,66 @@ export — already asks `isFigure()` and needs no change. If you find yourself
 editing the rail or the canvas to add a notation, the abstraction has slipped
 and that is the thing to fix.
 
+## Studio: one sheet, every notation
+
+`/studio` (in the site's navigation) is a free sheet for drawing by hand in
+every notation at once: several diagrams side by side, in any mix. It is the
+editor with the source taken away — the same `Canvas`, `Rail` (in
+`mode="studio"`, which swaps the shape drawer for a **Library** and drops
+Generate and Tingraph AI), element, figure and style panels, `Inspector`,
+`ExportDialog` and save. It lives in `components/studio/` and `lib/studio.ts`.
+
+- **The notation in hand.** The tools work in one notation at a time, shown as
+  *In hand* in the bar. Picking a notation in the Library puts it in hand, and
+  so does selecting anything a notation drew (`notationOfPicked`). Text,
+  pictures and freehand strokes belong to none and leave it alone. The
+  connector list, the Elements and Figure panels and the handles then work
+  exactly as they do on an editor sheet in that notation; the Elements panel
+  and its handles see only that notation's elements, links and frames.
+- **Every connector keeps its own notation's rules.** `LinkMark.notation` is
+  stamped by `newConnector` and on every line of an inserted example;
+  `rulesForLink` reads it (falling back to the notation that owns the line's
+  name, and to the ends' notation when two own it — `association`). Canvas and
+  `ConnectLayer` take that as `rulesFor`, so a re-cut org reporting line still
+  leaves the bottom of its box whatever is in hand. The editor passes no
+  `rulesFor` and routes every line by the sheet's notation, as before.
+- **Which notation a piece belongs to is read from its mark**
+  (`notationOfMark`): node unit prefixes (`bpmn-`, `org-`, `uc-`, …,
+  `flow-node-`, `pool-`), a figure's `<kind>-` unit, a lane's parent (a pool is
+  BPMN, a frame an activity), and a frame with partitions under it is an
+  activity's, otherwise a use case boundary.
+- **The Library** lists every notation, searchable and filtered by family;
+  one notation opens on two separate tabs. *Shapes* drags or drops its palette
+  shapes (`paletteShape`), places a figure empty, and places the structure the
+  editor writes into the source instead — a pool with two lanes, a use case
+  boundary, two partitions — drawn from small sources in `STRUCTURES`.
+  *Examples* inserts the notation's template and its `STARTERS` whole. These
+  are drawn locally from fixed sources, not generated: no allowance is used and
+  no reader's source is involved.
+- **An inserted drawing is a drawing of its own.** `drawPieces` converts with
+  fresh element ids and `adoptPieces` renames every unit (`renameCopies`, as a
+  paste does), re-ties and stamps its lines, normalises each line to start at
+  its own origin (Excalidraw will not edit one that does not, and only its own
+  `restore` normalises), and moves it to `spotFor` — the middle of an empty
+  sheet, else 200 to the right of everything on it. Two copies of one example
+  never share a unit or an id.
+- **A Studio sheet is saved as category `studio`** (migration 017, the API's
+  whitelist): the editor's document with `source: ""` and direction `down`,
+  read by `readStudioDocument` in `lib/studio-document.ts` — kept apart from
+  `lib/studio.ts` so pages that only list sheets do not load Excalidraw. It
+  counts toward the same saved-diagram limit, appears in My diagrams with its
+  own art and opens at `/studio?diagram=…`; the editor sends a Studio row
+  there, and Studio sends a notation row to the editor. The sheet's name is
+  edited in the bar and saved as the row's title.
+- **Save is shared.** `useSheetSave` (`components/editor/use-sheet-save.ts`)
+  is the editor's Save, auto-save switch and clean-state signature, written
+  once for both; `SheetActions` and `HomeMark` in `top-bar.tsx` are the bar's
+  shared halves.
+- **A placed shape is named afresh** (`mnl-<type>-<random>`) in the editor as
+  in Studio. A counter that restarted every session gave a reopened sheet's new
+  shape the unit of one placed last time, and two pieces with one unit are one
+  element.
+
 ## Public documentation and policies
 
 `/editor` is the sole diagram-library entry, with Browse diagrams and My

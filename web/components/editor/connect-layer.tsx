@@ -46,7 +46,10 @@ interface ConnectLayerProps {
   api: ExcalidrawImperativeAPI | null;
   /** the connector the rail is holding, by name, or null for the pointer */
   holding: string | null;
+  /** the rules a new connector is drawn by: the notation in hand */
   rules: Rules;
+  /** Studio only: the rules a connector already on the sheet is moved by */
+  rulesFor?: (link: LinkMark) => Rules;
   /** the sheet's own line: its colour, weight and roughness */
   style: ConnectorStyle;
   view: CanvasView;
@@ -131,6 +134,7 @@ export default function ConnectLayer({
   api,
   holding,
   rules,
+  rulesFor,
   style,
   view,
   picked,
@@ -143,6 +147,9 @@ export default function ConnectLayer({
   const svgRef = useRef<SVGSVGElement>(null);
 
   const link = picked ? unitOf(picked)?.link ?? null : null;
+  // a line already on the sheet is moved by its own notation's rules; only a
+  // new one takes the rules of the notation in hand
+  const own = link && rulesFor ? rulesFor(link) : rules;
   const drawing = holding !== null && !panning;
   // a half-drawn connector is dropped the moment the rail puts the tool back
   const held = drag?.mode === "draw" && holding === null ? null : drag;
@@ -165,7 +172,7 @@ export default function ConnectLayer({
     targetsRef.current = linkTargets(scene);
     // an ERD table publishes a point per column, so a relation drawn by hand
     // lands on the key it was dragged from rather than on the whole box
-    portsRef.current = rules.category === "erd" ? portsOf(scene) : new Map();
+    portsRef.current = rules.category === "erd" || own.category === "erd" ? portsOf(scene) : new Map();
     return targetsRef.current;
   };
 
@@ -205,7 +212,7 @@ export default function ConnectLayer({
   /** Writes one connector back, re-cutting its route from the new setting. */
   const write = (id: string, patch: Partial<LinkMark>, settled: boolean) => {
     api.updateScene({
-      elements: writeLink(api.getSceneElements(), id, patch, rules.category),
+      elements: writeLink(api.getSceneElements(), id, patch, own.category),
       // a leg still under the hand waits for the hand to come off before it
       // reaches the history, so one drag is one step back
       captureUpdate: settled
@@ -364,7 +371,7 @@ export default function ConnectLayer({
         ? { from: { unit: hover.unit }, to: { unit: end.unit }, line: kindOf }
         : { from: { unit: end.unit }, to: { unit: hover.unit }, line: kindOf };
       return routeBetween(reverse ? hover.box : from, reverse ? from : hover.box, {
-        ...rules,
+        ...(held.mode === "draw" ? rules : own),
         fromSide: reverse ? hover.end.side : end.side,
         toSide: reverse ? end.side : hover.end.side,
         fromAt: reverse ? hover.at : fromAt,
@@ -382,7 +389,7 @@ export default function ConnectLayer({
     // by, and follows the hand from there
     const side =
       end.side ??
-      sidesFor(from, { x: held.at.x, y: held.at.y, width: 1, height: 1 }, rules)[0];
+      sidesFor(from, { x: held.at.x, y: held.at.y, width: 1, height: 1 }, held.mode === "draw" ? rules : own)[0];
     const anchor = sideAnchor(from, side);
     if (fromAt !== undefined) anchor.y = fromAt;
     return reverse ? [held.at, anchor] : [anchor, held.at];

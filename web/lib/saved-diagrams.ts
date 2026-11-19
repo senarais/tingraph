@@ -51,7 +51,7 @@ export function diagramTitle(value: string, fallback = "Untitled diagram"): stri
   return Array.from(title).slice(0, MAX_DIAGRAM_TITLE).join("");
 }
 
-function readInk(value: Json | undefined): InkChoice | null {
+export function readInk(value: Json | undefined): InkChoice | null {
   if (!record(value) || typeof value.id !== "string") {
     return null;
   }

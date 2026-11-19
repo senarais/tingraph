@@ -45,6 +45,17 @@ export const DOC_GUIDES: { slug: string; title: string; description: string; sec
     ],
   },
   {
+    slug: "studio",
+    title: "Studio",
+    description: "Draw by hand in every notation on one free sheet, with several diagrams side by side.",
+    sections: [
+      { id: "what-studio-is", title: "One sheet for every notation", paragraphs: ["Studio is a free canvas. Where the editor holds one diagram in one notation and draws it from source, a Studio sheet holds as many diagrams as you like, in any mix of notations, and everything on it is drawn by hand. Open it from Studio in the site's navigation; you can draw and export without an account."] },
+      { id: "library", title: "Work from the Library", steps: ["Open the Library from the rail. It lists every notation; search it or filter by what a notation shows.", "Pick a notation. Its Shapes tab holds its shapes: drag one onto the sheet, or click it to drop one in the middle. Pools, boundaries and partitions are placed the same way and grow from their own controls.", "Its Examples tab holds whole drawings: the notation's starter example and its other starting points. Insert places one beside whatever is already on the sheet; nothing else moves.", "For a chart or another figure, the Shapes tab places an empty one, which you fill in from its panel in the rail."] },
+      { id: "notation-in-hand", title: "The notation in hand", paragraphs: ["The tools always work in one notation, shown in the bar as In hand. Picking a notation in the Library puts it in hand, and so does selecting something drawn in a notation on the sheet. The Connector in the rail then offers that notation's lines, and its Elements or Figure panel opens on what you selected.", "Every connector keeps its own notation's rules, so an org chart's reporting lines still leave the bottom of a box when a BPMN diagram stands beside it. Text, pictures and freehand strokes belong to no notation and leave the notation in hand as it is."] },
+      { id: "what-it-has", title: "What Studio has, and what it leaves out", bullets: ["Shapes, connectors, element and figure panels, style, the properties inspector, export, save and auto-save work as they do in the editor.", "There is no Generate panel and no Tingraph AI: a Studio sheet has no source. Write source in the editor when you want a diagram laid out for you, then keep finishing by hand.", `A saved Studio sheet counts as one saved diagram on your plan (Free ${PLAN_LIMITS.free.diagrams}, Premium ${PLAN_LIMITS.premium.diagrams}) and opens again from My diagrams.`] },
+    ],
+  },
+  {
     slug: "tingraph-ai",
     title: "Tingraph AI & copy prompts",
     description: "Draft diagram source with the built-in assistant, or brief an assistant of your own.",

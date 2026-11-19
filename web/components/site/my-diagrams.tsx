@@ -8,6 +8,7 @@ import { APIError, apiFetch, getSession } from "@/lib/api/client";
 import type { DiagramSummary } from "@/lib/api/types";
 import { isDiagramCategory } from "@/lib/saved-diagrams";
 import { ACCENTS, ALL_DIAGRAMS } from "@/lib/diagrams";
+import { STUDIO_CATEGORY } from "@/lib/studio-document";
 
 type Diagram = DiagramSummary;
 
@@ -137,9 +138,12 @@ export default function MyDiagrams({ query }: { query: string }) {
       ) : (
         <div className="mt-6 grid gap-6 sm:grid-cols-2 xl:grid-cols-3">
           {shown.map((diagram) => {
+            const studio = diagram.category === STUDIO_CATEGORY;
             const kind = ALL_DIAGRAMS.find((entry) => entry.id === diagram.category);
-            const category = isDiagramCategory(diagram.category) ? diagram.category : "flow";
-            const tone = kind ? ACCENTS[kind.accent] : ACCENTS.navy;
+            const category = studio
+              ? STUDIO_CATEGORY
+              : isDiagramCategory(diagram.category) ? diagram.category : "flow";
+            const tone = kind ? ACCENTS[kind.accent] : studio ? ACCENTS.slate : ACCENTS.navy;
             const confirming = armed === diagram.id;
             return (
               <article key={diagram.id} className="slab flex flex-col bg-white">
@@ -168,7 +172,11 @@ export default function MyDiagrams({ query }: { query: string }) {
                   </p>
                   <div className="mt-auto flex gap-2 pt-5">
                     <Link
-                      href={`/editor?type=${category}&diagram=${diagram.id}`}
+                      href={
+                        studio
+                          ? `/studio?diagram=${diagram.id}`
+                          : `/editor?type=${category}&diagram=${diagram.id}`
+                      }
                       className="flex-1 border-2 border-edge bg-edge px-3 py-2 text-center font-mono text-[12px] font-semibold text-bone transition-colors hover:bg-navy"
                     >
                       Open

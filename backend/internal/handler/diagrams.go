@@ -24,6 +24,8 @@ var diagramCategories = map[string]bool{
 	"architecture": true, "prisma": true, "class": true, "dfd": true, "state": true,
 	"tree": true, "histogram": true, "quadrant": true,
 	"gantt": true,
+	// a Studio sheet holds drawings in several notations; it has no source
+	"studio": true,
 }
 
 type diagramInput struct {

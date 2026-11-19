@@ -1143,6 +1143,39 @@ export function HeatmapArt({ accent = "oxblood", className }: ArtProps) {
   );
 }
 
+/** A Studio sheet: several drawings, in several notations, on one sheet. */
+export function StudioArt({ accent = "slate", className }: ArtProps) {
+  const ink = ACCENTS[accent].stroke;
+  return (
+    <svg viewBox="0 0 320 180" className={className} aria-hidden="true" fill="none">
+      <rect x="10" y="10" width="300" height="160" stroke={ink} strokeDasharray="4 4" opacity={0.45} />
+      {/* a flowchart */}
+      <rect x="28" y="26" width="58" height="22" rx="11" fill="white" stroke={ink} strokeWidth={CONNECTOR} />
+      <rect x="28" y="68" width="58" height="22" fill="white" stroke={ink} strokeWidth={CONNECTOR} />
+      <path d="M57 104l20 14-20 14-20-14z" fill="white" stroke={ink} strokeWidth={CONNECTOR} />
+      <Line d="M57 48v20M57 90v14" ink={ink} />
+      {/* a bar chart */}
+      <path d="M118 32v62h80" stroke={ink} strokeWidth={CONNECTOR} />
+      {[[128, 58], [146, 44], [164, 70], [182, 50]].map(([x, top]) => (
+        <rect key={x} x={x} y={top} width="12" height={94 - top} fill={ink} opacity={0.75} />
+      ))}
+      {/* an org chart */}
+      <rect x="236" y="26" width="52" height="20" fill="white" stroke={ink} strokeWidth={CONNECTOR} />
+      <rect x="220" y="66" width="36" height="18" fill="white" stroke={ink} strokeWidth={CONNECTOR} />
+      <rect x="268" y="66" width="36" height="18" fill="white" stroke={ink} strokeWidth={CONNECTOR} />
+      <Line d="M262 46v10h-24v10M262 56h24v10" ink={ink} />
+      {/* a Venn */}
+      <circle cx="140" cy="132" r="22" stroke={ink} strokeWidth={CONNECTOR} />
+      <circle cx="166" cy="132" r="22" stroke={ink} strokeWidth={CONNECTOR} />
+      {/* a sequence */}
+      <path d="M226 104v56M286 104v56" stroke={ink} strokeWidth={CONNECTOR} strokeDasharray="3 3" />
+      <Line d="M226 122h56M286 142h-56" ink={ink} />
+      <Head x={286} y={122} dir="right" ink={ink} />
+      <Head x={226} y={142} dir="left" ink={ink} />
+    </svg>
+  );
+}
+
 /* ------------------------------------------------ class, dfd, state, tree */
 
 export function GanttArt({ accent = "oxblood", className }: ArtProps) {
@@ -1342,6 +1375,7 @@ export function DiagramArt({
   if (id === "dfd") return <DfdArt accent={accent} className={className} />;
   if (id === "state") return <StateArt accent={accent} className={className} />;
   if (id === "tree") return <TreeArt accent={accent} className={className} />;
+  if (id === "studio") return <StudioArt accent={accent} className={className} />;
   if (id === "system-context") return <ContextArt accent={accent} className={className} />;
   if (id === "container") return <ContainerArt accent={accent} className={className} />;
   if (id === "component") return <ComponentArt accent={accent} className={className} />;

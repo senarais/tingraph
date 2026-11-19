@@ -48,8 +48,18 @@ async function checkRouting() {
     assert.equal(response.status, 308);
     assert.equal(getRedirectUrl(response), "https://tingraph.test/editor"+query, "old links must preserve tab and diagram queries");
   }
+  // Studio opens a fresh sheet, or the saved one it is asked for
+  const [{ default: StudioPage }, { default: StudioShell }] = await Promise.all([
+    import("../app/studio/page"), import("../components/studio/studio-shell"),
+  ]);
+  const studio = (query: Record<string, string | string[] | undefined>) => StudioPage({ params: Promise.resolve({}), searchParams: Promise.resolve(query) });
+  const fresh = await studio({});
+  assert.equal(fresh.type, StudioShell, "Studio must open its sheet");
+  assert.equal(fresh.props.diagramId, undefined, "a fresh Studio sheet opens empty");
+  assert.equal((await studio({ diagram: id })).props.diagramId, id, "a saved Studio sheet opens by id");
+  assert.equal((await studio({ diagram: [id, id] })).props.diagramId, undefined, "a malformed id opens a fresh sheet");
   assert(!existsSync(new URL("../app/build/page.tsx", import.meta.url)), "only one library page may exist");
-  console.log("routing self-check: catalogue tabs, all canvases, saved diagrams and legacy redirects passed");
+  console.log("routing self-check: catalogue tabs, all canvases, Studio, saved diagrams and legacy redirects passed");
 }
 
 checkRouting().catch((error) => { console.error(error); process.exitCode = 1; });

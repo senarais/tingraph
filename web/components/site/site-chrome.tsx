@@ -5,6 +5,7 @@ import PremiumPreview from "@/components/site/premium-preview";
 import { POLICIES, SUPPORT_EMAIL, SUPPORT_PHONE } from "@/lib/legal";
 
 const PAGES = [
+  { href: "/studio", label: "Studio" },
   { href: "/features", label: "Features" },
   { href: "/support", label: "Support" },
 ] as const;
@@ -61,7 +62,7 @@ export function SiteNav() {
 
 export function SiteFooter() {
   const groups = [
-    { title: "Product", links: [{ href: "/editor", label: "Browse diagrams" }, { href: "/features", label: "Features" }, { href: "/#pricing", label: "Plans & pricing" }] },
+    { title: "Product", links: [{ href: "/editor", label: "Browse diagrams" }, { href: "/studio", label: "Studio" }, { href: "/features", label: "Features" }, { href: "/#pricing", label: "Plans & pricing" }] },
     { title: "Learn", links: [{ href: "/docs", label: "Documentation" }, { href: "/docs/getting-started", label: "Getting started" }, { href: "/docs/tingraph-ai", label: "AI & copy prompts" }, { href: "/docs/saving-and-exporting", label: "Saving & exporting" }] },
     { title: "Tingraph", links: [{ href: "/about", label: "About" }, { href: "/support", label: "Support & contact" }, { href: "/security", label: "Security" }, { href: "/profile", label: "Your account" }] },
   ];

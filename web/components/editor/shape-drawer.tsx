@@ -22,7 +22,7 @@ interface ShapeDrawerProps {
  * card, which is the wrong thing entirely: what is being placed is a shape,
  * and the sheet draws that under the pointer instead.
  */
-function useBlankDragImage(): HTMLImageElement | undefined {
+export function useBlankDragImage(): HTMLImageElement | undefined {
   // made when the drawer opens, so the browser has decoded it long before a
   // shape is picked up
   const [image] = useState(() => {

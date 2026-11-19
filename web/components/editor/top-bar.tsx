@@ -14,7 +14,7 @@ import AccountButton from "@/components/account/account-button";
  * still parses. The one thing it does is let the drawing out of the editor.
  */
 
-function Cell({
+export function Cell({
   label,
   children,
   tone = "ink",
@@ -64,27 +64,9 @@ export default function TopBar({
   autoSave,
   onAutoSave,
 }: TopBarProps) {
-  const setExportOpen = useTingraphStore((s) => s.setExportOpen);
-
   return (
     <header className="flex h-14 shrink-0 items-stretch border-b-2 border-edge bg-bone">
-      <Link
-        href="/"
-        title="Back to the Tingraph home page"
-        className="flex items-center gap-2.5 border-r-2 border-edge px-2 transition-colors hover:bg-white sm:px-4"
-      >
-        <Image
-          src="/icon.png"
-          alt=""
-          width={1000}
-          height={1000}
-          sizes="28px"
-          className="h-7 w-7 object-contain"
-        />
-        <span className="hidden text-[14px] font-semibold tracking-tight text-ink min-[380px]:inline">
-          tingraph
-        </span>
-      </Link>
+      <HomeMark />
 
       <Cell label="Drawing">{title || "Untitled"}</Cell>
       <Cell label="Notation">
@@ -105,69 +87,124 @@ export default function TopBar({
         {errorMessage ? "Syntax error" : "Parsed"}
       </Cell>
 
+      <SheetActions
+        empty={empty}
+        saveState={saveState}
+        saveMessage={saveMessage}
+        onSave={onSave}
+        autoSave={autoSave}
+        onAutoSave={onAutoSave}
+      />
+    </header>
+  );
+}
+
+/** The mark at the left of a sheet's bar, back to the home page. */
+export function HomeMark() {
+  return (
+    <Link
+      href="/"
+      title="Back to the Tingraph home page"
+      className="flex items-center gap-2.5 border-r-2 border-edge px-2 transition-colors hover:bg-white sm:px-4"
+    >
+      <Image
+        src="/icon.png"
+        alt=""
+        width={1000}
+        height={1000}
+        sizes="28px"
+        className="h-7 w-7 object-contain"
+      />
+      <span className="hidden text-[14px] font-semibold tracking-tight text-ink min-[380px]:inline">
+        tingraph
+      </span>
+    </Link>
+  );
+}
+
+/**
+ * What a sheet's bar lets the reader do with the sheet: keep saving it as
+ * they work, save it now, take it out as a file, and reach their account.
+ */
+export function SheetActions({
+  empty,
+  saveState,
+  saveMessage,
+  onSave,
+  autoSave,
+  onAutoSave,
+}: {
+  empty: boolean;
+  saveState: "idle" | "saving" | "saved" | "error";
+  saveMessage: string;
+  onSave: () => void;
+  autoSave: boolean;
+  onAutoSave: () => void;
+}) {
+  const setExportOpen = useTingraphStore((s) => s.setExportOpen);
+  return (
       <div className="ml-auto flex items-center gap-2 px-2 sm:gap-3 sm:px-4">
-        <button
-          type="button"
-          role="switch"
-          aria-checked={autoSave}
-          aria-label="Auto-save"
-          onClick={onAutoSave}
-          title={
-            autoSave
-              ? "Auto-save is on: changes are saved to My diagrams a moment after you stop. Press to turn it off."
-              : "Turn on auto-save: changes are saved to My diagrams a moment after you stop."
-          }
-          className="group flex h-10 items-center gap-2 px-1 text-[12.5px] font-semibold text-ink"
-        >
-          <span className="hidden whitespace-nowrap lg:inline">Auto-save</span>
-          <span
-            aria-hidden="true"
-            className={`relative h-[22px] w-10 shrink-0 border-2 border-edge transition-colors group-hover:shadow-[2px_2px_0_var(--edge)] ${
-              autoSave ? "bg-edge" : "bg-white"
-            }`}
-          >
-            <span
-              className={`absolute top-[2px] h-3.5 w-3.5 transition-[left,background-color] duration-150 ${
-                autoSave ? "left-[20px] bg-bone" : "left-[2px] bg-edge"
-              }`}
-            />
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={onSave}
-          disabled={saveState === "saving"}
-          title={saveMessage || "Save this diagram to your account"}
-          className={`slab-tight press flex h-10 items-center gap-2 px-2 text-[12.5px] font-semibold disabled:cursor-wait disabled:opacity-60 sm:px-3 ${
-            saveState === "error" ? "bg-alert-tint text-alert" : "bg-white text-ink"
+      <button
+        type="button"
+        role="switch"
+        aria-checked={autoSave}
+        aria-label="Auto-save"
+        onClick={onAutoSave}
+        title={
+          autoSave
+            ? "Auto-save is on: changes are saved to My diagrams a moment after you stop. Press to turn it off."
+            : "Turn on auto-save: changes are saved to My diagrams a moment after you stop."
+        }
+        className="group flex h-10 items-center gap-2 px-1 text-[12.5px] font-semibold text-ink"
+      >
+        <span className="hidden whitespace-nowrap lg:inline">Auto-save</span>
+        <span
+          aria-hidden="true"
+          className={`relative h-[22px] w-10 shrink-0 border-2 border-edge transition-colors group-hover:shadow-[2px_2px_0_var(--edge)] ${
+            autoSave ? "bg-edge" : "bg-white"
           }`}
         >
-          {saveState === "saved" ? <Check size={14} /> : <Save size={14} />}
-          <span className="hidden sm:inline">
-            {saveState === "saving"
-              ? "Saving…"
-              : saveState === "saved"
-                ? "Saved"
-                : saveState === "error"
-                  ? "Retry save"
-                  : "Save"}
-          </span>
-        </button>
-        <span className="sr-only" role="status" aria-live="polite">
-          {saveMessage}
+          <span
+            className={`absolute top-[2px] h-3.5 w-3.5 transition-[left,background-color] duration-150 ${
+              autoSave ? "left-[20px] bg-bone" : "left-[2px] bg-edge"
+            }`}
+          />
         </span>
-        <button
-          type="button"
-          onClick={() => setExportOpen(true)}
-          disabled={empty}
-          className="slab-tight press flex h-10 items-center gap-2 bg-edge px-2 text-[12.5px] font-semibold text-bone disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none sm:px-4"
-        >
-          <Download size={14} />
-          <span className="hidden min-[370px]:inline">Export</span>
-        </button>
-        {/* in a tab of its own: the drawing lives in memory, and leaving would lose it */}
-        <AccountButton detached />
-      </div>
-    </header>
+      </button>
+      <button
+        type="button"
+        onClick={onSave}
+        disabled={saveState === "saving"}
+        title={saveMessage || "Save this diagram to your account"}
+        className={`slab-tight press flex h-10 items-center gap-2 px-2 text-[12.5px] font-semibold disabled:cursor-wait disabled:opacity-60 sm:px-3 ${
+          saveState === "error" ? "bg-alert-tint text-alert" : "bg-white text-ink"
+        }`}
+      >
+        {saveState === "saved" ? <Check size={14} /> : <Save size={14} />}
+        <span className="hidden sm:inline">
+          {saveState === "saving"
+            ? "Saving…"
+            : saveState === "saved"
+              ? "Saved"
+              : saveState === "error"
+                ? "Retry save"
+                : "Save"}
+        </span>
+      </button>
+      <span className="sr-only" role="status" aria-live="polite">
+        {saveMessage}
+      </span>
+      <button
+        type="button"
+        onClick={() => setExportOpen(true)}
+        disabled={empty}
+        className="slab-tight press flex h-10 items-center gap-2 bg-edge px-2 text-[12.5px] font-semibold text-bone disabled:cursor-not-allowed disabled:opacity-40 disabled:shadow-none sm:px-4"
+      >
+        <Download size={14} />
+        <span className="hidden min-[370px]:inline">Export</span>
+      </button>
+      {/* in a tab of its own: the drawing lives in memory, and leaving would lose it */}
+      <AccountButton detached />
+    </div>
   );
 }

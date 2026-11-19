@@ -9,6 +9,7 @@ import {
   Grid3x3,
   Hand,
   Image as ImageIcon,
+  Library,
   MousePointer2,
   MoveUpRight,
   Palette,
@@ -132,11 +133,15 @@ const FIGURE_ICONS: Partial<Record<DiagramCategory, LucideIcon>> = {
  * it opens — Fishbone, Venn, Mind map — because "Chart" means nothing on a
  * sheet that holds none.
  */
-function instrumentsFor(category: DiagramCategory): Entry[] {
+function instrumentsFor(category: DiagramCategory, mode: RailMode = "editor"): Entry[] {
   const figure = isFigure(category);
   const def = figureDef(category);
   const panel = elementPanel(category);
   return INSTRUMENTS.filter((entry) => {
+    // Studio's library holds every notation, so it is always there to open
+    if (mode === "studio" && entry.drawer === "shapes") {
+      return true;
+    }
     if (!entry.only) {
       return true;
     }
@@ -148,6 +153,14 @@ function instrumentsFor(category: DiagramCategory): Entry[] {
     }
     return !figure;
   }).map((entry) => {
+    if (mode === "studio" && entry.drawer === "shapes") {
+      return {
+        ...entry,
+        icon: Library,
+        label: "Library",
+        hint: "Every notation: its shapes and its examples",
+      };
+    }
     if (entry.drawer === "figure" && def) {
       return {
         ...entry,
@@ -334,12 +347,21 @@ function RailButton({
   );
 }
 
+/**
+ * The editor's column, or Studio's: Studio draws by hand in every notation,
+ * so it has a library in place of the shape drawer and carries neither
+ * Generate nor Tingraph AI.
+ */
+export type RailMode = "editor" | "studio";
+
 export default function Rail({
   category,
-  onOpenAi,
+  onOpenAi = () => {},
+  mode = "editor",
 }: {
   category: DiagramCategory;
-  onOpenAi: () => void;
+  onOpenAi?: () => void;
+  mode?: RailMode;
 }) {
   const tool = useTingraphStore((s) => s.tool);
   const setTool = useTingraphStore((s) => s.setTool);
@@ -424,7 +446,7 @@ export default function Rail({
       }
       const wanted = POINTER_KEYS[event.key];
       const entry = wanted
-        ? instrumentsFor(category).find((instrument) => instrument.tool === wanted)
+        ? instrumentsFor(category, mode).find((instrument) => instrument.tool === wanted)
         : undefined;
       if (entry) {
         event.preventDefault();
@@ -473,7 +495,7 @@ export default function Rail({
       aria-label="Editor tools"
       className="order-2 flex h-14 w-full shrink-0 items-center gap-1 overflow-x-auto border-t-2 border-edge bg-bone px-2 sm:order-none sm:h-auto sm:w-14 sm:flex-col sm:overflow-visible sm:border-r-2 sm:border-t-0 sm:px-0 sm:py-3"
     >
-      {instrumentsFor(category).map((entry) => (
+      {instrumentsFor(category, mode).map((entry) => (
         <RailButton
           key={entry.label}
           entry={entry}
@@ -519,7 +541,7 @@ export default function Rail({
         </RailButton>
       ))}
       <hr className="mx-1 h-7 border-l-2 border-edge sm:mx-0 sm:my-2 sm:h-0 sm:w-7 sm:border-l-0 sm:border-t-2" />
-      {PANELS.map((entry) => (
+      {PANELS.filter((entry) => mode === "editor" || entry.drawer === "style").map((entry) => (
         <RailButton
           key={entry.label}
           entry={entry}

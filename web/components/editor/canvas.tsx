@@ -41,8 +41,9 @@ import {
 } from "@/lib/canvas/frames";
 import { portsOf, syncTables } from "@/lib/canvas/erd";
 import { held, selection } from "@/lib/canvas/inspect";
-import { unitOf } from "@/lib/canvas/units";
+import { unitOf, type LinkMark } from "@/lib/canvas/units";
 import type { Rules } from "@/lib/canvas/connect";
+import { linkNotation, notationOfMark, notationOfUnit } from "@/lib/studio";
 import type { ConnectorStyle } from "@/lib/excalidraw-mapper/build-skeletons";
 import { SHAPE_DRAG_TYPE, paletteShapeSize, type PaletteItem } from "@/lib/palette";
 import { DiagramCategory, DSLNode, isSettable } from "@/lib/types";
@@ -65,6 +66,12 @@ interface CanvasProps {
   connectorStyle: ConnectorStyle;
   /** which notation the sheet is in, and which way it grows */
   rules: Rules;
+  /**
+   * Studio only: the rules each existing connector is routed by, read off the
+   * connector itself, for a sheet that holds several notations. Without it
+   * every line on the sheet follows `rules`.
+   */
+  rulesFor?: (link: LinkMark) => Rules;
   onApi: (api: ExcalidrawImperativeAPI) => void;
   onSelection: (picked: ExcalidrawElement[]) => void;
   /** a shape card let go over the sheet, in viewport coordinates */
@@ -134,6 +141,7 @@ export default function Canvas({
   dragging,
   connectorStyle,
   rules,
+  rulesFor,
   onApi,
   onSelection,
   onDropShape,
@@ -176,9 +184,11 @@ export default function Canvas({
   /** the size of the sheet last fitted against, so it is fitted again when it changes */
   const roomRef = useRef("");
   const rulesRef = useRef(rules);
+  const rulesForRef = useRef(rulesFor);
   useEffect(() => {
     rulesRef.current = rules;
-  }, [rules]);
+    rulesForRef.current = rulesFor;
+  }, [rules, rulesFor]);
 
   /**
    * Zoom about the middle of the sheet. Excalidraw scales around the canvas
@@ -277,7 +287,9 @@ export default function Canvas({
       // a connector the reader has hold of is left alone until the pointer is
       // up: one being dragged by its box, one being resized with its shapes
       const busy = held(state);
-      const erd = rulesRef.current.category === "erd";
+      // a Studio sheet may hold tables whatever notation is in hand
+      const mixed = rulesForRef.current;
+      const erd = rulesRef.current.category === "erd" || !!mixed;
       const base = fix?.elements ?? elements;
       // a table is exactly its band plus its rows, so one that was stretched
       // is cut again before anything is routed against it
@@ -287,6 +299,7 @@ export default function Canvas({
         rulesRef.current,
         busy,
         erd ? portsOf(tables ?? base) : undefined,
+        mixed,
       );
       // a chart the reader has stretched is drawn again at the size they
       // dragged it to, rather than left as scaled shapes
@@ -378,17 +391,23 @@ export default function Canvas({
       // frames drawn round them, all read straight off the sheet
       const boxes = poolBoxes(scene);
       if (isSettable(rulesRef.current.category)) {
-        const mine = elementsOn(scene);
+        // on a Studio sheet the panel is about the notation in hand only
+        const own = rulesRef.current.category;
+        const mine = elementsOn(scene).filter(
+          (entry) => !mixed || notationOfUnit(entry.unit) === own,
+        );
         const heldUnits = new Set(
           picked.map((element) => unitOf(element)?.unit).filter(Boolean),
         );
         const next: SheetParts = {
           elements: mine,
-          links: linksOn(scene),
-          frames:
-            rulesRef.current.category === "activity"
-              ? partitionFrames(scene)
-              : frameBoxes(scene),
+          links: linksOn(scene).filter((entry) => !mixed || linkNotation(entry.link) === own),
+          frames: (rulesRef.current.category === "activity"
+            ? partitionFrames(scene)
+            : frameBoxes(scene)
+          ).filter(
+            (frame) => !mixed || notationOfMark({ unit: frame.unit, kind: "frame" }, scene) === own,
+          ),
           pools: rulesRef.current.category === "bpmn" ? boxes : [],
           held:
             heldUnits.size === 1
@@ -560,6 +579,7 @@ export default function Canvas({
         api={api}
         holding={holding}
         rules={rules}
+        rulesFor={rulesFor}
         style={connectorStyle}
         view={view}
         picked={line}

@@ -45,6 +45,13 @@ export interface LinkMark {
   bend?: number | null;
   /** the two boxes the route on the sheet was last cut against */
   at?: string;
+  /**
+   * The notation whose rules route this line. A sheet in the editor holds one
+   * notation and never reads it; a Studio sheet holds several, and a
+   * reporting line must keep leaving the bottom of its box whatever else is
+   * drawn beside it. See `rulesForLink` in `lib/studio.ts`.
+   */
+  notation?: DiagramCategory;
 }
 
 export interface UnitMark {

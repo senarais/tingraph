@@ -731,7 +731,11 @@ export function newConnector(
           unit,
           kind: "edge",
           core: true,
-          link: { ...link, at: linkSignature(from, to, { ...link, ...anchors }, cut) },
+          link: {
+            ...link,
+            notation: link.notation ?? rules.category,
+            at: linkSignature(from, to, { ...link, ...anchors }, cut),
+          },
         }),
       } as never,
     ],
@@ -877,6 +881,8 @@ export function syncConnectors(
   rules: Rules,
   busy: ReadonlySet<string> = new Set(),
   ports: Ports = NO_PORTS,
+  /** a sheet holding several notations routes each line by its own */
+  rulesFor?: (link: LinkMark) => Rules,
 ): ExcalidrawElement[] | null {
   let next: ExcalidrawElement[] | null = null;
   let boxes: Map<string, Box> | null = null;
@@ -949,7 +955,7 @@ export function syncConnectors(
     // this pass included, so two lines re-cut together do not land as one
     const scene = next ?? elements;
     const route = routeBetween(from, to, {
-      ...rules,
+      ...(rulesFor ? rulesFor(link) : rules),
       fromSide: link.from.side,
       toSide: link.to.side,
       bend: link.bend,
@@ -1252,7 +1258,8 @@ function shiftBelow(elements: Elements, cut: number, by: number): ExcalidrawElem
   );
 }
 
-function freshId(): string {
+/** A short random name nothing else on the sheet answers to. */
+export function freshId(): string {
   return Math.random().toString(36).slice(2, 8);
 }
 

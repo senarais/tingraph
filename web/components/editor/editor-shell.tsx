@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { apiFetch, getSession } from "@/lib/api/client";
 import type { Diagram } from "@/lib/api/types";
 import { readSavedDiagram, type OpenedDiagram } from "@/lib/saved-diagrams";
+import { STUDIO_CATEGORY } from "@/lib/studio-document";
 import { useTingraphStore } from "@/lib/store";
 import { DiagramCategory } from "@/lib/types";
 
@@ -92,6 +93,11 @@ export default function EditorShell({
         return;
       }
       const { diagram: data } = (await response.json()) as { diagram: Diagram };
+      if (data.category === STUDIO_CATEGORY) {
+        // a Studio sheet holds many notations, and opens in Studio
+        window.location.replace(`/studio?diagram=${encodeURIComponent(data.id)}`);
+        return;
+      }
       const document = readSavedDiagram(data.document, data.category);
       if (!document) {
         setLoaded({
