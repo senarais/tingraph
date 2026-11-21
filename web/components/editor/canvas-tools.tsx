@@ -16,29 +16,34 @@ export default function CanvasTools({
   zoom: number;
   onZoom: (factor: number) => void;
   onFit: () => void;
-  onHistory: (direction: "undo" | "redo") => void;
+  /** absent on a sheet that cannot be changed, which has no history to step through */
+  onHistory?: (direction: "undo" | "redo") => void;
   disabled: boolean;
 }) {
   return (
     <div className="slab-tight absolute bottom-4 left-4 z-10 flex items-stretch bg-white">
-      <button
-        type="button"
-        onClick={() => onHistory("undo")}
-        title="Undo"
-        aria-label="Undo"
-        className="border-r-2 border-edge px-2 py-1.5 text-ink transition-colors hover:bg-bone"
-      >
-        <Undo2 size={14} />
-      </button>
-      <button
-        type="button"
-        onClick={() => onHistory("redo")}
-        title="Redo"
-        aria-label="Redo"
-        className="border-r-2 border-edge px-2 py-1.5 text-ink transition-colors hover:bg-bone"
-      >
-        <Redo2 size={14} />
-      </button>
+      {onHistory && (
+        <>
+          <button
+            type="button"
+            onClick={() => onHistory("undo")}
+            title="Undo"
+            aria-label="Undo"
+            className="border-r-2 border-edge px-2 py-1.5 text-ink transition-colors hover:bg-bone"
+          >
+            <Undo2 size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() => onHistory("redo")}
+            title="Redo"
+            aria-label="Redo"
+            className="border-r-2 border-edge px-2 py-1.5 text-ink transition-colors hover:bg-bone"
+          >
+            <Redo2 size={14} />
+          </button>
+        </>
+      )}
       <button
         type="button"
         onClick={() => onZoom(1 / 1.2)}

@@ -211,13 +211,25 @@ Consequences worth knowing before touching the canvas:
 - The rail is the only place a tool is chosen. `RAIL_TOOLS` in
   `components/editor/canvas.tsx` lists the Excalidraw tools it drives;
   anything else the canvas reports back is put straight to `selection`.
-- `components/editor/rail.tsx` owns the keyboard, and owns it narrowly. **Only
-  the two instruments that say what the pointer is answer to a key** — `1`/`v`
-  for the pointer, `0`/`h` for the hand. Every other key Excalidraw would take
-  a tool from (`STOLEN_KEYS`: the tool letters and the digits `2`–`9`) is
-  stopped in the capture phase and answered by nothing. A letter belongs to
-  what the reader is writing far more often than to a tool, and a panel that
-  needs one can be pressed.
+- `components/editor/rail.tsx` owns the keyboard. **Every rail button has a
+  letter**, shown in its tooltip and `aria-keyshortcuts`: `v`/`1` pointer,
+  `h`/`0` hand, `s` shapes, `f` the figure or elements panel, `t` text, `i`
+  image, `c` connector, `p` draw, `e` erase, `g` Generate, `a` Tingraph AI, `y`
+  Style. Studio swaps `s` for plain shapes and puts the Library on `b`, and
+  its plain shapes take Excalidraw's own letters `r` `d` `o` `a` `l`. The
+  keys live on the `Entry` rows (`key`, `alt`) and `shortcutFor` reads them, so a
+  new rail button gets its key where it is declared and keys never collide
+  across a mode (`a` is AI in the editor and the arrow in Studio only because
+  the two never share a rail). Every other key Excalidraw would take a tool
+  from (`STOLEN_KEYS`) is stopped in the capture phase and answered by nothing.
+  **A key is answered only when the reader is not writing**: not in an input,
+  caption or Monaco, not with Ctrl/Meta/Alt held, not with Shift held (a
+  shifted letter is Excalidraw's own — Shift+H and Shift+V flip the selection
+  — and passes through untouched; Caps Lock alone still reaches the rail), not while the Generate panel
+  is out and not while a `dialog[open]` / `aria-modal` stands over the sheet.
+  In the last two cases the key is still kept from Excalidraw, but acts on
+  nothing. `overDialog` skips Excalidraw's own colour picker, which stays
+  mounted as an `aria-modal` inside `.excalidraw` and is not a dialog.
 - **Nothing is swallowed while the reader is writing.** `typing()` covers
   inputs, textareas and contenteditable — and anything inside `.monaco-editor`,
   because Monaco writes through an `EditContext` on a plain `div` that none of
@@ -226,7 +238,8 @@ Consequences worth knowing before touching the canvas:
   guard has the same blind spot, which is why `useCodeKeys` in the source
   drawer stops keydowns at the panel before they reach the document.
 - The **Generate panel takes the keyboard entirely** while it is out: it is
-  open in order to be typed into, so not even the pointer keys are answered.
+  open in order to be typed into, so no rail key is answered, and no key
+  reaches Excalidraw either.
 - Holding space still pans, because Excalidraw does that itself. The rail only
   records it (`panning` in `lib/store.ts`) so the Hand button can light up and
   the connector layer can step out of the way.
@@ -243,6 +256,39 @@ Consequences worth knowing before touching the canvas:
   selection inspector sits along the bottom of the remaining sheet.
 - `window.__tingraphStore` and `window.__excalidrawAPI` are exposed on purpose,
   for driving the editor from a console or a browser agent.
+
+## Bold and italic are other faces
+
+Excalidraw draws a caption in one face chosen by a number, at weight 400 and
+upright, and has no bold, italic or underline. So a bold or italic caption
+is a caption whose `fontFamily` is **another face**: `lib/text-face.ts` holds
+the table (ids 201–203 for the formal sheet's Helvetica, set in Arimo, which
+is metric-compatible; 211–213 for the playful sheet, set in Nunito because
+Excalifont has no bold or italic), and `faceOf` / `familyFor` turn an id into
+base + bold + italic and back. The woff2 files are in `public/fonts` with
+their OFL licences. Rules that follow:
+
+- `lib/canvas/text-faces.ts` adds the ids to Excalidraw's exported
+  `FONT_FAMILY` object (plain and unfrozen; `getFontFamilyString` reads it) and
+  the faces to `document.fonts`. It is called at the canvas module's import,
+  before the first caption is drawn. Excalidraw's own font registry is private
+  and never hears of them, so it never redraws a caption when one of them
+  arrives: `useTextFacesReady` holds back the first paint of a sheet that
+  opens with styled captions until the faces are in (the canvas and the
+  shared view both), and every canvas fetches them on mount for whatever is
+  pasted later. **Never redraw by bumping element versions instead** — a new
+  version is a change to auto-save, so merely opening a shared sheet would
+  save it and move its revision under a collaborator. `embedTextFaces` writes
+  the faces into an exported SVG as `data:` URLs (Excalidraw logs a harmless
+  "Couldn't find registered fonts" for them while exporting). PNG, JPG and PDF
+  are drawn from the page's fonts.
+- The properties panel's Bold and Italic toggles write `bold` / `italic` on a
+  `StylePatch`; `applyStyle` works the face out from the caption's current
+  one, and `restyle` keeps a caption bold or italic across a style switch.
+  `styleOfFont` maps a cut back to its sheet style, and `typeset` measures in
+  the cut's own stack.
+- The whole caption is styled; there are no runs inside one, and no underline
+  or strikethrough, because Excalidraw cannot draw them.
 
 ## An element is a unit, not a shape
 
@@ -987,6 +1033,30 @@ Generate and Tingraph AI), element, figure and style panels, `Inspector`,
   is the editor's Save, auto-save switch and clean-state signature, written
   once for both; `SheetActions` and `HomeMark` in `top-bar.tsx` are the bar's
   shared halves.
+- **A table is a `matrix` figure.** Studio's rail has Table (`g`, Studio
+  only, drawer `table` in `lib/store.ts`), and Ctrl+V anywhere on a Studio
+  sheet with a table on the clipboard draws one: a capture-phase `paste`
+  listener in `studio-root.tsx` takes the event only when
+  `tableFromClipboard` finds a table, so text, pictures and copied shapes
+  still paste through Excalidraw (which would otherwise offer a chart for
+  spreadsheet text), and never while a dialog stands over the sheet. One cell
+  copied out of a spreadsheet arrives as a one-cell table and pastes as text
+  (`isTable`). `lib/table/parse.ts` is pure (no DOM, its own small HTML
+  tokenizer) and reads the first `<table>` — merged cells resolved, fills
+  kept from inline `background`, `bgcolor` and the page's own class rules
+  (Excel puts them there: `.xl66{background:…}`), nested tables read as text,
+  hidden elements skipped, reading stopped one row or cell past the limit — else tab-separated text, which only counts as a
+  table when every line splits into two or more cells and most lines do not
+  start with a tab (indented code pastes as text). Files and the text box
+  find tab, semicolon or comma. `lib/table/table.ts` turns the grid into a
+  `MatrixSpec`: a first row that is one cell merged across the whole table
+  is its title; then the first row the headings (two rows when the first
+  spans columns, which become groups), first column the row headings (the
+  corner keeps its own words), formal
+  `plain` style, sized so its text fits (`planMatrix` must agree; the
+  self-check holds it). `TABLE_LIMITS` refuses more than 100 rows, 30 columns
+  or 1,500 cells in words. There is no table notation and no editor table;
+  `.xlsx` is not read.
 - **A placed shape is named afresh** (`mnl-<type>-<random>`) in the editor as
   in Studio. A counter that restarted every session gave a reopened sheet's new
   shape the unit of one placed last time, and two pieces with one unit are one
@@ -1114,6 +1184,36 @@ and `/media/*` to `backend/cmd/api`; Next handles pages. Browser calls use
 - **The store remembers which saved diagram its source came from** (`saved`).
   A new sheet in the same notation opens on the template rather than on that
   diagram's source, so saving it never copies a saved diagram by accident.
+- **A saved diagram can be shared by link, like a document.** One link per
+  diagram, in `app.diagram_shares` (migration 019): a 43-character
+  base64url token and `access` `view` or `edit`. The owner manages it through
+  `/api/v1/diagrams/{id}/share` (GET; PUT `{access}` turns it on or switches it
+  and keeps the token; POST `/reset` replaces the token; DELETE turns it
+  off) from the bar's Share button (`share-dialog.tsx`, owner only; a sheet
+  never saved is offered Save first). `GET /api/v1/shared/{token}` needs no
+  account, is rate-limited per IP, never returns the owner or the id except
+  `owned` to the signed-in owner (whom `/shared/[token]` sends to their own
+  copy), opens nothing while the owner's account is disabled, and is
+  `no-store` and `noindex`; the page itself is `noindex` and
+  `no-referrer`. A view link, or an edit link before signing in, opens
+  `shared-view.tsx`: Excalidraw's `viewModeEnabled`, pan, zoom and Export,
+  no Save. An edit link and a session open the whole editor or Studio with
+  `shared` set, and `useSheetSave` then PUTs to `/api/v1/shared/{token}`
+  (session and CSRF required) instead of the owner's row, never POSTs, and
+  leaves the address alone; the bar says "Shared · can edit" (`SharedCell`)
+  and the account prompts say where the save goes. Shared saves cost the
+  editor no saved-diagram quota and do not appear in their My diagrams. The
+  owner's My diagrams marks every shared diagram, so the list read includes
+  `share` and the share endpoints invalidate the cached list.
+- **Saves are guarded by a revision, not merged.** `app.diagrams.revision`
+  moves on by one on every save. The editor and Studio remember the revision
+  they opened at and send it; a save against an older one is refused with
+  412 (`409` stays the plan's diagram limit), auto-save turns off, and a
+  failed save's reason is shown in an alert under the Save button rather than
+  only in its tooltip, because "Retry save" alone cannot say "reload". A shared save must name a revision; an owner's save
+  without one is still accepted, for older tabs. Editing is not live: there
+  is no presence, no merge and no realtime channel — that would be a new
+  subsystem (a WebSocket service and a CRDT), not a change to this one.
 - **Redis accelerates only the small per-user saved-diagram list.** The Go API
   authenticates every request against PostgreSQL first; Redis keys use that
   authenticated user id and hold at most 32 KB of list metadata for 30 seconds.
@@ -1256,8 +1356,8 @@ is strict about React hooks, including reading a ref during render.
 
 From `backend/`, `go test ./...` must pass. From the repository root,
 `ops/smoke-test.sh` drives the running Compose stack through routing,
-registration, login, Origin checks, CSRF, account isolation, diagram quota and
-logout. It creates and removes its own database users.
+registration, login, Origin checks, CSRF, account isolation, share links
+(view, edit, a stale save refused, turned off), diagram quota and logout. It creates and removes its own database users.
 
 The canvas itself can only be judged by driving it. Clicks and screenshots
 through a browser agent work; plain key presses and drags often do not arrive,

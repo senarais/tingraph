@@ -119,7 +119,7 @@ export default function EditorShell({
         thinking: false,
         saved: data.id,
       });
-      setLoaded({ id: data.id, title: data.title, document });
+      setLoaded({ id: data.id, title: data.title, document, revision: data.revision });
     };
     void load();
     return () => {

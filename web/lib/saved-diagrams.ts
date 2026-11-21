@@ -22,6 +22,10 @@ export interface OpenedDiagram {
   id: string;
   title: string;
   document: SavedDiagramDocument;
+  /** the revision it was opened at; a save over a newer one is refused */
+  revision?: number;
+  /** opened through an editable shared link: saves go to the link, not to a diagram of the reader's */
+  shared?: string;
 }
 
 export interface SavedDiagramRow {

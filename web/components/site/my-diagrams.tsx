@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { Clock3, Trash2 } from "lucide-react";
+import { Clock3, Link2, Trash2 } from "lucide-react";
 import { DiagramArt } from "@/components/site/diagram-art";
 import { APIError, apiFetch, getSession } from "@/lib/api/client";
 import type { DiagramSummary } from "@/lib/api/types";
@@ -84,7 +84,7 @@ export default function MyDiagrams({ query }: { query: string }) {
       <div className="slab mt-6 bg-white p-6">
         <h2 className="font-mono text-lg font-semibold text-ink">Sign in to keep diagrams</h2>
         <p className="mt-2 max-w-xl text-[13.5px] leading-relaxed text-ink-soft">
-          Saved diagrams are private to your account and reopen with every canvas edit intact.
+          Saved diagrams are private to your account until you share a link, and reopen with every canvas edit intact.
         </p>
         {problem && <p className="mt-3 text-[12.5px] text-alert">{problem}</p>}
         <Link
@@ -166,9 +166,24 @@ export default function MyDiagrams({ query }: { query: string }) {
                       {category}
                     </code>
                   </div>
-                  <p className="mt-3 flex items-center gap-1.5 text-[11.5px] text-ink-faint">
-                    <Clock3 size={12} />
-                    Updated {DATE.format(new Date(diagram.updated_at))}
+                  <p className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11.5px] text-ink-faint">
+                    <span className="flex items-center gap-1.5">
+                      <Clock3 size={12} />
+                      Updated {DATE.format(new Date(diagram.updated_at))}
+                    </span>
+                    {diagram.share && (
+                      <span
+                        className="flex items-center gap-1.5 text-ink"
+                        title={
+                          diagram.share === "edit"
+                            ? "Anyone with the link can sign in and change it"
+                            : "Anyone with the link can view it"
+                        }
+                      >
+                        <Link2 size={12} />
+                        Shared · {diagram.share === "edit" ? "can edit" : "view only"}
+                      </span>
+                    )}
                   </p>
                   <div className="mt-auto flex gap-2 pt-5">
                     <Link

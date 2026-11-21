@@ -7,6 +7,8 @@
 
 import type { ExcalidrawTextElement } from "@excalidraw/excalidraw/element/types";
 import { SHEET_STYLES, type SheetStyle } from "@/lib/sheet";
+import { faceOf, variantCss } from "@/lib/text-face";
+import { loadTextFaces } from "@/lib/canvas/text-faces";
 
 let context: CanvasRenderingContext2D | null = null;
 
@@ -35,6 +37,8 @@ export async function fontReady(style: SheetStyle, sample: string): Promise<void
   }
   try {
     await fonts.load(`16px ${style.family}`, sample);
+    // the bold and italic cuts too: a caption can be set in any of them
+    await loadTextFaces();
     await fonts.ready;
   } catch {
     // an unavailable face falls back, which is still better than not drawing
@@ -66,11 +70,13 @@ export function measureText(
   };
 }
 
-/** The style a caption is set in, found by the face it carries. */
+/**
+ * The style a caption is set in, found by the face it carries. A bold or
+ * italic cut belongs to the style it is a cut of.
+ */
 export function styleOfFont(fontFamily: number): SheetStyle {
-  return (
-    SHEET_STYLES.find((style) => style.fontFamily === fontFamily) ?? SHEET_STYLES[0]
-  );
+  const base = faceOf(fontFamily).base;
+  return SHEET_STYLES.find((style) => style.fontFamily === base) ?? SHEET_STYLES[0];
 }
 
 /**
@@ -104,7 +110,8 @@ export function typeset(
   fontSize: number,
 ) {
   const style = styleOfFont(fontFamily);
-  const box = measureText(element.text, fontSize, style.css, style.lineHeight);
+  const css = variantCss(fontFamily, style.css) ?? style.css;
+  const box = measureText(element.text, fontSize, css, style.lineHeight);
   return {
     fontFamily,
     fontSize,

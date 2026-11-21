@@ -1,5 +1,6 @@
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { unitOf } from "@/lib/canvas/units";
+import { faceOf } from "@/lib/text-face";
 import { DiagramCategory } from "@/lib/types";
 
 /**
@@ -286,6 +287,7 @@ export function readValues(picked: ExcalidrawElement[]) {
   const caption = picked.find((element) => element.type === "text") as
     | (ExcalidrawElement & { fontFamily: number; fontSize: number; textAlign: string })
     | undefined;
+  const face = faceOf(caption?.fontFamily ?? 2);
   return {
     strokeColor: head?.strokeColor ?? "#1e1e1e",
     backgroundColor: head?.backgroundColor ?? "transparent",
@@ -293,7 +295,10 @@ export function readValues(picked: ExcalidrawElement[]) {
     strokeStyle: (head?.strokeStyle ?? "solid") as "solid" | "dashed" | "dotted",
     rounded: !!head?.roundness,
     opacity: head?.opacity ?? 100,
-    fontFamily: caption?.fontFamily ?? 2,
+    // the sheet font; bold and italic are cuts of it, read apart
+    fontFamily: face.base,
+    bold: face.bold,
+    italic: face.italic,
     fontSize: caption?.fontSize ?? 16,
     textAlign: (caption?.textAlign ?? "center") as "left" | "center" | "right",
   };

@@ -15,14 +15,16 @@ import AccessDialog from "@/components/account/access-dialog";
 import Canvas, { NO_PARTS, type SheetParts } from "@/components/editor/canvas";
 import ElementDrawer, { elementPanel } from "@/components/editor/element-drawer";
 import ExportDialog from "@/components/editor/export-dialog";
+import ShareDialog from "@/components/editor/share-dialog";
 import FigureDrawer from "@/components/editor/figure-drawer";
 import Inspector from "@/components/editor/inspector";
-import Rail from "@/components/editor/rail";
+import Rail, { overDialog, typing } from "@/components/editor/rail";
 import StyleDrawer from "@/components/editor/style-drawer";
-import { Cell, HomeMark, SheetActions } from "@/components/editor/top-bar";
+import { Cell, HomeMark, SharedCell, SheetActions } from "@/components/editor/top-bar";
 import { Tick } from "@/components/editor/ui";
 import { useSheetSave } from "@/components/editor/use-sheet-save";
 import LibraryDrawer from "@/components/studio/library-drawer";
+import TableDrawer from "@/components/studio/table-drawer";
 import { getSession } from "@/lib/api/client";
 import type { Rules } from "@/lib/canvas/connect";
 import { elementOn, redrawElement } from "@/lib/canvas/elements";
@@ -67,6 +69,9 @@ import {
   type StudioDocument,
 } from "@/lib/studio";
 import { TEMPLATE_LABELS } from "@/lib/templates";
+import type { MatrixSpec } from "@/lib/matrix/spec";
+import { parseHtmlTable, parseTableText, tableFromClipboard, type Grid } from "@/lib/table/parse";
+import { blankTable, tableFromGrid } from "@/lib/table/table";
 import type { DiagramCategory, DSLNode } from "@/lib/types";
 
 /**
@@ -83,6 +88,10 @@ export interface OpenedStudio {
   id: string;
   title: string;
   document: StudioDocument;
+  /** the revision it was opened at; a save over a newer one is refused */
+  revision?: number;
+  /** opened through an editable shared link: saves go to the link, not to a sheet of the reader's */
+  shared?: string;
 }
 
 const DRAWER_TITLES: Record<Drawer, string> = {
@@ -92,7 +101,11 @@ const DRAWER_TITLES: Record<Drawer, string> = {
   source: "Library",
   style: "Style",
   ai: "Library",
+  table: "Table",
 };
+
+/** A table file is read as text; anything bigger than this is not a table to draw. */
+const TABLE_FILE_LIMIT = 2_000_000;
 
 /** A Studio sheet always grows down the page; only a source has a direction. */
 const DOWN = "down" as const;
@@ -149,6 +162,8 @@ export default function StudioRoot({ initial }: { initial?: OpenedStudio }) {
   const [part, setPart] = useState<string | null>(null);
   const [parts, setParts] = useState<SheetParts>(NO_PARTS);
   const [imageMessage, setImageMessage] = useState("");
+  const [shareOpen, setShareOpen] = useState(false);
+  const [tableMessage, setTableMessage] = useState<{ tone: "ok" | "alert"; text: string } | null>(null);
   const [accountGate, setAccountGate] = useState<{ title: string; message: string; next: string } | null>(null);
   const counterRef = useRef(1);
   const [seed] = useState(() => openScene(initial));
@@ -255,6 +270,107 @@ export default function StudioRoot({ initial }: { initial?: OpenedStudio }) {
       newFigure(elements, spec, { x: at.x + size.width / 2, y: at.y + size.height / 2 }, ink, style),
     );
   };
+
+  /**
+   * A table on the sheet: a matrix figure, placed where it overlaps nothing,
+   * picked so its notation is in hand and its panel and handles answer.
+   */
+  const placeTable = (spec: MatrixSpec) => {
+    if (!api) return;
+    const size = { width: spec.options.width, height: spec.options.height };
+    const at = spotFor(api.getSceneElements(), size, centre());
+    add(newFigure([], spec, { x: at.x + size.width / 2, y: at.y + size.height / 2 }, ink, style));
+    setTableMessage({
+      tone: "ok",
+      text: `Table placed: ${spec.rows.length} row${spec.rows.length === 1 ? "" : "s"} under ${spec.columns.length} column heading${spec.columns.length === 1 ? "" : "s"}. Double-click a cell to change it; the Matrix panel (F) holds the rest.`,
+    });
+  };
+
+  /** A table read from somewhere, or the reason it could not be: said in the panel. */
+  const placeGrid = (grid: Grid | null, from: string) => {
+    if (!grid) {
+      setTableMessage({ tone: "alert", text: `No table was found in ${from}.` });
+      return;
+    }
+    const made = tableFromGrid(grid);
+    if ("error" in made) {
+      setTableMessage({ tone: "alert", text: made.error });
+      // the refusal is in the table panel, so the panel is brought out to say it
+      if (useTingraphStore.getState().drawer !== "table") useTingraphStore.getState().openDrawer("table");
+      return;
+    }
+    placeTable(made.spec);
+  };
+
+  /** The clipboard, asked for from the panel's button rather than by Ctrl+V. */
+  const pasteTable = async () => {
+    try {
+      let html = "";
+      let text = "";
+      if (navigator.clipboard?.read) {
+        for (const item of await navigator.clipboard.read()) {
+          if (!html && item.types.includes("text/html")) html = await (await item.getType("text/html")).text();
+          if (!text && item.types.includes("text/plain")) text = await (await item.getType("text/plain")).text();
+        }
+      } else {
+        text = await navigator.clipboard.readText();
+      }
+      // the button is pressed on purpose, so comma- and semicolon-separated text
+      // counts too; a lone value or a sentence is still not a table
+      const fromText = text.trim() ? parseTableText(text) : null;
+      placeGrid(
+        tableFromClipboard(html, text) ??
+          (fromText && fromText.rows.length >= 2 && fromText.rows[0].length >= 2 ? fromText : null),
+        "the clipboard",
+      );
+    } catch {
+      setTableMessage({
+        tone: "alert",
+        text: "The browser would not share the clipboard. Click the sheet and press Ctrl+V instead.",
+      });
+    }
+  };
+
+  const importTable = async (file: File) => {
+    if (/\.(xlsx?|ods|numbers)$/i.test(file.name)) {
+      setTableMessage({
+        tone: "alert",
+        text: "Spreadsheet files are not read directly. Save it as CSV, or copy the cells and paste them on the sheet.",
+      });
+      return;
+    }
+    if (file.size > TABLE_FILE_LIMIT) {
+      setTableMessage({ tone: "alert", text: "That file is over 2 MB, which is far more than one table on a sheet." });
+      return;
+    }
+    const text = await file.text().catch(() => null);
+    if (text === null) {
+      setTableMessage({ tone: "alert", text: "That file could not be read." });
+      return;
+    }
+    const html = /\.html?$/i.test(file.name) || /<table[\s>]/i.test(text);
+    placeGrid(html ? parseHtmlTable(text) : parseTableText(text), file.name);
+  };
+
+  // Ctrl+V with a table on the clipboard draws the table. Anything else is
+  // left to Excalidraw, which pastes text, pictures and copied shapes itself;
+  // nothing is taken while the reader is writing in a field or a caption
+  useEffect(() => {
+    const paste = (event: ClipboardEvent) => {
+      // a dialog over the sheet (share, export, sign-in) is not the sheet
+      if (typing(event.target) || overDialog() || !event.clipboardData || !api) return;
+      const grid = tableFromClipboard(
+        event.clipboardData.getData("text/html"),
+        event.clipboardData.getData("text/plain"),
+      );
+      if (!grid) return;
+      event.preventDefault();
+      event.stopPropagation();
+      placeGrid(grid, "the clipboard");
+    };
+    document.addEventListener("paste", paste, true);
+    return () => document.removeEventListener("paste", paste, true);
+  });
 
   const selectUnit = (unit: string, elements?: readonly ExcalidrawElement[]) => {
     if (!api) return;
@@ -367,7 +483,12 @@ export default function StudioRoot({ initial }: { initial?: OpenedStudio }) {
 
   const restyleSelection = async (patch: StylePatch, was?: { strokeColor?: string }) => {
     const ids = new Set(picked.map((element) => element.id));
-    if (patch.fontFamily !== undefined || patch.fontSize !== undefined) {
+    if (
+      patch.fontFamily !== undefined ||
+      patch.fontSize !== undefined ||
+      patch.bold !== undefined ||
+      patch.italic !== undefined
+    ) {
       await fontReady(
         styleOfFont(patch.fontFamily ?? style.fontFamily),
         picked.map((element) => (element.type === "text" ? element.text : "")).join(""),
@@ -442,9 +563,11 @@ export default function StudioRoot({ initial }: { initial?: OpenedStudio }) {
     return session.user;
   };
 
-  const { saveState, saveMessage, autoSave, save, toggleAutoSave } = useSheetSave({
+  const { savedId, saveState, saveMessage, autoSave, save, toggleAutoSave } = useSheetSave({
     api,
-    initialId: initial?.id ?? null,
+    initialId: initial?.shared ? null : (initial?.id ?? null),
+    initialRevision: initial?.revision ?? null,
+    shared: initial?.shared ?? null,
     extra: () => {
       const state = useTingraphStore.getState();
       return [name, state.style, state.ink.color, state.ink.tint].join("|");
@@ -511,6 +634,7 @@ export default function StudioRoot({ initial }: { initial?: OpenedStudio }) {
         </div>
         <Cell label="In hand">{TEMPLATE_LABELS[notation]}</Cell>
         <Cell label="On the sheet">{summary}</Cell>
+        {initial?.shared && <SharedCell />}
         <SheetActions
           empty={empty}
           saveState={saveState}
@@ -518,6 +642,8 @@ export default function StudioRoot({ initial }: { initial?: OpenedStudio }) {
           onSave={() => void save()}
           autoSave={autoSave}
           onAutoSave={() => void toggleAutoSave()}
+          // only the owner shares; someone editing through a link has no Share
+          onShare={initial?.shared ? undefined : () => setShareOpen(true)}
         />
       </header>
 
@@ -610,6 +736,15 @@ export default function StudioRoot({ initial }: { initial?: OpenedStudio }) {
               />
             )}
             {drawer === "style" && <StyleDrawer category={notation} />}
+            {drawer === "table" && (
+              <TableDrawer
+                message={tableMessage}
+                onBlank={(rows, columns) => placeTable(blankTable(rows, columns))}
+                onClipboard={() => void pasteTable()}
+                onFile={(file) => void importTable(file)}
+                onText={(text) => placeGrid(parseTableText(text), "that text")}
+              />
+            )}
           </aside>
         )}
 
@@ -658,6 +793,15 @@ export default function StudioRoot({ initial }: { initial?: OpenedStudio }) {
         </main>
       </div>
 
+      {shareOpen && (
+      <ShareDialog
+        open
+        diagramId={savedId}
+        noun="Studio sheet"
+        onSave={() => void save()}
+        onClose={() => setShareOpen(false)}
+      />
+      )}
       {exportOpen && <ExportDialog api={api} title={name} onClose={() => setExportOpen(false)} />}
       <AccessDialog
         open={accountGate !== null}

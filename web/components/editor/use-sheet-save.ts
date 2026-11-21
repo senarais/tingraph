@@ -43,6 +43,14 @@ export interface SheetSaveOptions {
   api: ExcalidrawImperativeAPI | null;
   /** the saved diagram this sheet already is, or null for a new one */
   initialId: string | null;
+  /** the revision it was opened at, so a save made over someone else's is refused */
+  initialRevision?: number | null;
+  /**
+   * The token of the shared link this sheet was opened through, for an
+   * editor who is not the owner: saves go to that link, never to a diagram
+   * of their own, and the address is left alone.
+   */
+  shared?: string | null;
   /** everything a save writes besides the scene, as one line */
   extra: () => string;
   /** the row a save writes */
@@ -59,6 +67,8 @@ export interface SheetSaveOptions {
 export function useSheetSave({
   api,
   initialId,
+  initialRevision = null,
+  shared = null,
   extra,
   build,
   locate,
@@ -75,6 +85,8 @@ export function useSheetSave({
   /** a sheet that just failed to save, so auto-save waits for a new change */
   const failedSigRef = useRef<string | null>(null);
   const savingRef = useRef(false);
+  /** the revision the sheet was last opened or saved at */
+  const revisionRef = useRef<number | null>(initialRevision);
 
   /**
    * Everything a save writes, in one line: the sheet's elements and files, and
@@ -111,10 +123,16 @@ export function useSheetSave({
         return;
       }
     } else {
-      const account = await requireAccount(
-        `Sign up to save your ${noun}`,
-        `Saving needs an account. The Free plan stores up to 2 diagrams; Premium stores up to 100.`,
-      );
+      const account =
+        shared !== null
+          ? await requireAccount(
+              `Sign in to save this shared ${noun}`,
+              `Your changes are saved into the ${noun} the link was shared from. Saving it needs an account; it does not use any of your saved-diagram space.`,
+            )
+          : await requireAccount(
+              `Sign up to save your ${noun}`,
+              `Saving needs an account. The Free plan stores up to 2 diagrams; Premium stores up to 100.`,
+            );
       if (!account) return;
     }
 
@@ -126,38 +144,62 @@ export function useSheetSave({
     setSaveMessage(`Saving ${noun}…`);
     try {
       const values = build();
+      const existing = shared !== null || savedId !== null;
       const response = await apiFetch(
-        savedId ? `/api/v1/diagrams/${encodeURIComponent(savedId)}` : "/api/v1/diagrams",
+        shared !== null
+          ? `/api/v1/shared/${encodeURIComponent(shared)}`
+          : savedId
+            ? `/api/v1/diagrams/${encodeURIComponent(savedId)}`
+            : "/api/v1/diagrams",
         {
-          method: savedId ? "PUT" : "POST",
+          method: existing ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(values),
+          body: JSON.stringify(
+            existing && revisionRef.current !== null
+              ? { ...values, revision: revisionRef.current }
+              : values,
+          ),
         },
       );
       if (!response.ok) {
         const error = await APIError.from(response);
         failedSigRef.current = written;
         setSaveState("error");
-        if (error.status === 409 && auto) {
-          // trying again cannot help until a diagram is deleted
+        // none of these is mended by trying again, so auto-save stops
+        const final = [403, 404, 409, 412].includes(error.status);
+        if (final && auto) {
           turnAutoSave(false);
         }
+        const off = final && auto ? " Auto-save is off." : "";
         setSaveMessage(
-          error.status === 409
-            ? `Saved-diagram limit reached for your plan.${auto ? " Auto-save is off." : ""}`
-            : `${noun[0].toUpperCase()}${noun.slice(1)} could not be saved. Try again.`,
+          error.status === 412
+            ? `Someone else saved this ${noun} since you opened it. Reload to see their version; your changes here are not saved.${off}`
+            : error.status === 409
+              ? `Saved-diagram limit reached for your plan.${off}`
+              : shared !== null && error.status === 403
+                ? `This link is view-only now; your changes are not saved.${off}`
+                : shared !== null && error.status === 404
+                  ? `This link has been turned off; your changes are not saved.${off}`
+                  : `${noun[0].toUpperCase()}${noun.slice(1)} could not be saved. Try again.`,
         );
         return;
       }
-      const data = (await response.json()) as { id: string };
+      const data = (await response.json()) as { id?: string; revision?: number };
+      revisionRef.current = typeof data.revision === "number" ? data.revision : revisionRef.current;
       savedSigRef.current = written;
       failedSigRef.current = null;
-      setSavedId(data.id);
-      onSaved?.(data.id);
       setSaveState("saved");
+      if (shared !== null) {
+        // the owner's diagram, saved through the link: no address of our own
+        setSaveMessage(auto ? "Auto-saved to the shared diagram." : "Saved to the shared diagram.");
+        return;
+      }
+      const id = data.id ?? savedId ?? "";
+      setSavedId(id);
+      onSaved?.(id);
       setSaveMessage(auto ? "Auto-saved to My diagrams." : "Saved to My diagrams.");
       const url = new URL(window.location.href);
-      locate(url, data.id);
+      locate(url, id);
       window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
     } catch {
       failedSigRef.current = written;
@@ -219,10 +261,16 @@ export function useSheetSave({
       setSaveMessage("Auto-save is off.");
       return;
     }
-    const account = await requireAccount(
-      `Sign up to auto-save your ${noun}`,
-      `Auto-save keeps your ${noun} in My diagrams as you work, so it needs an account. The Free plan stores up to 2 diagrams; Premium stores up to 100.`,
-    );
+    const account =
+      shared !== null
+        ? await requireAccount(
+            `Sign in to auto-save this shared ${noun}`,
+            `Auto-save writes your changes into the ${noun} the link was shared from as you work, so it needs an account.`,
+          )
+        : await requireAccount(
+            `Sign up to auto-save your ${noun}`,
+            `Auto-save keeps your ${noun} in My diagrams as you work, so it needs an account. The Free plan stores up to 2 diagrams; Premium stores up to 100.`,
+          );
     if (!account) return;
     turnAutoSave(true);
     failedSigRef.current = null;

@@ -18,6 +18,10 @@ import { avatarProblem, readProfile, safeNext } from "../lib/auth";
 import { customInk, inkFor, washFor } from "../lib/ink";
 import { exportLock, isPlanTier, PLAN_LIMITS, planName } from "../lib/plans";
 import { styleFor } from "../lib/sheet";
+import { parseHtmlTable, parseDelimited, parseTableText, tableFromClipboard, readColour, looksTabular } from "../lib/table/parse";
+import { blankTable, tableFromGrid } from "../lib/table/table";
+import { planMatrix } from "../lib/matrix/build-matrix";
+import { TEXT_VARIANTS, faceOf, familyFor, variantCss } from "../lib/text-face";
 import { diagramTitle, readSavedDiagram } from "../lib/saved-diagrams";
 import type { Json } from "../lib/json";
 import {
@@ -1418,6 +1422,178 @@ assert.throws(() => parseDSL('architecture "Bad" { service A "A" size 0 1 }'), /
   assert.equal(readStudioDocument({ ...(sheet as object), source: "flow \"x\" {}" } as unknown as Json), null, "a Studio sheet has no source");
   assert.equal(readStudioDocument({ ...(sheet as object), category: "flow" } as unknown as Json), null);
   assert.equal(readSavedDiagram(sheet), null, "the editor does not open a Studio sheet");
+}
+
+// bold and italic are other faces of the sheet font, never a flag on the caption
+{
+  const ids = new Set(TEXT_VARIANTS.map((variant) => variant.id));
+  assert.equal(ids.size, TEXT_VARIANTS.length, "every cut has an id of its own");
+  assert.ok(
+    TEXT_VARIANTS.every((variant) => variant.id > 9 && variant.id !== 100 && variant.id !== 1000),
+    "no cut takes one of Excalidraw's own ids",
+  );
+  for (const base of [2, 5]) {
+    assert.equal(familyFor(base, false, false), base, "plain is the sheet font itself");
+    for (const bold of [false, true]) {
+      for (const italic of [false, true]) {
+        const id = familyFor(base, bold, italic);
+        assert.deepEqual(faceOf(id), { base, bold, italic }, "a cut reads back as what it is");
+      }
+    }
+  }
+  assert.deepEqual(faceOf(7), { base: 7, bold: false, italic: false }, "another font is its own base");
+  assert.equal(familyFor(7, true, false), 7, "a font with no cuts stays as it is");
+  assert.equal(variantCss(2, "Helvetica"), null, "a plain caption is measured as the sheet is");
+  assert.ok(variantCss(familyFor(2, true, false), "Helvetica")?.endsWith(", Helvetica"));
+}
+
+// a table pasted from anywhere is a table on the sheet
+{
+  const sheets = `<meta charset="utf-8"><google-sheets-html-origin><style type="text/css"><!--td {border: 1px solid #ccc;}--></style>
+<table xmlns="http://www.w3.org/1999/xhtml" cellspacing="0" cellpadding="0" dir="ltr" border="1"><colgroup><col width="100"/><col width="100"/></colgroup>
+<tbody><tr><td style="background-color:#d9ead3;">Name</td><td>Score &amp; rank</td><td>Note</td></tr>
+<tr><td>Amir</td><td style="background-color:rgb(255,242,204);">9</td><td></td></tr>
+<tr><td>Budi<br>Santoso</td><td style="background-color:#ffffff;">7</td><td>a &lt; b&nbsp;ok</td></tr></tbody></table>`;
+  const grid = parseHtmlTable(sheets)!;
+  assert.equal(grid.rows.length, 3);
+  assert.equal(grid.rows[0].length, 3);
+  assert.equal(grid.rows[0][1].own, "Score & rank", "entities are read");
+  assert.equal(grid.rows[2][0].own, "Budi Santoso", "a line break inside a cell is a space");
+  assert.equal(grid.rows[2][2].own, "a < b ok");
+  assert.equal(grid.rows[0][0].color, "#d9ead3", "a fill stays on its cell");
+  assert.equal(grid.rows[1][1].color, "#fff2cc", "rgb() fills are read");
+  assert.equal(grid.rows[2][1].color, undefined, "white is the paper, not a fill");
+  const made = tableFromGrid(grid);
+  assert.ok("spec" in made);
+  if ("spec" in made) {
+    const spec = made.spec;
+    assert.equal(spec.corner, "Name");
+    assert.deepEqual(spec.columns.map((c) => c.label), ["Score & rank", "Note"]);
+    assert.deepEqual(spec.rows.map((r) => r.label), ["Amir", "Budi Santoso"]);
+    assert.equal(spec.rows[0].cells[0].value, "9");
+    assert.equal(spec.rows[0].cells[0].color, "#fff2cc");
+    assert.equal(spec.options.style, "plain", "formal is the default, a table is no exception");
+    // the figure is sized so its rows are the height the sizing chose, not squeezed
+    const plan = planMatrix(spec, { x: 0, y: 0, width: spec.options.width, height: spec.options.height });
+    assert.ok(plan.cells[0][0].width >= 56 && plan.cells[0][0].height >= 30, "cells are not squeezed");
+    assert.ok(Math.abs(plan.cells[0][0].width * spec.columns.length + plan.corner.width + 32 - spec.options.width) < 1);
+  }
+
+  // merged cells: a heading over two columns becomes a group; rowspan leaves the cells under it empty
+  const word = `<html><body><!--StartFragment--><table class=MsoTableGrid border=1>
+<tr><td rowspan=2>Who</td><td colspan=2 bgcolor="FFFF00">Q1</td><td colspan=2>Q2</td></tr>
+<tr><td>Jan</td><td>Feb</td><td>Mar</td><td>Apr</td></tr>
+<tr><td><![if !supportLists]>x<![endif]><p class=MsoNormal><span>Ann</span></p></td><td>1</td><td>2</td><td>3</td><td>4</td></tr>
+</table><!--EndFragment--></body></html>`;
+  const merged = parseHtmlTable(word)!;
+  assert.equal(merged.rows.length, 3);
+  assert.equal(merged.rows[0].length, 5, "a merge does not shift its neighbours");
+  assert.equal(merged.rows[1][0].own, "", "a row merge leaves the cell under it empty");
+  assert.equal(merged.rows[0][2].flow, "Q1", "a column merge names every column it covers");
+  assert.equal(merged.rows[0][1].color, "#ffff00");
+  const groupSpec = tableFromGrid(merged);
+  assert.ok("spec" in groupSpec);
+  if ("spec" in groupSpec) {
+    assert.deepEqual(groupSpec.spec.columns.map((c) => c.group), ["Q1", "Q1", "Q2", "Q2"]);
+    assert.deepEqual(groupSpec.spec.columns.map((c) => c.label), ["Jan", "Feb", "Mar", "Apr"]);
+    assert.equal(groupSpec.spec.corner, "Who", "the corner takes the heading that spans both rows");
+    assert.equal(groupSpec.spec.rows.length, 1);
+    assert.equal(groupSpec.spec.rows[0].label, "x Ann", "Word's conditional markers are not text");
+  }
+
+  // a title merged across the whole table is its title, and the corner keeps its own words
+  const titledGrid = parseHtmlTable('<table><tr><td colspan=3>Sales 2026</td></tr><tr><td>Name</td><td>Q1</td><td>Q2</td></tr><tr><td>Ann</td><td>1</td><td>2</td></tr></table>')!;
+  const titled = tableFromGrid(titledGrid);
+  assert.ok("spec" in titled);
+  if ("spec" in titled) {
+    assert.equal(titled.spec.title, "Sales 2026");
+    assert.equal(titled.spec.corner, "Name");
+    assert.deepEqual(titled.spec.columns.map((c) => [c.label, c.group]), [["Q1", ""], ["Q2", ""]]);
+    assert.equal(titled.spec.rows[0].label, "Ann");
+  }
+
+  // a nested table is the cell's words; a second table is left alone; hidden cells are not text
+  const nested = parseHtmlTable(`<table><tr><td>A<table><tr><td>inner</td><td>two</td></tr></table></td><td>B<span style="display:none">secret</span></td></tr></table><table><tr><td>other</td></tr></table>`)!;
+  assert.equal(nested.rows.length, 1);
+  assert.equal(nested.rows[0].length, 2);
+  assert.equal(nested.rows[0][0].own, "A inner two");
+  assert.equal(nested.rows[0][1].own, "B");
+  assert.equal(parseHtmlTable("<p>no table here</p>"), null);
+  assert.equal(parseHtmlTable("<table></table>"), null);
+  // markup that is not closed still reads, and a thead marks the heading
+  const loose = parseHtmlTable("<table><thead><tr><th>H1<th>H2<tbody><tr><td>a<td>b<tr><td>c<td>d</table>")!;
+  assert.equal(loose.rows.length, 3);
+  assert.equal(loose.headingRows, 1);
+  assert.equal(loose.rows[2][1].own, "d");
+  // a colspan bomb cannot blow up the grid
+  const bomb = parseHtmlTable('<table><tr><td colspan="999999999">x</td></tr></table>')!;
+  assert.ok(bomb.rows[0].length <= 31);
+  assert.ok("error" in tableFromGrid(bomb) || "spec" in tableFromGrid(bomb), "a colspan bomb is bounded");
+
+  // Excel puts a cell's fill in its stylesheet and only the class on the cell
+  const excel = parseHtmlTable(`<html><head><style><!--
+.xl65 {mso-number-format:General; background:#FFFF00; mso-pattern:black none;}
+.xl66, td.xl67 {background-color:rgb(198,239,206);}
+.xl68 {background:white;}
+--></style></head><body><table><tr><td class=xl65>Name</td><td class="xl63 xl66">Q1</td></tr>
+<tr><td class=xl67>Ann</td><td class=xl68 style="background:#ff0000">5</td></tr></table></body></html>`)!;
+  assert.equal(excel.rows[0][0].color, "#ffff00", "a class fill from Excel's stylesheet is kept");
+  assert.equal(excel.rows[0][1].color, "#c6efce", "the class the stylesheet fills is found among several");
+  assert.equal(excel.rows[1][0].color, "#c6efce", "a selector list fills every class in it");
+  assert.equal(excel.rows[1][1].color, "#ff0000", "an inline fill wins over the class");
+
+  // a hidden row the markup leaves open ends at the next row, not at the end of the table
+  const hiddenRow = parseHtmlTable('<table><tr><td>a</td><td>b</td></tr><tr style="display:none"><td>x<td>y<tr><td>c</td><td>d</td></tr></table>')!;
+  assert.deepEqual(hiddenRow.rows.map((row) => row.map((cell) => cell.own)), [["a", "b"], ["c", "d"]]);
+
+  // a huge copy is cut short while it is read, and then refused in words
+  const flood = parseHtmlTable(`<table>${"<tr><td>a</td><td>b</td></tr>".repeat(5000)}</table>`)!;
+  assert.ok(flood.rows.length <= 101, "reading stops one row past the limit");
+  assert.ok("error" in tableFromGrid(flood));
+  const wide = parseHtmlTable(`<table><tr>${"<td>a</td>".repeat(5000)}</tr></table>`)!;
+  assert.ok(wide.rows[0].length <= 31, "a row stops one cell past the limit");
+  assert.ok("error" in tableFromGrid(wide));
+
+  // tab-separated text, with Excel's quoting
+  const tsv = 'Item\tQty\tNote\r\nPen\t3\t"two\nlines"\r\nInk\t5\t"say ""hi"""\r\n';
+  assert.equal(looksTabular(tsv), true);
+  const fromText = tableFromClipboard("", tsv)!;
+  assert.equal(fromText.rows.length, 3);
+  assert.equal(fromText.rows[1][2].own, "two lines");
+  assert.equal(fromText.rows[2][2].own, 'say "hi"');
+  assert.equal(looksTabular("just a sentence, with a comma"), false, "a sentence is not a table");
+  assert.equal(looksTabular("\tif (x) {\n\t\treturn 1;\n\t}"), false, "tab-indented code is not a table");
+  assert.equal(looksTabular("one\ttwo"), false, "one line is not a table");
+  assert.equal(tableFromClipboard("<p>x</p>", "plain words"), null);
+  assert.equal(
+    tableFromClipboard("<google-sheets-html-origin><table><tr><td>42</td></tr></table>", "42"),
+    null,
+    "one cell copied out of a spreadsheet pastes as text, not as a table of one",
+  );
+  assert.ok(tableFromClipboard("<table><tr><td>a</td><td>b</td></tr></table>", "a\tb"), "two cells are a table");
+  assert.equal(tableFromClipboard("<table><tr><td>h</td><td>i</td></tr></table>", "ignored")!.rows[0][0].own, "h", "HTML wins over its own plain text");
+
+  // files: the delimiter is found
+  assert.deepEqual(parseDelimited("a,b\n\"c,d\",e", ","), [["a", "b"], ["c,d", "e"]]);
+  assert.equal(parseTableText("a;b;c\n1;2;3")!.rows[1][2].own, "3");
+  assert.equal(parseTableText("a,b\n1,2")!.rows[0][1].own, "b");
+  assert.equal(parseTableText("a\tb\n1\t2")!.rows[1][0].own, "1");
+  assert.equal(parseTableText("   \n  "), null);
+
+  // limits and the shapes that are not quite a table
+  const huge = parseTableText(Array.from({ length: 101 }, () => "a,b").join("\n"))!;
+  assert.ok("error" in tableFromGrid(huge), "a table past the limits is refused in words");
+  const one = tableFromGrid({ caption: "", headingRows: 1, rows: [[{ own: "H", flow: "H", heading: true, wide: false }]] });
+  assert.ok("spec" in one && one.spec.rows.length === 1 && one.spec.columns.length === 1, "one cell still draws");
+  const made3 = blankTable(3, 4);
+  assert.equal(made3.rows.length, 3);
+  assert.equal(made3.columns.length, 4);
+  assert.ok(made3.rows.every((row) => row.cells.length === 4), "a blank table is rectangular");
+  assert.equal(blankTable(0, 0).rows.length, 1);
+  assert.equal(readColour("#FFF"), null);
+  assert.equal(readColour("#e5e7eb"), "#e5e7eb");
+  assert.equal(readColour("rgba(0,0,0,0)"), null);
+  assert.equal(readColour("transparent"), null);
 }
 
 checkPdf().then(() => {

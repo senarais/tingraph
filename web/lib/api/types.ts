@@ -45,10 +45,36 @@ export interface DiagramSummary {
   id: string;
   title: string;
   category: string;
+  /** present while a share link is on */
+  share?: "view" | "edit";
   created_at: string;
   updated_at: string;
 }
 
 export interface Diagram extends DiagramSummary {
   document: Json;
+  /** moves on by one on every save; a save naming an older one is refused */
+  revision: number;
+}
+
+/** How a saved diagram is shared: one link, view-only or editable. */
+export type ShareAccess = "view" | "edit";
+
+export interface DiagramShare {
+  token: string;
+  access: ShareAccess;
+}
+
+/** A diagram read through its shared link: no id and no owner. */
+export interface SharedDiagram {
+  diagram: {
+    title: string;
+    category: string;
+    document: Json;
+    revision: number;
+    updated_at: string;
+  };
+  access: ShareAccess;
+  /** the diagram's id, sent only to its signed-in owner */
+  owned?: string;
 }

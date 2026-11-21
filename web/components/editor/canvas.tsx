@@ -41,6 +41,7 @@ import {
 } from "@/lib/canvas/frames";
 import { portsOf, syncTables } from "@/lib/canvas/erd";
 import { held, selection } from "@/lib/canvas/inspect";
+import { registerTextFaces, useTextFacesReady } from "@/lib/canvas/text-faces";
 import { unitOf, type LinkMark } from "@/lib/canvas/units";
 import type { Rules } from "@/lib/canvas/connect";
 import { linkNotation, notationOfMark, notationOfUnit } from "@/lib/studio";
@@ -134,6 +135,10 @@ const RAIL_TOOLS = new Set<string>([
   "eraser",
 ]);
 
+// bold and italic are other faces of the sheet font; Excalidraw reads them
+// from its own font table, so they are in it before the first caption is drawn
+registerTextFaces();
+
 /** Studio's plain shapes: its rail offers them, and only a Studio sheet keeps them in hand. */
 const STUDIO_TOOLS = new Set<string>(["rectangle", "diamond", "ellipse", "arrow", "line"]);
 
@@ -169,6 +174,8 @@ export default function Canvas({
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null);
   const [seeded] = useState(() => initialElements);
   const [seededFiles] = useState(() => initialFiles);
+  // a sheet opening with bold or italic captions waits for their faces
+  const facesReady = useTextFacesReady(seeded);
   const [pools, setPools] = useState<PoolBox[]>([]);
   const [empty, setEmpty] = useState(false);
   const [view, setView] = useState<CanvasView>(NO_VIEW);
@@ -516,60 +523,62 @@ export default function Canvas({
         onDropShape(type, event.clientX, event.clientY);
       }}
     >
-      <Excalidraw
-        name="tingraph-scene"
-        excalidrawAPI={(handle) => {
-          apiRef.current = handle;
-          (window as unknown as { __excalidrawAPI?: typeof handle }).__excalidrawAPI =
-            handle;
-          setApi(handle);
-          onApi(handle);
-        }}
-        // a copy is its own element, never a second piece of the original
-        onDuplicate={reunit}
-        onChange={handleChange}
-        // the whole page is the editor: a shortcut has to work after pressing a
-        // swatch in the properties panel, not only when the sheet has focus.
-        // Excalidraw ignores a key pressed inside an input, a textarea or a
-        // caption editor, so nothing here can swallow typing.
-        handleKeyboardGlobally
-        UIOptions={{
-          canvasActions: {
-            export: false,
-            saveToActiveFile: false,
-            loadScene: false,
-            toggleTheme: false,
-            saveAsImage: false,
-            clearCanvas: false,
-          },
-        }}
-        initialData={{
-          elements: seeded,
-          files: seededFiles,
-          scrollToContent: true,
-          appState: {
-            viewBackgroundColor: "#ffffff",
-            // guides that show when a shape lines up with the ones around it
-            objectsSnapModeEnabled: true,
-            // formal defaults: sharp lines, sans-serif, near-black stroke —
-            // distinguishes Tingraph output from default Excalidraw style
-            currentItemStrokeColor: "#1e1e1e",
-            currentItemBackgroundColor: "transparent",
-            currentItemFillStyle: "solid",
-            currentItemStrokeWidth: 2,
-            currentItemStrokeStyle: "solid",
-            currentItemRoughness: 0,
-            currentItemRoundness: "sharp",
-            currentItemArrowType: "sharp",
-            // a hand-drawn arrow starts out as the sheet's own connector
-            currentItemEndArrowhead: "triangle",
-            currentItemStartArrowhead: null,
-            currentItemFontSize: 16,
-            currentItemFontFamily: 2,
-            currentItemOpacity: 100,
-          },
-        }}
-      />
+      {facesReady && (
+        <Excalidraw
+          name="tingraph-scene"
+          excalidrawAPI={(handle) => {
+            apiRef.current = handle;
+            (window as unknown as { __excalidrawAPI?: typeof handle }).__excalidrawAPI =
+              handle;
+            setApi(handle);
+            onApi(handle);
+          }}
+          // a copy is its own element, never a second piece of the original
+          onDuplicate={reunit}
+          onChange={handleChange}
+          // the whole page is the editor: a shortcut has to work after pressing a
+          // swatch in the properties panel, not only when the sheet has focus.
+          // Excalidraw ignores a key pressed inside an input, a textarea or a
+          // caption editor, so nothing here can swallow typing.
+          handleKeyboardGlobally
+          UIOptions={{
+            canvasActions: {
+              export: false,
+              saveToActiveFile: false,
+              loadScene: false,
+              toggleTheme: false,
+              saveAsImage: false,
+              clearCanvas: false,
+            },
+          }}
+          initialData={{
+            elements: seeded,
+            files: seededFiles,
+            scrollToContent: true,
+            appState: {
+              viewBackgroundColor: "#ffffff",
+              // guides that show when a shape lines up with the ones around it
+              objectsSnapModeEnabled: true,
+              // formal defaults: sharp lines, sans-serif, near-black stroke —
+              // distinguishes Tingraph output from default Excalidraw style
+              currentItemStrokeColor: "#1e1e1e",
+              currentItemBackgroundColor: "transparent",
+              currentItemFillStyle: "solid",
+              currentItemStrokeWidth: 2,
+              currentItemStrokeStyle: "solid",
+              currentItemRoughness: 0,
+              currentItemRoundness: "sharp",
+              currentItemArrowType: "sharp",
+              // a hand-drawn arrow starts out as the sheet's own connector
+              currentItemEndArrowhead: "triangle",
+              currentItemStartArrowhead: null,
+              currentItemFontSize: 16,
+              currentItemFontFamily: 2,
+              currentItemOpacity: 100,
+            },
+          }}
+        />
+      )}
       <FigureControls
         api={api}
         figure={chartHeld ? figure : null}

@@ -23,3 +23,31 @@ func TestReadDiagramAcceptsAStudioSheet(t *testing.T) {
 		t.Fatal("an unknown category was accepted")
 	}
 }
+
+func TestReadDiagramCarriesTheRevisionItWasOpenedAt(t *testing.T) {
+	document := `{"version":1,"category":"flow","source":"","direction":"down","ink":{"id":"mono"},"style":"formal","scene":{"elements":[],"files":{}}}`
+	request := httptest.NewRequest("PUT", "/api/v1/diagrams/x", strings.NewReader(`{"title":"T","category":"flow","document":`+document+`,"revision":7}`))
+	input, err := readDiagram(httptest.NewRecorder(), request)
+	if err != nil || input.Revision == nil || *input.Revision != 7 {
+		t.Fatalf("revision was not read: %v %v", input.Revision, err)
+	}
+	request = httptest.NewRequest("PUT", "/api/v1/diagrams/x", strings.NewReader(`{"title":"T","category":"flow","document":`+document+`}`))
+	input, err = readDiagram(httptest.NewRecorder(), request)
+	if err != nil || input.Revision != nil {
+		t.Fatal("a save without a revision must still be accepted, as before")
+	}
+}
+
+func TestShareTokensAndAccess(t *testing.T) {
+	if !shareTokenPattern.MatchString("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") ||
+		shareTokenPattern.MatchString("short") ||
+		shareTokenPattern.MatchString("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/") {
+		t.Fatal("share token pattern is wrong")
+	}
+	if !validShareAccess("view") || !validShareAccess("edit") || validShareAccess("owner") || validShareAccess("") {
+		t.Fatal("share access is view or edit only")
+	}
+	if uuidPattern.MatchString("' or 1=1 --") || !uuidPattern.MatchString("00000000-0000-0000-0000-000000000000") {
+		t.Fatal("uuid pattern is wrong")
+	}
+}

@@ -15,8 +15,9 @@ import { DiagramCategory, LayoutDirection } from "@/lib/types";
  * `figure` is the one a figure is set from; `elements` is its counterpart for
  * the graphs whose elements carry a spec of their own — see `isSettable`.
  * `ai` is the chatbot, which writes source rather than drawing anything.
+ * `table` is Studio's alone: a table pasted, imported or made blank.
  */
-export type Drawer = "shapes" | "figure" | "elements" | "source" | "style" | "ai";
+export type Drawer = "shapes" | "figure" | "elements" | "source" | "style" | "ai" | "table";
 
 /**
  * One line of the conversation with Tingraph AI.

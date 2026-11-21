@@ -1,6 +1,6 @@
 "use client";
 
-import { AlignCenter, AlignLeft, AlignRight } from "lucide-react";
+import { AlignCenter, AlignLeft, AlignRight, Bold, Italic } from "lucide-react";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import { controlsFor, readValues } from "@/lib/canvas/inspect";
 import type { StylePatch } from "@/lib/canvas/restyle";
@@ -198,6 +198,34 @@ export default function Inspector({ picked, category, onPatch }: InspectorProps)
                 value={value.fontFamily}
                 onChange={(fontFamily) => onPatch({ fontFamily })}
               />
+            </div>
+            <div>
+              <Tick className="mb-1.5 block">Emphasis</Tick>
+              <div className="flex border-2 border-edge bg-white">
+                {[
+                  { key: "bold", icon: Bold, title: "Bold", held: value.bold },
+                  { key: "italic", icon: Italic, title: "Italic", held: value.italic },
+                ].map((toggle, index) => {
+                  const Icon = toggle.icon;
+                  return (
+                    <button
+                      key={toggle.key}
+                      type="button"
+                      aria-pressed={toggle.held}
+                      title={toggle.title}
+                      onClick={() =>
+                        onPatch(toggle.key === "bold" ? { bold: !toggle.held } : { italic: !toggle.held })
+                      }
+                      className={`flex flex-1 items-center justify-center gap-1.5 px-2 py-1 text-[11px] transition-colors ${
+                        index > 0 ? "border-l-2 border-edge" : ""
+                      } ${toggle.held ? "bg-edge text-bone" : "text-ink hover:bg-bone"}`}
+                    >
+                      <Icon size={13} />
+                      {toggle.title}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
             <div className="flex gap-2">
               <div className="min-w-0 flex-1">

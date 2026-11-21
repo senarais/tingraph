@@ -20,6 +20,7 @@ import {
   Palette,
   Pencil,
   Shapes,
+  Sheet,
   Sparkles,
   Table2,
   Type,
@@ -41,19 +42,21 @@ import { isFigure, type DiagramCategory } from "@/lib/types";
  * lines its notation draws with. Pressing whatever is already held puts it
  * back, so the column is never in a state the reader cannot leave.
  *
- * Only the two instruments that decide what the pointer *is* answer to a key:
- * the hand and the pointer itself. Everything else is pressed, because a
- * letter or a digit belongs to whatever the reader is writing — a caption on
- * the sheet, a name in a panel, a line of source — far more often than it
- * belongs to a tool.
+ * Every instrument has a key, shown beside its name and in its tooltip. A key
+ * is only answered while the reader is not writing: not in a field, a caption
+ * or the code editor, not while the Generate panel is out (it is open to be
+ * typed into), and not behind a dialog. The keyboard half is the effect in
+ * `Rail`; `shortcutFor` says what each letter reaches for.
  */
 
 interface Entry {
   icon: LucideIcon;
   label: string;
   hint: string;
-  /** the key that reaches for it, on the two that have one */
+  /** the letter that reaches for it */
   key?: string;
+  /** a second key for the same thing (the digit Excalidraw gives the pointer and hand) */
+  alt?: string;
   tool?: CanvasTool;
   drawer?: Drawer;
   /** the connector instrument, which opens its own list */
@@ -65,18 +68,20 @@ interface Entry {
 }
 
 const INSTRUMENTS: Entry[] = [
-  { icon: Hand, label: "Hand", hint: "Pan the sheet", key: "0", tool: "hand" },
+  { icon: Hand, label: "Hand", hint: "Pan the sheet", key: "h", alt: "0", tool: "hand" },
   {
     icon: MousePointer2,
     label: "Select",
     hint: "Pick and move",
-    key: "1",
+    key: "v",
+    alt: "1",
     tool: "selection",
   },
   {
     icon: Shapes,
     label: "Shapes",
     hint: "Drop a shape on the sheet",
+    key: "s",
     drawer: "shapes",
     only: "graph",
   },
@@ -84,6 +89,7 @@ const INSTRUMENTS: Entry[] = [
     icon: ChartColumn,
     label: "Figure",
     hint: "Everything this diagram is made of",
+    key: "f",
     drawer: "figure",
     only: "figure",
   },
@@ -91,6 +97,7 @@ const INSTRUMENTS: Entry[] = [
     icon: Table2,
     label: "Elements",
     hint: "Everything this diagram is made of",
+    key: "f",
     drawer: "elements",
     only: "settable",
   },
@@ -98,20 +105,30 @@ const INSTRUMENTS: Entry[] = [
     icon: Square,
     label: "Shapes",
     hint: "Rectangle, diamond, ellipse, arrow, line",
+    key: "s",
     basics: true,
     only: "studio",
   },
-  { icon: Type, label: "Text", hint: "Write on the sheet", tool: "text" },
-  { icon: ImageIcon, label: "Image", hint: "Place a picture", tool: "image" },
+  {
+    icon: Sheet,
+    label: "Table",
+    hint: "Paste, import or make a table",
+    key: "g",
+    drawer: "table",
+    only: "studio",
+  },
+  { icon: Type, label: "Text", hint: "Write on the sheet", key: "t", tool: "text" },
+  { icon: ImageIcon, label: "Image", hint: "Place a picture", key: "i", tool: "image" },
   {
     icon: MoveUpRight,
     label: "Connector",
     hint: "Join two elements",
+    key: "c",
     lines: true,
     only: "graph",
   },
-  { icon: Pencil, label: "Draw", hint: "Freehand stroke", tool: "freedraw" },
-  { icon: Eraser, label: "Erase", hint: "Rub something out", tool: "eraser" },
+  { icon: Pencil, label: "Draw", hint: "Freehand stroke", key: "p", tool: "freedraw" },
+  { icon: Eraser, label: "Erase", hint: "Rub something out", key: "e", tool: "eraser" },
 ];
 
 /**
@@ -119,12 +136,18 @@ const INSTRUMENTS: Entry[] = [
  * arrow drawn with them is an Excalidraw arrow, not a Tingraph connector; it
  * belongs to no notation and is routed by nothing.
  */
-const BASICS: Array<{ tool: CanvasTool; label: string; hint: string; icon: LucideIcon }> = [
-  { tool: "rectangle", label: "Rectangle", hint: "a box, drawn by dragging", icon: Square },
-  { tool: "diamond", label: "Diamond", hint: "a rhombus", icon: Diamond },
-  { tool: "ellipse", label: "Ellipse", hint: "a circle or an oval", icon: Circle },
-  { tool: "arrow", label: "Arrow", hint: "a free arrow, bent with its handles", icon: ArrowUpRight },
-  { tool: "line", label: "Line", hint: "a plain line or polyline", icon: Minus },
+const BASICS: Array<{
+  tool: CanvasTool;
+  label: string;
+  hint: string;
+  icon: LucideIcon;
+  key: string;
+}> = [
+  { tool: "rectangle", label: "Rectangle", hint: "a box, drawn by dragging", icon: Square, key: "r" },
+  { tool: "diamond", label: "Diamond", hint: "a rhombus", icon: Diamond, key: "d" },
+  { tool: "ellipse", label: "Ellipse", hint: "a circle or an oval", icon: Circle, key: "o" },
+  { tool: "arrow", label: "Arrow", hint: "a free arrow, bent with its handles", icon: ArrowUpRight, key: "a" },
+  { tool: "line", label: "Line", hint: "a plain line or polyline", icon: Minus, key: "l" },
 ];
 
 const PANELS: Entry[] = [
@@ -132,15 +155,17 @@ const PANELS: Entry[] = [
     icon: Wand2,
     label: "Generate",
     hint: "Write the diagram as source",
+    key: "g",
     drawer: "source",
   },
   {
     icon: Sparkles,
     label: "Tingraph AI",
     hint: "Describe the diagram and have it written",
+    key: "a",
     drawer: "ai",
   },
-  { icon: Palette, label: "Style", hint: "Ink and drawing style", drawer: "style" },
+  { icon: Palette, label: "Style", hint: "Ink and drawing style", key: "y", drawer: "style" },
 ];
 
 /** The panel a figure opens under, said and drawn the way that figure is. */
@@ -188,6 +213,7 @@ function instrumentsFor(category: DiagramCategory, mode: RailMode = "editor"): E
         ...entry,
         icon: Library,
         label: "Library",
+        key: "b",
         hint: "Every notation: its shapes and its examples",
       };
     }
@@ -207,6 +233,35 @@ function instrumentsFor(category: DiagramCategory, mode: RailMode = "editor"): E
 }
 
 /**
+ * Whether one of Tingraph's own dialogs stands over the sheet. Excalidraw keeps
+ * a hidden `aria-modal` colour picker alive inside its own tree, which is not
+ * a dialog and must not silence the keys.
+ */
+export function overDialog(): boolean {
+  return document.querySelector("dialog[open], [aria-modal='true']:not(.excalidraw *)") !== null;
+}
+
+type Shortcut = { entry: Entry } | { shape: CanvasTool };
+
+/**
+ * What a letter reaches for in this notation and mode: an instrument or panel
+ * of the column, or one of Studio's plain shapes. Only what the column offers
+ * answers, so `a` is Tingraph AI on the editor and the arrow in Studio.
+ */
+export function shortcutFor(key: string, category: DiagramCategory, mode: RailMode): Shortcut | null {
+  const column = [
+    ...instrumentsFor(category, mode),
+    ...PANELS.filter((entry) => mode === "editor" || entry.drawer === "style"),
+  ];
+  const entry = column.find((item) => item.key === key || item.alt === key);
+  if (entry) {
+    return { entry };
+  }
+  const shape = mode === "studio" ? BASICS.find((item) => item.key === key) : undefined;
+  return shape ? { shape: shape.tool } : null;
+}
+
+/**
  * Whether a key press belongs to whatever the reader is typing into.
  *
  * The code editor is the awkward one: Monaco writes through an `EditContext`
@@ -214,7 +269,7 @@ function instrumentsFor(category: DiagramCategory, mode: RailMode = "editor"): E
  * to be recognised by where it sits rather than by what it is. Miss it and
  * every letter typed into the source reaches for a tool instead.
  */
-function typing(target: EventTarget | null): boolean {
+export function typing(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLInputElement ||
     target instanceof HTMLTextAreaElement ||
@@ -224,18 +279,11 @@ function typing(target: EventTarget | null): boolean {
   );
 }
 
-/** The only keys the column answers to, and what they reach for. */
-const POINTER_KEYS: Record<string, CanvasTool | undefined> = {
-  "0": "hand",
-  h: "hand",
-  "1": "selection",
-  v: "selection",
-};
-
 /**
- * The keys Excalidraw would otherwise take a tool from. Tingraph draws its
- * shapes from the notation rather than from a toolbar, so these reach for
- * nothing — they are stopped so that they do nothing at all.
+ * The keys Excalidraw would otherwise take a tool from. Those the rail gives
+ * its own meaning are answered by the rail; the rest reach for nothing — they
+ * are stopped so that they do nothing at all, and the rail stays the only
+ * place a tool is chosen.
  */
 const STOLEN_KEYS = new Set("rdolfpkxaeti23456789".split(""));
 
@@ -321,7 +369,7 @@ function Label({ entry, shown }: { entry: Entry; shown: boolean }) {
       </span>
       {entry.key && (
         <kbd className="border border-bone/50 px-1 font-mono text-[10px] leading-[14px] text-bone">
-          {entry.key}
+          {entry.key.toUpperCase()}
         </kbd>
       )}
     </div>
@@ -357,7 +405,7 @@ function RailButton({
       <button
         type="button"
         aria-pressed={held}
-        aria-keyshortcuts={entry.key}
+        aria-keyshortcuts={entry.key ? [entry.key, entry.alt].filter(Boolean).join(" ").toUpperCase() : undefined}
         aria-label={`${entry.label}: ${entry.hint}`}
         onClick={() => {
           leave();
@@ -457,16 +505,17 @@ export default function Rail({
   /**
    * The keyboard half of the column.
    *
-   * Two instruments answer to a key, and they are the two that say what the
-   * pointer is: `1` or `v` for the pointer, `0` or `h` for the hand. Every
-   * other key Excalidraw would take one of its own tools from is swallowed
-   * here instead — the rail is the only place a tool is chosen, so a stray `r`
-   * must not leave a rectangle tool in the reader's hand.
+   * Every instrument answers to the letter shown beside it (the pointer and
+   * the hand to a digit as well). Every other key Excalidraw would take one of
+   * its own tools from is swallowed here instead — the rail is the only place
+   * a tool is chosen, so a stray `r` must not leave a rectangle tool in the
+   * reader's hand where the sheet has no use for one.
    *
-   * Nothing is swallowed while the reader is writing: in a panel field, in a
-   * caption on the sheet, or in the code editor. The Generate panel goes
-   * further and takes the keyboard entirely — it is open in order to be typed
-   * into, so not even the pointer keys are answered while it is out.
+   * Nothing is answered, or swallowed, while the reader is writing: in a panel
+   * field, in a caption on the sheet, or in the code editor. The Generate panel
+   * goes further and takes the keyboard entirely while it is out — it is open
+   * in order to be typed into — and so does a dialog standing over the sheet.
+   * Both still stop the key from reaching Excalidraw; neither acts on it.
    */
   useEffect(() => {
     const down = (event: KeyboardEvent) => {
@@ -481,27 +530,34 @@ export default function Rail({
       if (event.key === "Escape" && connector !== null) {
         setConnector(null);
         setLines(false);
+        setBasics(false);
         return;
       }
-      const wanted = POINTER_KEYS[event.key];
-      const entry = wanted
-        ? instrumentsFor(category, mode).find((instrument) => instrument.tool === wanted)
-        : undefined;
-      if (entry) {
-        event.preventDefault();
-        event.stopPropagation();
-        // the source panel is out to be written in, so it keeps the keyboard
-        if (drawer !== "source") {
-          press(entry);
-        }
+      // a shifted letter is Excalidraw's own (Shift+H and Shift+V flip the
+      // selection), so it goes through untouched, as it always has; Caps Lock
+      // alone still reaches the rail, which is why the letter is lowered
+      if (event.shiftKey) {
         return;
       }
-      // every other tool key Excalidraw carries: stopped here, answered by
-      // nothing, so the rail stays the only place a tool comes from
-      if (STOLEN_KEYS.has(event.key)) {
-        event.preventDefault();
-        event.stopPropagation();
+      const key = event.key.toLowerCase();
+      const entry = shortcutFor(key, category, mode);
+      if (!entry && !STOLEN_KEYS.has(key)) {
+        return;
       }
+      // either way Excalidraw never sees it
+      event.preventDefault();
+      event.stopPropagation();
+      if (!entry || drawer === "source" || overDialog()) {
+        return;
+      }
+      if ("shape" in entry) {
+        // a plain shape from Studio's list
+        setLines(false);
+        setBasics(false);
+        setTool(entry.shape);
+        return;
+      }
+      press(entry.entry);
     };
     const up = (event: KeyboardEvent) => {
       if (event.key === " ") {
@@ -565,12 +621,15 @@ export default function Rail({
                     }`}
                   >
                     <Icon size={15} aria-hidden="true" className="shrink-0" />
-                    <span className="min-w-0">
+                    <span className="min-w-0 flex-1">
                       <span className="block font-mono text-[11.5px] leading-tight">{item.label}</span>
                       <span className={`block font-mono text-[10px] leading-tight ${on ? "text-bone/70" : "text-ink-faint"}`}>
                         {item.hint}
                       </span>
                     </span>
+                    <kbd className={`border px-1 font-mono text-[10px] leading-[14px] ${on ? "border-bone/50" : "border-edge/40 text-ink-faint"}`}>
+                      {item.key.toUpperCase()}
+                    </kbd>
                   </button>
                 );
               })}

@@ -482,7 +482,7 @@ export default function Catalog() {
             </p>
           ) : (
             <p className="slab-tight bg-bone px-3 py-2 font-mono text-[12px] text-ink">
-              Private to your account
+              Private unless you share a link
             </p>
           )}
         </div>

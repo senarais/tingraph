@@ -164,6 +164,47 @@ status=$(curl -sS -o "$work/response" -w '%{http_code}' -b "$work/cookies-2" \
   "$BASE_URL/api/v1/diagrams/$diagram_id")
 expect 404 "$status" "cross-account diagram read"
 
+# a diagram shared by link: anyone may view it, a signed-in holder of an edit
+# link may save it, and a save made from an older revision is refused
+status=$(curl -sS -o "$work/response" -w '%{http_code}' -b "$work/cookies-2" \
+  -X PUT "$BASE_URL/api/v1/diagrams/$diagram_id/share" -H "Origin: $ORIGIN" \
+  -H "X-CSRF-Token: $csrf2" -H 'Content-Type: application/json' --data '{"access":"edit"}')
+expect 404 "$status" "share another account's diagram"
+status=$(curl -sS -o "$work/response" -w '%{http_code}' -b "$work/cookies-1" \
+  -X PUT "$BASE_URL/api/v1/diagrams/$diagram_id/share" -H "Origin: $ORIGIN" \
+  -H "X-CSRF-Token: $csrf1" -H 'Content-Type: application/json' --data '{"access":"view"}')
+expect 200 "$status" "turn on a view link"
+share_token=$(node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); if (!/^[A-Za-z0-9_-]{43}$/.test(x.share.token)) process.exit(1); process.stdout.write(x.share.token)' "$work/response")
+status=$(curl -sS -o "$work/response" -w '%{http_code}' "$BASE_URL/api/v1/shared/$share_token")
+expect 200 "$status" "anonymous read of a view link"
+node -e 'const x=JSON.parse(require("fs").readFileSync(process.argv[1], "utf8")); if (x.access !== "view" || x.owned || x.diagram.id || x.diagram.revision !== 1) process.exit(1)' "$work/response"
+shared_save="{\"title\":\"Shared edit\",\"category\":\"flow\",\"document\":$document,\"revision\":1}"
+status=$(curl -sS -o "$work/response" -w '%{http_code}' -b "$work/cookies-2" \
+  -X PUT "$BASE_URL/api/v1/shared/$share_token" -H "Origin: $ORIGIN" \
+  -H "X-CSRF-Token: $csrf2" -H 'Content-Type: application/json' --data "$shared_save")
+expect 403 "$status" "save through a view link"
+status=$(curl -sS -o "$work/response" -w '%{http_code}' -b "$work/cookies-1" \
+  -X PUT "$BASE_URL/api/v1/diagrams/$diagram_id/share" -H "Origin: $ORIGIN" \
+  -H "X-CSRF-Token: $csrf1" -H 'Content-Type: application/json' --data '{"access":"edit"}')
+expect 200 "$status" "switch the link to edit"
+status=$(curl -sS -o "$work/response" -w '%{http_code}' \
+  -X PUT "$BASE_URL/api/v1/shared/$share_token" -H "Origin: $ORIGIN" \
+  -H 'Content-Type: application/json' --data "$shared_save")
+expect 401 "$status" "anonymous save through an edit link"
+status=$(curl -sS -o "$work/response" -w '%{http_code}' -b "$work/cookies-2" \
+  -X PUT "$BASE_URL/api/v1/shared/$share_token" -H "Origin: $ORIGIN" \
+  -H "X-CSRF-Token: $csrf2" -H 'Content-Type: application/json' --data "$shared_save")
+expect 200 "$status" "save through an edit link"
+status=$(curl -sS -o "$work/response" -w '%{http_code}' -b "$work/cookies-2" \
+  -X PUT "$BASE_URL/api/v1/shared/$share_token" -H "Origin: $ORIGIN" \
+  -H "X-CSRF-Token: $csrf2" -H 'Content-Type: application/json' --data "$shared_save")
+expect 412 "$status" "stale save through an edit link"
+status=$(curl -sS -o "$work/response" -w '%{http_code}' -b "$work/cookies-1" \
+  -X DELETE "$BASE_URL/api/v1/diagrams/$diagram_id/share" -H "Origin: $ORIGIN" -H "X-CSRF-Token: $csrf1")
+expect 204 "$status" "turn the link off"
+status=$(curl -sS -o "$work/response" -w '%{http_code}' "$BASE_URL/api/v1/shared/$share_token")
+expect 404 "$status" "a link turned off opens nothing"
+
 for title in second third; do
   status=$(curl -sS -o "$work/response" -w '%{http_code}' -b "$work/cookies-1" \
     -X POST "$BASE_URL/api/v1/diagrams" -H "Origin: $ORIGIN" \
@@ -215,4 +256,4 @@ gone=$(docker exec "$db_container" psql -U tingraph_owner -d tingraph -At \
   -c "select count(*) from ops.discount_codes where code = '$unused_code'")
 [ "$gone" = '0' ] || { printf 'unused code was not deleted\n' >&2; exit 1; }
 
-printf 'Smoke test passed: routing, auth, legal acceptance, Origin, CSRF, ownership, and quota.\n'
+printf 'Smoke test passed: routing, auth, legal acceptance, Origin, CSRF, ownership, sharing and quota.\n'

@@ -59,6 +59,7 @@ import { DSLError, DiagramCategory, DSLNode, LayoutDirection } from "@/lib/types
 import AiDrawer from "@/components/editor/ai-drawer";
 import Canvas, { NO_PARTS, type SheetParts } from "@/components/editor/canvas";
 import ExportDialog from "@/components/editor/export-dialog";
+import ShareDialog from "@/components/editor/share-dialog";
 import Inspector from "@/components/editor/inspector";
 import Rail from "@/components/editor/rail";
 import ShapeDrawer from "@/components/editor/shape-drawer";
@@ -173,6 +174,8 @@ const DRAWER_TITLES: Record<Drawer, string> = {
   source: "Generate",
   style: "Style",
   ai: "Tingraph AI",
+  // Studio's alone; the editor's rail never offers it
+  table: "Table",
 };
 
 export default function EditorRoot({
@@ -199,6 +202,7 @@ export default function EditorRoot({
 
   const [debouncedCode, setDebouncedCode] = useState(code);
   const [picked, setPicked] = useState<ExcalidrawElement[]>([]);
+  const [shareOpen, setShareOpen] = useState(false);
   const [dragging, setDragging] = useState<PaletteItem | null>(null);
   const [empty, setEmpty] = useState(false);
   const [figure, setFigure] = useState<FigureOnSheet | null>(null);
@@ -645,9 +649,11 @@ export default function EditorRoot({
     });
   };
 
-  const { saveState, saveMessage, autoSave, save, toggleAutoSave } = useSheetSave({
+  const { savedId, saveState, saveMessage, autoSave, save, toggleAutoSave } = useSheetSave({
     api,
-    initialId: initialDiagram?.id ?? null,
+    initialId: initialDiagram?.shared ? null : (initialDiagram?.id ?? null),
+    initialRevision: initialDiagram?.revision ?? null,
+    shared: initialDiagram?.shared ?? null,
     // the source and the settings are saved beside the sheet
     extra: () => {
       const state = useTingraphStore.getState();
@@ -731,7 +737,12 @@ export default function EditorRoot({
     was?: { strokeColor?: string },
   ) => {
     const ids = new Set(picked.map((element) => element.id));
-    if (patch.fontFamily !== undefined || patch.fontSize !== undefined) {
+    if (
+      patch.fontFamily !== undefined ||
+      patch.fontSize !== undefined ||
+      patch.bold !== undefined ||
+      patch.italic !== undefined
+    ) {
       await fontReady(
         styleOfFont(patch.fontFamily ?? style.fontFamily),
         picked.map((element) => (element.type === "text" ? element.text : "")).join(""),
@@ -776,12 +787,15 @@ export default function EditorRoot({
         onSave={() => void save()}
         autoSave={autoSave}
         onAutoSave={() => void toggleAutoSave()}
+        // only the owner shares; someone editing through a link has no Share
+        onShare={initialDiagram?.shared ? undefined : () => setShareOpen(true)}
+        shared={!!initialDiagram?.shared}
       />
 
       <div className="relative flex min-h-0 flex-1 flex-col sm:flex-row">
         <Rail category={editorCategory} onOpenAi={() => void openAi()} />
 
-        {drawer && (
+        {drawer && drawer !== "table" && (
           <aside className="absolute inset-x-0 bottom-14 top-0 z-30 flex min-h-0 flex-col bg-bone sm:static sm:w-[352px] sm:shrink-0 sm:border-r-2 sm:border-edge">
             <header className="flex items-center gap-2 border-b-2 border-edge px-3 py-2.5">
               <Tick>
@@ -986,6 +1000,15 @@ export default function EditorRoot({
             <X size={14} aria-hidden="true" />
           </button>
         </div>
+      )}
+      {shareOpen && (
+      <ShareDialog
+        open
+        diagramId={savedId}
+        noun="diagram"
+        onSave={() => void save()}
+        onClose={() => setShareOpen(false)}
+      />
       )}
       {exportOpen && (
         <ExportDialog

@@ -13,6 +13,7 @@ import { Download, Sparkles, X } from "lucide-react";
 import { apiFetch, getSession } from "@/lib/api/client";
 import type { Entitlements } from "@/lib/api/types";
 import { jpegToPdf } from "@/lib/export/pdf";
+import { embedTextFaces } from "@/lib/canvas/text-faces";
 import { EXPORT_RULES, exportLock, type ExportFormat, type PlanTier } from "@/lib/plans";
 import { Field, Segmented, SlabButton, Tick } from "@/components/editor/ui";
 
@@ -217,6 +218,13 @@ export default function ExportDialog({
           files,
           exportPadding: padding,
         });
+        // Excalidraw embeds no face for the bold and italic cuts
+        await embedTextFaces(
+          svg,
+          scene.flatMap((element) =>
+            element.type === "text" ? [(element as { fontFamily: number }).fontFamily] : [],
+          ),
+        );
         save(
           new Blob([svg.outerHTML], { type: "image/svg+xml;charset=utf-8" }),
           filename,

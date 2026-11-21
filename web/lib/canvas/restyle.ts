@@ -5,6 +5,7 @@ import type {
 } from "@excalidraw/excalidraw/element/types";
 import { unitOf } from "@/lib/canvas/units";
 import { typeset } from "@/lib/canvas/text-metrics";
+import { faceOf, familyFor } from "@/lib/text-face";
 import type { Ink } from "@/lib/ink";
 import type { SheetStyle } from "@/lib/sheet";
 
@@ -55,7 +56,12 @@ export function restyle(elements: Elements, to: SheetStyle): ExcalidrawElement[]
       patch.roundness = corner;
     }
     if (isText(element)) {
-      Object.assign(patch, typeset(element, to.fontFamily, element.fontSize));
+      // a bold or italic caption stays bold or italic in the other style
+      const face = faceOf(element.fontFamily);
+      Object.assign(
+        patch,
+        typeset(element, familyFor(to.fontFamily, face.bold, face.italic), element.fontSize),
+      );
     }
     return Object.keys(patch).length === 0
       ? element
@@ -72,7 +78,10 @@ export interface StylePatch {
   strokeStyle?: "solid" | "dashed" | "dotted";
   roundness?: { type: number; value: number } | null;
   opacity?: number;
+  /** the sheet font (2 or 5); a caption keeps its bold and italic across it */
   fontFamily?: number;
+  bold?: boolean;
+  italic?: boolean;
   fontSize?: number;
   textAlign?: "left" | "center" | "right";
 }
@@ -96,7 +105,7 @@ export function applyStyle(
   patch: StylePatch,
   was: { strokeColor?: string } = {},
 ): ExcalidrawElement[] {
-  const { strokeColor, fontFamily, fontSize, textAlign, ...box } = patch;
+  const { strokeColor, fontFamily, bold, italic, fontSize, textAlign, ...box } = patch;
   return elements.map((element) => {
     if (element.isDeleted || !ids.has(element.id)) {
       return element;
@@ -108,13 +117,25 @@ export function applyStyle(
     if (isText(element)) {
       const caption = element;
       if (textAlign !== undefined) update.textAlign = textAlign;
-      if (fontFamily !== undefined || fontSize !== undefined) {
-        // the box has to be measured again, or the caption is cut short
+      if (
+        fontFamily !== undefined ||
+        bold !== undefined ||
+        italic !== undefined ||
+        fontSize !== undefined
+      ) {
+        // bold and italic are other faces of the same font, so the face is
+        // worked out from what the caption is now and what was asked for; the
+        // box then has to be measured again, or the caption is cut short
+        const now = faceOf(caption.fontFamily);
         Object.assign(
           update,
           typeset(
             caption,
-            fontFamily ?? caption.fontFamily,
+            familyFor(
+              fontFamily ?? now.base,
+              bold ?? now.bold,
+              italic ?? now.italic,
+            ),
             fontSize ?? caption.fontSize,
           ),
         );

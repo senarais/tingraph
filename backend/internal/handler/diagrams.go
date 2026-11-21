@@ -33,15 +33,22 @@ type diagramInput struct {
 	Title    string          `json:"title"`
 	Category string          `json:"category"`
 	Document json.RawMessage `json:"document"`
+	// the revision the sheet was opened at; a save naming an older one is
+	// refused rather than written over someone else's
+	Revision *int64 `json:"revision,omitempty"`
 }
 
 type diagramRow struct {
-	ID        string          `json:"id"`
-	Title     string          `json:"title"`
-	Category  string          `json:"category"`
-	Document  json.RawMessage `json:"document,omitempty"`
-	CreatedAt time.Time       `json:"created_at"`
-	UpdatedAt time.Time       `json:"updated_at"`
+	ID       string          `json:"id"`
+	Title    string          `json:"title"`
+	Category string          `json:"category"`
+	Document json.RawMessage `json:"document,omitempty"`
+	Revision int64           `json:"revision,omitempty"`
+	// "view" or "edit" while a share link is on; listed so the owner can see
+	// at a glance what anyone with a link can open
+	Share     string    `json:"share,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 func (server *Handler) ListDiagrams(w http.ResponseWriter, r *http.Request) {
@@ -55,8 +62,9 @@ func (server *Handler) ListDiagrams(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	rows, err := server.db.Query(r.Context(), `
-		select id::text, title, category, created_at, updated_at
-		from app.diagrams where user_id = $1 order by updated_at desc`, userID,
+		select d.id::text, d.title, d.category, coalesce(s.access, ''), d.created_at, d.updated_at
+		from app.diagrams d left join app.diagram_shares s on s.diagram_id = d.id
+		where d.user_id = $1 order by d.updated_at desc`, userID,
 	)
 	if err != nil {
 		httpx.Problem(w, http.StatusInternalServerError, "diagrams could not be loaded")
@@ -66,7 +74,7 @@ func (server *Handler) ListDiagrams(w http.ResponseWriter, r *http.Request) {
 	diagrams := make([]diagramRow, 0)
 	for rows.Next() {
 		var diagram diagramRow
-		if err := rows.Scan(&diagram.ID, &diagram.Title, &diagram.Category, &diagram.CreatedAt, &diagram.UpdatedAt); err != nil {
+		if err := rows.Scan(&diagram.ID, &diagram.Title, &diagram.Category, &diagram.Share, &diagram.CreatedAt, &diagram.UpdatedAt); err != nil {
 			httpx.Problem(w, http.StatusInternalServerError, "diagrams could not be loaded")
 			return
 		}
@@ -86,10 +94,10 @@ func (server *Handler) ListDiagrams(w http.ResponseWriter, r *http.Request) {
 func (server *Handler) GetDiagram(w http.ResponseWriter, r *http.Request) {
 	var diagram diagramRow
 	err := server.db.QueryRow(r.Context(), `
-		select id::text, title, category, document, created_at, updated_at
+		select id::text, title, category, document, revision, created_at, updated_at
 		from app.diagrams where id = $1 and user_id = $2`,
 		r.PathValue("id"), currentSession(r).User.ID,
-	).Scan(&diagram.ID, &diagram.Title, &diagram.Category, &diagram.Document, &diagram.CreatedAt, &diagram.UpdatedAt)
+	).Scan(&diagram.ID, &diagram.Title, &diagram.Category, &diagram.Document, &diagram.Revision, &diagram.CreatedAt, &diagram.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		http.NotFound(w, r)
 		return
@@ -123,7 +131,7 @@ func (server *Handler) CreateDiagram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	server.invalidateDiagramList(currentSession(r).User.ID)
-	httpx.JSON(w, http.StatusCreated, map[string]string{"id": id})
+	httpx.JSON(w, http.StatusCreated, map[string]any{"id": id, "revision": 1})
 }
 
 func (server *Handler) UpdateDiagram(w http.ResponseWriter, r *http.Request) {
@@ -133,12 +141,24 @@ func (server *Handler) UpdateDiagram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var id string
+	var revision int64
 	err = server.db.QueryRow(r.Context(), `
-		update app.diagrams set title = $3, category = $4, document = $5
-		where id = $1 and user_id = $2 returning id::text`,
-		r.PathValue("id"), currentSession(r).User.ID, input.Title, input.Category, input.Document,
-	).Scan(&id)
+		update app.diagrams set title = $3, category = $4, document = $5, revision = revision + 1
+		where id = $1 and user_id = $2 and ($6::bigint is null or revision = $6)
+		returning id::text, revision`,
+		r.PathValue("id"), currentSession(r).User.ID, input.Title, input.Category, input.Document, input.Revision,
+	).Scan(&id, &revision)
 	if errors.Is(err, pgx.ErrNoRows) {
+		// nothing matched: a diagram that is not the reader's, or one an
+		// editor with the shared link saved since this sheet was opened
+		var exists bool
+		if input.Revision != nil && server.db.QueryRow(r.Context(),
+			`select exists(select 1 from app.diagrams where id = $1 and user_id = $2)`,
+			r.PathValue("id"), currentSession(r).User.ID,
+		).Scan(&exists) == nil && exists {
+			httpx.Problem(w, http.StatusPreconditionFailed, "this diagram was saved by someone else since you opened it")
+			return
+		}
 		http.NotFound(w, r)
 		return
 	}
@@ -148,7 +168,7 @@ func (server *Handler) UpdateDiagram(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	server.invalidateDiagramList(currentSession(r).User.ID)
-	httpx.JSON(w, http.StatusOK, map[string]string{"id": id})
+	httpx.JSON(w, http.StatusOK, map[string]any{"id": id, "revision": revision})
 }
 
 func (server *Handler) DeleteDiagram(w http.ResponseWriter, r *http.Request) {

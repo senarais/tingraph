@@ -56,7 +56,7 @@ export default function StudioShell({ diagramId }: { diagramId?: string }) {
         setLoaded({ status: "error", message: "This saved Studio sheet has invalid data and could not be opened." });
         return;
       }
-      setLoaded({ id: data.id, title: data.title, document });
+      setLoaded({ id: data.id, title: data.title, document, revision: data.revision });
     };
     void load();
     return () => {

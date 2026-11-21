@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { Check, Download, Repeat2, Save } from "lucide-react";
+import { useState } from "react";
+import { Check, Download, Repeat2, Save, Share2, X } from "lucide-react";
 import { TEMPLATE_LABELS, useTingraphStore } from "@/lib/store";
 import { DiagramCategory } from "@/lib/types";
 import { Tick } from "@/components/editor/ui";
@@ -50,6 +51,10 @@ interface TopBarProps {
   /** whether the sheet saves itself as the reader works */
   autoSave: boolean;
   onAutoSave: () => void;
+  /** opens the share dialog; absent where the reader cannot share (a shared copy) */
+  onShare?: () => void;
+  /** opened through someone else's edit link: saves land in their diagram */
+  shared?: boolean;
 }
 
 export default function TopBar({
@@ -63,6 +68,8 @@ export default function TopBar({
   onSave,
   autoSave,
   onAutoSave,
+  onShare,
+  shared = false,
 }: TopBarProps) {
   return (
     <header className="flex h-14 shrink-0 items-stretch border-b-2 border-edge bg-bone">
@@ -86,6 +93,7 @@ export default function TopBar({
       <Cell label="Status" tone={errorMessage ? "alert" : "ink"}>
         {errorMessage ? "Syntax error" : "Parsed"}
       </Cell>
+      {shared && <SharedCell />}
 
       <SheetActions
         empty={empty}
@@ -94,8 +102,23 @@ export default function TopBar({
         onSave={onSave}
         autoSave={autoSave}
         onAutoSave={onAutoSave}
+        onShare={onShare}
       />
     </header>
+  );
+}
+
+/**
+ * Says, in the bar, that this sheet is someone else's diagram opened through
+ * an edit link: Save writes into their diagram, not into the reader's own.
+ */
+export function SharedCell() {
+  return (
+    <Cell label="Access">
+      <span title="Opened through a shared edit link. Saving changes the owner's diagram; it is not added to your diagrams.">
+        Shared · can edit
+      </span>
+    </Cell>
   );
 }
 
@@ -133,6 +156,7 @@ export function SheetActions({
   onSave,
   autoSave,
   onAutoSave,
+  onShare,
 }: {
   empty: boolean;
   saveState: "idle" | "saving" | "saved" | "error";
@@ -140,8 +164,13 @@ export function SheetActions({
   onSave: () => void;
   autoSave: boolean;
   onAutoSave: () => void;
+  onShare?: () => void;
 }) {
   const setExportOpen = useTingraphStore((s) => s.setExportOpen);
+  // a failed save says why where it can be read, not only in a tooltip: a
+  // conflict asks the reader to reload, and "Retry save" alone would not
+  const [dismissed, setDismissed] = useState("");
+  const failure = saveState === "error" && saveMessage !== "" && saveMessage !== dismissed;
   return (
       <div className="ml-auto flex items-center gap-2 px-2 sm:gap-3 sm:px-4">
       <button
@@ -171,29 +200,58 @@ export function SheetActions({
           />
         </span>
       </button>
-      <button
-        type="button"
-        onClick={onSave}
-        disabled={saveState === "saving"}
-        title={saveMessage || "Save this diagram to your account"}
-        className={`slab-tight press flex h-10 items-center gap-2 px-2 text-[12.5px] font-semibold disabled:cursor-wait disabled:opacity-60 sm:px-3 ${
-          saveState === "error" ? "bg-alert-tint text-alert" : "bg-white text-ink"
-        }`}
-      >
-        {saveState === "saved" ? <Check size={14} /> : <Save size={14} />}
-        <span className="hidden sm:inline">
-          {saveState === "saving"
-            ? "Saving…"
-            : saveState === "saved"
-              ? "Saved"
-              : saveState === "error"
-                ? "Retry save"
-                : "Save"}
-        </span>
-      </button>
+      <div className="relative">
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={saveState === "saving"}
+          title={saveMessage || "Save this diagram to your account"}
+          className={`slab-tight press flex h-10 items-center gap-2 px-2 text-[12.5px] font-semibold disabled:cursor-wait disabled:opacity-60 sm:px-3 ${
+            saveState === "error" ? "bg-alert-tint text-alert" : "bg-white text-ink"
+          }`}
+        >
+          {saveState === "saved" ? <Check size={14} /> : <Save size={14} />}
+          <span className="hidden sm:inline">
+            {saveState === "saving"
+              ? "Saving…"
+              : saveState === "saved"
+                ? "Saved"
+                : saveState === "error"
+                  ? "Retry save"
+                  : "Save"}
+          </span>
+        </button>
+        {failure && (
+          <div
+            role="alert"
+            className="absolute right-0 top-full z-40 mt-2 flex w-[min(18rem,calc(100vw-1rem))] items-start gap-2 border-2 border-edge bg-white px-3 py-2 shadow-[3px_3px_0_var(--edge)]"
+          >
+            <p className="min-w-0 flex-1 text-[11.5px] leading-relaxed text-alert">{saveMessage}</p>
+            <button
+              type="button"
+              onClick={() => setDismissed(saveMessage)}
+              aria-label="Dismiss"
+              className="-mr-1 grid h-6 w-6 shrink-0 place-items-center text-ink-faint hover:text-ink"
+            >
+              <X size={13} />
+            </button>
+          </div>
+        )}
+      </div>
       <span className="sr-only" role="status" aria-live="polite">
         {saveMessage}
       </span>
+      {onShare && (
+        <button
+          type="button"
+          onClick={onShare}
+          title="Share a link to this diagram, view-only or editable"
+          className="slab-tight press flex h-10 items-center gap-2 bg-white px-2 text-[12.5px] font-semibold text-ink sm:px-3"
+        >
+          <Share2 size={14} />
+          <span className="hidden md:inline">Share</span>
+        </button>
+      )}
       <button
         type="button"
         onClick={() => setExportOpen(true)}
